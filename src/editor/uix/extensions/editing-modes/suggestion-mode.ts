@@ -7,9 +7,11 @@ import { type PluginSettings } from "../../../../types";
 import {
 	cursor_move_range,
 	cursorMoved,
+    deriveUserEvent,
 	generate_metadata,
 	getEditorRanges,
 	getUserEvents,
+    isUserEvent,
 	mark_ranges,
 	MarkAction,
 	type MarkType,
@@ -84,10 +86,6 @@ const vim_action_resolver = {
 // 	{ keys: 'o', motion: 'moveToOtherHighlightedEnd', context:'visual'},
 // 	{ keys: 'O', motion: 'moveToOtherHighlightedEnd',
 // 	'moveToLineOrEdgeOfDocument':
-
-function isUserEvent(event: string, events: string[]): boolean {
-	return events.some(e => e.startsWith(event));
-}
 
 export const suggestionMode = (settings: PluginSettings): Extension =>
 	EditorState.transactionFilter.of(tr => applySuggestion(tr, settings));
@@ -195,7 +193,16 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			}
 		}
 
-		return tr.startState.update(changes.length ? { changes, selection: EditorSelection.create(selections) } : {});
+		if (!changes.length)
+			return tr;
+
+        const forwardedEvent = deriveUserEvent(tr);
+        return tr.startState.update({
+			changes,
+			selection: EditorSelection.create(selections),
+			annotations: forwardedEvent ? [Transaction.userEvent.of(forwardedEvent)] : undefined,
+			filter: false,
+		});
 	} // CASE 2: Handle cursor movements
 	else if (
 		isUserEvent("select", userEvents) && cursorMoved(tr) &&
@@ -203,8 +210,15 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 	) {
 		if (latest_event && latest_event.instanceOf(KeyboardEvent)) {
 			const result = cursor_transaction_pass_syntax(tr, userEvents, vim_mode, settings, latest_event);
-			if (result)
-				return tr.startState.update(result);
+			if (result) {
+				const forwardedEvent = deriveUserEvent(tr);
+				return tr.startState.update({
+					...result,
+					annotations: forwardedEvent ? [Transaction.userEvent.of(forwardedEvent)] : result.annotations,
+					filter: false,
+				});
+			}
+			return tr;
 		}
 	}
 

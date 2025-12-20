@@ -1,5 +1,5 @@
 import {
-	type MarkdownFileInfo, type MarkdownPostProcessor,
+    type MarkdownFileInfo, type MarkdownPostProcessor,
 	MarkdownPreviewRenderer, MarkdownView,
 	Notice, Plugin, TFile,
 } from "obsidian";

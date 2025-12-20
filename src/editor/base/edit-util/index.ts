@@ -5,6 +5,7 @@ export * from "./range-create";
 
 export * from "./character-logic";
 export * from "./selection-logic";
-export * from "./transaction-logic";
+
+export * from "./transaction-util";
 
 export * from "./metadata";

@@ -93,6 +93,17 @@ export class CommentIconWidget extends WidgetType {
 				}));
 			},
 
+			onBlur: (editor) => {
+				// Save comment on blur (same as onSubmit)
+				this.view.dispatch(this.view.state.update({
+					changes: {
+						from: range.from,
+						to: range.to,
+						insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
+					},
+				}));
+			},
+
 			isEditable: (editor) => {
 				if (range.fields.author && range.fields.author !== app.plugins.plugins.commentator.settings.author) {
 					new Notice("[Commentator] You cannot edit comments from other authors.");
@@ -154,7 +165,18 @@ export class CommentIconWidget extends WidgetType {
 								replyComponent.unload();
 								replyContainer.remove();
 							},
-							onBlur: () => {
+							onBlur: (editor) => {
+								// Save reply on blur if there's content
+								const content = editor.get();
+								if (content.trim()) {
+									this.view.dispatch(this.view.state.update({
+										changes: {
+											from: range.full_range_back,
+											to: range.full_range_back,
+											insert: create_range(this.view.state.field(pluginSettingsField), range.type, content),
+										},
+									}));
+								}
 								replyComponent.unload();
 								replyContainer.remove();
 							}

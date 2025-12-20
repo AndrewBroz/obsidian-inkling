@@ -80,7 +80,11 @@ class AnnotationNode extends Component {
 						this.renderPreview();
 					},
 					filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
-					onBlur: this.renderPreview.bind(this),
+					onBlur: (editor) => {
+						// Save on blur (same as onSubmit)
+						this.new_text = editor.get();
+						this.renderPreview();
+					},
 				}),
 			);
 			this.currentMode = "source";

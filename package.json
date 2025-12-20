@@ -53,7 +53,7 @@
         "diff-match-patch": "^1.0.5",
         "esbuild": "^0.25.4",
         "esbuild-jest": "^0.5.0",
-        "esbuild-plugin-inline-worker": "https://github.com/mitschabaude/esbuild-plugin-inline-worker",
+        "esbuild-plugin-inline-worker": "^0.1.1",
         "esbuild-sass-plugin": "^3.3.1",
         "esbuild-svelte": "^0.9.2",
         "localforage": "^1.10.0",
