@@ -1,6 +1,6 @@
 import esbuild, { analyzeMetafile } from "esbuild";
 
-import { inlineWorkerPlugin } from "esbuild-plugin-inline-worker";
+import inlineWorkerPlugin from "esbuild-plugin-inline-worker";
 import { sassPlugin } from "esbuild-sass-plugin";
 import esbuildSvelte from "esbuild-svelte";
 import sveltePreprocess from "svelte-preprocess";
@@ -8,7 +8,6 @@ import sveltePreprocess from "svelte-preprocess";
 import { banner } from "./banner";
 
 import builtins from "builtin-modules";
-import builtinModules from "builtin-modules";
 import process from "process";
 
 const externalModules = [
@@ -78,17 +77,15 @@ const context = await esbuild.context({
 			},
 		}),
 		inlineWorkerPlugin({
-			buildOptions: {
-				platform: "browser",
-				legalComments: 'none',
-				external: externalModules,
-				format: "cjs",
-				treeShaking: true,
-				minify: prod,
-				minifyWhitespace: true,
-				bundle: true,
-				sourcemap: false,
-			},
+            platform: "browser",
+            legalComments: 'none',
+            external: externalModules,
+            format: "cjs",
+            treeShaking: true,
+            minify: prod,
+            minifyWhitespace: true,
+            bundle: true,
+            sourcemap: false,
 		}),
 	],
 });
