@@ -1,10 +1,10 @@
-import { Text } from "@codemirror/state";
+import type { Text } from "@codemirror/state";
 import IntervalTree from "@flatten-js/interval-tree";
-import { type CriticMarkupRange } from "./base_range";
+import type { CriticMarkupRange } from "./base_range";
 
 export class CriticMarkupRanges {
 	ranges: CriticMarkupRange[];
-	tree: IntervalTree<CriticMarkupRange>;
+	tree: IntervalTree;
 
 	constructor(ranges: CriticMarkupRange[]) {
 		this.ranges = ranges;

@@ -1,4 +1,4 @@
-import {apiVersion, App, type Menu, Notice, Platform} from "obsidian";
+import {apiVersion, App, type Menu, MenuItem, Notice, Platform} from "obsidian";
 
 /**
  * Helper function for opening the settings tab of the plugin
@@ -185,9 +185,11 @@ export function menuSingleChoiceExclusive<T>(
 				.onClick(() => {
 					onChange(value);
 					for (const subitem of menu.items) {
-						const is_active = subitem === item;
-						subitem.dom.classList.toggle("mod-checked", is_active);
-						subitem.setChecked(is_active);
+						if (subitem instanceof MenuItem) {
+							const is_active = subitem === item;
+							subitem.dom.classList.toggle("mod-checked", is_active);
+							subitem.setChecked(is_active);
+						}
 					}
 				});
 		});

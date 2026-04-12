@@ -1,7 +1,7 @@
 import { PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
 import type { EditorChange } from "../edit-handler";
 import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, type SuggestionType } from "./definitions";
-import { type CommentRange } from "./types";
+import type { CommentRange } from "./types";
 
 const shortHandMapping = {
 	"a": "author",

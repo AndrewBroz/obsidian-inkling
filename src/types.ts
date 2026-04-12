@@ -1,5 +1,5 @@
 import type { Command } from "obsidian";
-import { SuggestionType } from "./editor/base";
+import type { SuggestionType } from "./editor/base";
 
 export enum PreviewMode {
 	// Show all text

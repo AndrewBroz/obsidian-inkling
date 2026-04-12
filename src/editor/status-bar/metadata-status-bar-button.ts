@@ -1,4 +1,4 @@
-import { Menu, setIcon } from "obsidian";
+import {Menu, type MenuItem, setIcon} from "obsidian";
 import type CommentatorPlugin from "../../main";
 import { stickyContextMenuPatch } from "../../patches";
 
@@ -33,7 +33,7 @@ export class MetadataStatusBarButton {
 				await this.plugin.setSetting("add_metadata", !this.plugin.settings.add_metadata);
 				item.setChecked(this.plugin.settings.add_metadata);
 				menu.items.slice(1).forEach((item) => {
-					item.setDisabled(!this.plugin.settings.add_metadata);
+					(item as MenuItem).setDisabled(!this.plugin.settings.add_metadata);
 				});
 			});
 		});
