@@ -22,6 +22,7 @@ To set up a development environment, please follow the following instructions:
 2. Clone this repository (`git clone --recurse-submodules https://github.com/Fevol/obsidian-criticmarkup.git`)
 3. Run `bun install` in the root of the repository to install all dependencies
 4. Run `bun run build:dev` to build the plugin. This will also reload the plugin in your currently active Obsidian vault
+5. (_Optional_) If you want the plugin to reload on every build, use `bun run build:dev:hr` instead. For this, you will need to install the [Obsidian CLI](https://obsidian.md/cli).
 
 ### Parser
 

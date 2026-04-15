@@ -7,7 +7,8 @@
     "scripts": {
         "dev": "bun run esbuild.config.mjs && obsidian plugin:reload id=commentator",
         "build": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts production",
-        "build:dev": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=commentator",
+        "build:dev": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development",
+        "build:dev:hr": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=commentator",
         "lint": "bun eslint src/",
         "format": "bun dprint fmt",
         "test": "jest --verbose",
