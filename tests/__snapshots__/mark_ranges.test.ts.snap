@@ -1,0 +1,23 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`mark_ranges characterization (snapshot-pinned) clear action on marked text 1`] = `"hello big world"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) delete exactly an addition's contents 1`] = `"ab{--cd--}ef"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) delete inside existing deletion 1`] = `"ab{--cd--}ef"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) delete spanning plain text and addition 1`] = `"{--abcdef--}"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) deletion across highlight range 1`] = `"{--ab--}{==cd==}{--ef--}"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) insert at right edge of addition 1`] = `"he{++lloy++}x"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) insert between two additions 1`] = `"uv{++wxy++}z"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) insert inside existing addition 1`] = `"he{++llyo++}"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) insert into range with different author is kept outside that range 1`] = `"a{++{"author":"B"}@@b++}{++{"author":"A"}@@x++}{++{"author":"B"}@@c++}d"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) substitution across existing substitution 1`] = `"{~~xyzu~>new~~}"`;
+
+exports[`mark_ranges characterization (snapshot-pinned) substitution spanning two adjacent ranges 1`] = `"{~~uvwyz~>q~~}"`;
