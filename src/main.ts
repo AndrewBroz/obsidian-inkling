@@ -54,6 +54,7 @@ import {
 } from "./editor/uix/extensions";
 import { editModeHeaderButton, type HeaderButton, previewModeHeaderButton } from "./editor/view-header";
 
+import { AuthorNameModal } from "./ui/modals";
 import { CommentatorSettings } from "./ui/settings";
 import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/view.svelte";
 
@@ -89,6 +90,10 @@ export default class CommentatorPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 	previous_settings: Partial<PluginSettings> = {};
 	changed_settings: Partial<PluginSettings> = {};
+
+	// EXPL: True only when loadData() returned null, i.e. no saved data.json existed yet.
+	//       Used to gate the first-run author-name prompt (see onload()).
+	first_install: boolean = false;
 
 	previewModeHeaderButton!: HeaderButton;
 	editModeHeaderModeButton!: HeaderButton;
@@ -251,6 +256,20 @@ export default class CommentatorPlugin extends Plugin {
 
 		await this.migrateSettings(await this.loadData());
 
+		// EXPL: First-run-only prompt for the author name used in suggestion/comment attribution.
+		//       Skipping (or an existing vault with settings.author already set) leaves settings
+		//       untouched; generate_metadata() simply omits the author field while it is empty.
+		this.app.workspace.onLayoutReady(() => {
+			if (this.first_install && !this.settings.author) {
+				new AuthorNameModal(this.app, async (author) => {
+					if (author) {
+						this.settings.author = author;
+						await this.setSettings();
+					}
+				}).open();
+			}
+		});
+
 		this.defaultEditModeExtension = getEditMode(this.settings.default_edit_mode, this.settings);
 
 		this.addSettingTab(new CommentatorSettings(this.app, this));
@@ -290,6 +309,7 @@ export default class CommentatorPlugin extends Plugin {
 
 	async migrateSettings(new_settings: PluginSettings) {
 		const original_settings = this.settings;
+		this.first_install = new_settings == null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, new_settings);
 		this.previous_settings = Object.assign({}, original_settings, this.settings);
 

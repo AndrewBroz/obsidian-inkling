@@ -121,6 +121,71 @@ export class Modal extends Component {
 	onClose() {}
 }
 
+export class TextComponent {
+	inputEl: any = typeof document !== "undefined" ? document.createElement("input") : undefined;
+	private _onChange?: (value: string) => any;
+	setValue(_v: string) {
+		return this;
+	}
+	setPlaceholder(_p: string) {
+		return this;
+	}
+	setDisabled(_d: boolean) {
+		return this;
+	}
+	onChange(cb: (value: string) => any) {
+		this._onChange = cb;
+		return this;
+	}
+}
+
+export class ButtonComponent {
+	buttonEl: any = typeof document !== "undefined" ? document.createElement("button") : undefined;
+	setButtonText(_t: string) {
+		return this;
+	}
+	setCta() {
+		return this;
+	}
+	setWarning() {
+		return this;
+	}
+	setDisabled(_d: boolean) {
+		return this;
+	}
+	onClick(_cb: (evt: MouseEvent) => any) {
+		return this;
+	}
+}
+
+export class Setting {
+	settingEl: any = typeof document !== "undefined" ? document.createElement("div") : undefined;
+	constructor(public containerEl?: any) {}
+	setName(_n: string) {
+		return this;
+	}
+	setDesc(_d: string) {
+		return this;
+	}
+	setClass(_c: string) {
+		return this;
+	}
+	setHeading() {
+		return this;
+	}
+	setDisabled(_d: boolean) {
+		return this;
+	}
+	addButton(cb: (component: ButtonComponent) => any) {
+		cb(new ButtonComponent());
+		return this;
+	}
+	addText(cb: (component: TextComponent) => any) {
+		cb(new TextComponent());
+		return this;
+	}
+}
+
 export class ItemView extends Component {
 	constructor(public leaf?: any) {
 		super();
