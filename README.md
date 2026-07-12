@@ -4,9 +4,10 @@
 It is designed both for collaborative editing (with tools like Relay) and for reviewing your notes, providing a suggestion mode
 for tracking changes, comments anchored to text selections, and a comment-only mode for reviewers.
 
-This is a fork of Commentator. Commentator was built by [@Fevol](https://github.com/Fevol) upon the excellent work and
-advice of [@kometenstaub](https://github.com/kometenstaub) (original [plugin](https://github.com/kometenstaub/obsidian-criticmarkup)
-and [parser](https://github.com/kometenstaub/lang-criticmarkup)). All credit for the plugin's foundation belongs to them.
+This is a fork of [Commentator](Fevol/obsidian-criticmarkup). Commentator was built by [@Fevol](https://github.com/Fevol) upon the
+excellent work and advice of [@kometenstaub](https://github.com/kometenstaub) (original
+[plugin](https://github.com/kometenstaub/obsidian-criticmarkup) and [parser](https://github.com/kometenstaub/lang-criticmarkup)).
+All credit for the plugin's foundation belongs to them.
 
 ## Installing (via BRAT)
 
