@@ -180,8 +180,8 @@ describe("annotation gutter blur-path dispatches are synchronous", () => {
 	});
 });
 
-describe("card action buttons are gated to comment/anchored threads", () => {
-	test("comment and anchored-highlight cards render Resolve/Delete actions", () => {
+describe("card action buttons are gated by thread type", () => {
+	test("comment and anchored-highlight cards render Resolve/Delete actions, not Accept/Reject", () => {
 		const { view, ranges } = setup("x{>>hi<<}y{==sel==}{>>reply<<}z");
 		const comment_card = mountThread(view, ranges[0]).marker;
 		const anchored_card = mountThread(view, ranges[1]).marker;
@@ -189,14 +189,143 @@ describe("card action buttons are gated to comment/anchored threads", () => {
 		expect(comment_card.annotation_thread.querySelector(".cmtr-anno-gutter-thread-actions")).not.toBeNull();
 		expect(anchored_card.annotation_thread.querySelector("[aria-label='Resolve thread']")).not.toBeNull();
 		expect(anchored_card.annotation_thread.querySelector("[aria-label='Delete thread']")).not.toBeNull();
+		expect(comment_card.annotation_thread.querySelector("[aria-label='Accept changes']")).toBeNull();
+		expect(anchored_card.annotation_thread.querySelector("[aria-label='Reject changes']")).toBeNull();
 	});
 
-	test("suggestion cards render no Resolve/Delete actions (standalone or with replies)", () => {
-		const { view, ranges } = setup("x{++add++}y{--del--}{>>note<<}z");
-		const standalone_addition = mountThread(view, ranges[0]).marker;
-		const deletion_with_reply = mountThread(view, ranges[1]).marker;
+	test("suggestion cards render Accept/Reject actions, not Resolve/Delete (standalone or with replies)", () => {
+		const { view, ranges } = setup("x{++add++}y{--del--}{>>note<<}z{~~old~>new~~}w");
+		const standalone_addition = mountThread(view, ranges.find((r) => r.type === SuggestionType.ADDITION)!)
+			.marker;
+		const deletion_with_reply = mountThread(view, ranges.find((r) => r.type === SuggestionType.DELETION)!)
+			.marker;
+		const substitution = mountThread(view, ranges.find((r) => r.type === SuggestionType.SUBSTITUTION)!).marker;
 
-		expect(standalone_addition.annotation_thread.querySelector(".cmtr-anno-gutter-thread-actions")).toBeNull();
-		expect(deletion_with_reply.annotation_thread.querySelector(".cmtr-anno-gutter-thread-actions")).toBeNull();
+		for (const card of [standalone_addition, deletion_with_reply, substitution]) {
+			expect(card.annotation_thread.querySelector("[aria-label='Accept changes']")).not.toBeNull();
+			expect(card.annotation_thread.querySelector("[aria-label='Reject changes']")).not.toBeNull();
+			expect(card.annotation_thread.querySelector("[aria-label='Resolve thread']")).toBeNull();
+			expect(card.annotation_thread.querySelector("[aria-label='Delete thread']")).toBeNull();
+		}
+	});
+});
+
+describe("suggestion card Accept/Reject buttons dispatch synchronously", () => {
+	test("clicking Accept on an addition card applies the suggestion (keeps the added text, drops markup)", () => {
+		const { view, ranges } = setup("x{++add++}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const accept_button = marker.annotation_thread.querySelector<HTMLButtonElement>(
+			"[aria-label='Accept changes']",
+		)!;
+		accept_button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+		expect(view.state.doc.toString()).toBe("xaddy");
+	});
+
+	test("clicking Reject on an addition card discards the suggestion entirely", () => {
+		const { view, ranges } = setup("x{++add++}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const reject_button = marker.annotation_thread.querySelector<HTMLButtonElement>(
+			"[aria-label='Reject changes']",
+		)!;
+		reject_button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+		expect(view.state.doc.toString()).toBe("xy");
+	});
+
+	test("clicking Accept on a deletion card removes the deleted text", () => {
+		const { view, ranges } = setup("x{--del--}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const accept_button = marker.annotation_thread.querySelector<HTMLButtonElement>(
+			"[aria-label='Accept changes']",
+		)!;
+		accept_button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+		expect(view.state.doc.toString()).toBe("xy");
+	});
+
+	test("clicking Reject on a deletion card keeps the deleted text and drops markup", () => {
+		const { view, ranges } = setup("x{--del--}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const reject_button = marker.annotation_thread.querySelector<HTMLButtonElement>(
+			"[aria-label='Reject changes']",
+		)!;
+		reject_button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+		expect(view.state.doc.toString()).toBe("xdely");
+	});
+
+	test("Accept/Reject clicks stop propagation (thread-click focus handler does not also fire)", () => {
+		const { view, ranges } = setup("x{++add++}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const thread_click = jest.fn();
+		marker.annotation_thread.addEventListener("click", thread_click);
+
+		const accept_button = marker.annotation_thread.querySelector<HTMLButtonElement>(
+			"[aria-label='Accept changes']",
+		)!;
+		accept_button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+		expect(thread_click).not.toHaveBeenCalled();
+	});
+});
+
+describe("gutter card shape: action row must not steal :first-child/:last-child from entries", () => {
+	test("hypothesis check: the actions row is inserted BEFORE the annotation entry in DOM order", () => {
+		// EXPL: This documents *why* the plain `.cmtr-anno-gutter-annotation:first-child` /
+		//       `:last-child` CSS selectors break for a lone comment card: `toDOM()` appends the
+		//       actions row to `annotation_thread` before looping over `this.annotations` to build
+		//       the entries, so the actions row — not the entry — is the literal first DOM child.
+		//       `:last-child` still matches the entry (nothing follows it), so the card renders
+		//       with square top / rounded bottom, i.e. a "bottom segment" — matching the report.
+		const { view, ranges } = setup("x{>>hi<<}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const children = Array.from(marker.annotation_thread.children);
+		expect(children[0].classList.contains("cmtr-anno-gutter-thread-actions")).toBe(true);
+
+		const entry = marker.annotation_thread.querySelector(".cmtr-anno-gutter-annotation")!;
+		expect(marker.annotation_thread.firstElementChild).not.toBe(entry);
+		expect(marker.annotation_thread.firstElementChild!.classList.contains("cmtr-anno-gutter-annotation")).toBe(
+			false,
+		);
+		// EXPL: `:last-child` was never broken — the entry IS the literal last child.
+		expect(marker.annotation_thread.lastElementChild).toBe(entry);
+	});
+
+	test("lone-entry card: exactly one .cmtr-anno-gutter-annotation, first AND last among its own kind", () => {
+		// EXPL: The fix (annotation-gutter.scss) selects entries with `:nth-child(1 of S)` /
+		//       `:nth-last-child(1 of S)` (S = .cmtr-anno-gutter-annotation), which matches the
+		//       first/last child *among elements matching S*, ignoring interleaved siblings like
+		//       the actions row entirely. jsdom can't evaluate that selector (no computed CSS
+		//       either way), so assert the structural fact the selector keys on directly: among
+		//       `.cmtr-anno-gutter-annotation`-classed children, there is exactly one, so it is
+		//       trivially both the first and the last of its kind -> gets full corner rounding.
+		const { view, ranges } = setup("x{>>hi<<}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const entries = Array.from(marker.annotation_thread.children).filter((el) =>
+			el.classList.contains("cmtr-anno-gutter-annotation")
+		);
+		expect(entries).toHaveLength(1);
+		expect(entries[0]).toBe(marker.annotation_thread.querySelector(".cmtr-anno-gutter-annotation"));
+	});
+
+	test("multi-entry thread: first/last-of-kind still resolve correctly around the actions row", () => {
+		const { view, ranges } = setup("x{==sel==}{>>a<<}{>>b<<}y");
+		const { marker } = mountThread(view, ranges[0]);
+
+		const entries = Array.from(marker.annotation_thread.children).filter((el) =>
+			el.classList.contains("cmtr-anno-gutter-annotation")
+		);
+		expect(entries).toHaveLength(2);
+		// EXPL: nth-child(1 of S)/nth-last-child(1 of S) pick these two regardless of the actions
+		//       row's position among the children — unlike plain :first-child/:last-child.
+		expect(entries[0]).not.toBe(entries[1]);
 	});
 });

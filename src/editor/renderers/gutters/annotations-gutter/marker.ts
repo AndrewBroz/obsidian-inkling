@@ -450,10 +450,15 @@ export class AnnotationMarker extends GutterMarker {
 
 		// EXPL: Compact per-card actions (visible on hover/focus, see annotation-gutter.scss).
 		//       Resolve/Delete are comment-thread concepts: only rendered when the base is a
-		//       HIGHLIGHT anchor or a COMMENT. Suggestion threads keep accept/reject (and
-		//       "Remove all comments" for their replies) in the card's context menu — a Resolve
-		//       there would contradict itself across views, and Delete on a standalone suggestion
-		//       card would be a silent no-op (`removeThreadChanges` returns [] for it).
+		//       HIGHLIGHT anchor or a COMMENT. Suggestion bases (addition/deletion/substitution)
+		//       get Accept/Reject instead, dispatching the same `acceptSuggestions`/
+		//       `rejectSuggestions` helpers as the "Accept changes"/"Reject changes" context-menu
+		//       items below, scoped to this thread's own span — a Resolve button there would
+		//       contradict itself across views (suggestions have their own accept/reject
+		//       lifecycle), and Delete on a standalone suggestion card would be a silent no-op
+		//       (`removeThreadChanges` returns [] for it). Both branches reuse the same
+		//       `.cmtr-anno-gutter-thread-actions` row/hover mechanism so suggestion cards get
+		//       identical hover-reveal treatment to comment/anchored cards.
 		if (thread_resolvable(this.annotation)) {
 			const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
 			const resolve_button = actions.createEl("button", {
@@ -473,6 +478,34 @@ export class AnnotationMarker extends GutterMarker {
 			delete_button.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.view.dispatch({ changes: removeThreadChanges(this.annotation) });
+			});
+		} else if (
+			this.annotation.type === SuggestionType.ADDITION ||
+			this.annotation.type === SuggestionType.DELETION ||
+			this.annotation.type === SuggestionType.SUBSTITUTION
+		) {
+			const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
+			const accept_button = actions.createEl("button", {
+				cls: "cmtr-anno-gutter-thread-action",
+				attr: { "aria-label": "Accept changes" },
+			});
+			setIcon(accept_button, "check");
+			accept_button.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.view.dispatch({
+					changes: acceptSuggestions(this.view.state, this.annotation.from, this.annotation.to),
+				});
+			});
+			const reject_button = actions.createEl("button", {
+				cls: "cmtr-anno-gutter-thread-action",
+				attr: { "aria-label": "Reject changes" },
+			});
+			setIcon(reject_button, "x");
+			reject_button.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.view.dispatch({
+					changes: rejectSuggestions(this.view.state, this.annotation.from, this.annotation.to),
+				});
 			});
 		}
 

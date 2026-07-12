@@ -58,17 +58,27 @@
   word-wrap: break-word;
 }
 
-.cmtr-anno-gutter-annotation:first-child {
+// EXPL: `:nth-child(1 of S)` / `:nth-last-child(1 of S)` (the CSS "of <selector-list>" form)
+//       match the first/last child *among siblings matching S*, ignoring any interleaved
+//       siblings entirely. This is deliberate: `.cmtr-anno-gutter-thread-actions` (the hover
+//       action row, see below) is a sibling of these entries and — being appended to the
+//       thread container before the entries are built (marker.ts toDOM()) — is the DOM's
+//       literal first child. Plain `:first-child` therefore never matched a lone entry (square
+//       top, rounded bottom only — reported as the card rendering as a "bottom segment"); using
+//       `of S` instead makes the rounding immune to the actions row's position in the DOM.
+.cmtr-anno-gutter-annotation:nth-child(1 of .cmtr-anno-gutter-annotation) {
   border-top-left-radius: var(--radius-l);
   border-top-right-radius: var(--radius-l);
 }
 
-.cmtr-anno-gutter-annotation:last-child {
+.cmtr-anno-gutter-annotation:nth-last-child(1 of .cmtr-anno-gutter-annotation) {
   border-bottom-left-radius: var(--radius-l);
   border-bottom-right-radius: var(--radius-l);
 }
 
-.cmtr-anno-gutter-annotation:not(:last-child) {
+.cmtr-anno-gutter-annotation:not(
+    :nth-last-child(1 of .cmtr-anno-gutter-annotation)
+  ) {
   border-bottom: 1px dashed var(--background-modifier-border);
 }
 
