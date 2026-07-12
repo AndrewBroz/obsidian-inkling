@@ -102,12 +102,40 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
   actual tracked tree was 26 (the estimate counted untracked working-tree artifacts). All
   tracked content was vendored byte-identically (verified in review).
 
+## Phase 3A outcomes
+
+- **Reject-all corruption (bug 2) FIXED** for full-coverage cases (commits 48e81e9 + c2009533):
+  deletion/substitution marks now retract fully-covered pending additions; replacement text is
+  wrapped as a pending addition. Invariant-asserting tests (accept-all preserved, reject-all
+  restores pre-mark semantics) landed in tests/mark_ranges.test.ts. Partial-coverage residual
+  recorded above (bug 2 status update).
+- **Attribution on by default** (commit 073939b): six defaults flipped (enable_/add_ metadata,
+  author, timestamp). Existing users unaffected (saved settings win in the merge). First-install
+  detection lives in migrateSettings (loadSettings is dead code — cleanup candidate); the
+  AuthorNameModal prompts once on fresh installs.
+- **Comments anchor to selections** (commit 7b59c20): clean selection wraps as
+  `{==selection==}{>>comment<<}`; the parser's adjacency rule attaches the comment as a thread
+  on the highlight, so gutter/hover render it with zero renderer changes. Selection touching
+  existing markup falls back to at-cursor (CriticMarkup cannot nest — recorded spec refinement).
+  Safety note: head-inside-markup cannot reach the fallback via real callers (at_cursor's
+  inclusive boundaries guarantee `range` is defined there); the guarantee lives in caller
+  discipline — flagged for a defensive guard later.
+
+### Manual smoke checklist (needs a human in Obsidian)
+
+- Fresh vault → author-name prompt appears once; existing vault → no prompt, settings intact.
+- New suggestion/comment carries `{"author":"...","time":...}@@` metadata; author/recency
+  filters in the Annotations View now work out of the box.
+- Select text → "Add comment" → highlight + focused comment thread; hover shows the thread.
+- (Carried from earlier phases) staleness-guard Notice; gutter fold/resize persistence;
+  bulk-stale accept shows ONE summary Notice.
+
 ## Test-infrastructure conventions established (use in later phases)
 
 - jest state setup: `EditorState.create` requires more than `[rangeParser]` — use the
   `pluginSettingsField`/`providePluginSettingsExtension` pattern (see tests/range_correcter.test.ts).
-- Parsing metadata (`{"author":...}@@`) requires settings override `enable_metadata: true`
-  (DEFAULT_SETTINGS disables it).
+- Parsing metadata (`{"author":...}@@`) requires `enable_metadata: true` — on by default since
+  Phase 3A; tests that need deterministic markup output should override `add_metadata: false`.
 - The `obsidian` npm package has no runtime code; the root `__mocks__/obsidian.ts` provides the
   runtime surface and jest auto-applies it. `src/ui/embeddable-editor.ts` is stubbed via
   `moduleNameMapper` because it extends a live-Obsidian class at module load.
