@@ -71,5 +71,6 @@
         "@codemirror/state": "6.5.0",
         "@codemirror/view": "6.38.6",
         "@codemirror/language": "$@codemirror/language"
-    }
+    },
+    "trustedDependencies": []
 }
