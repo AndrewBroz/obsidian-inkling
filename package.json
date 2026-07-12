@@ -19,7 +19,7 @@
 		"postinstall": "bun run scripts/postinstall.ts"
 	},
 	"keywords": [],
-	"author": "Andrew Broz (https://github.com/AndrewBroz)",
+	"author": "Andrew Brož (https://github.com/AndrewBroz)",
 	"contributors": [
 		"kometenstaub (https://github.com/kometenstaub)",
 		"Fevol (https://github.com/Fevol)"
