@@ -15,9 +15,9 @@ import {
 	type EditorChange,
 	rangeParser,
 	rejectSuggestions,
-	reopen_thread,
 	resolve_thread,
 	SuggestionType,
+	thread_resolvable,
 	thread_resolved,
 } from "../../../base";
 
@@ -135,10 +135,12 @@ class AnnotationNode extends Component {
 	renderPreview() {
 		if (this.currentMode === "preview") return;
 
-		// FIXME: On accepting a new comment (on mod+enter), this function gets called twice
-		//    Once for the immediate user event
-		//    And again when the comments get updated
-		//    -> This caused an issue where the range gets added twice, temporarily fixed by setting text to new text
+		// EXPL: On accepting a new comment (on mod+enter), this function gets called twice:
+		//       once for the immediate user event, and again when the write dispatch below rebuilds
+		//       the gutter (editor teardown can re-enter via a native blur). The second call must
+		//       not dispatch again: the write branch sets `text = new_text` BEFORE dispatching, so
+		//       the re-entrant call takes the equal-text render branch above it; the empty-cancel
+		//       branch is latched by `cancelling` for the same reason.
 		this.annotation_container.toggleClass("cmtr-anno-gutter-annotation-editing", false);
 
 		// EXPL: An empty submit/blur is routed here before the write path below, since renderPreview
@@ -153,11 +155,14 @@ class AnnotationNode extends Component {
 		if (this.new_text !== null && !this.new_text.trim()) {
 			if (!this.text.trim()) {
 				if (!this.cancelling) {
+					// EXPL: Latch and clear state BEFORE dispatching, then dispatch SYNCHRONOUSLY
+					//       (dispatch-first, same ordering as comment-widget.ts's commitRangeEdit):
+					//       range.from/to are only valid in the CURRENT document. A deferred dispatch
+					//       raced the card buttons' synchronous dispatches (mousedown blurs the editor
+					//       before click fires), splicing stale offsets through the fresh transaction.
 					this.cancelling = true;
-					const range = this.range as CommentRange;
-					activeWindow.setTimeout(() => {
-						this.marker.view.dispatch({ changes: cancel_empty_comment(range) });
-					});
+					this.new_text = null;
+					this.marker.view.dispatch({ changes: cancel_empty_comment(this.range as CommentRange) });
 				}
 				this.new_text = null;
 				return;
@@ -220,16 +225,18 @@ class AnnotationNode extends Component {
 		} // EXPL: The annotation gets updated with new text
 		else {
 			const settings = this.marker.view.state.field(pluginSettingsField);
+			// EXPL: Snapshot the change while range.from/to are still valid, set `text = new_text`
+			//       (the double-call guard for the re-entrant call described above), then dispatch
+			//       SYNCHRONOUSLY. The previous deferred dispatch raced the card buttons' synchronous
+			//       resolve/delete dispatches (mousedown blurs the open editor before click fires),
+			//       applying pre-resolve offsets to the post-resolve document and corrupting text.
+			const changes = {
+				from: this.range.from,
+				to: this.range.to,
+				insert: create_range(settings, SuggestionType.COMMENT, this.new_text),
+			};
 			this.text = this.new_text;
-			activeWindow.setTimeout(() => {
-				this.marker.view.dispatch({
-					changes: {
-						from: this.range.from,
-						to: this.range.to,
-						insert: create_range(settings, SuggestionType.COMMENT, this.new_text!),
-					},
-				});
-			});
+			this.marker.view.dispatch({ changes });
 		}
 	}
 
@@ -337,23 +344,21 @@ class AnnotationNode extends Component {
 			});
 		}
 
-		menu.addItem((item) => {
-			if (thread_resolved(this.range)) {
-				item.setTitle("Reopen thread")
-					.setIcon("rotate-ccw")
-					.setSection("close-annotation")
-					.onClick(() => {
-						this.marker.view.dispatch({ changes: reopen_thread(this.range) });
-					});
-			} else {
+		// EXPL: Resolve is a comment-thread concept (HIGHLIGHT/COMMENT base only, see
+		//       `thread_resolvable`) — suggestion threads are closed via accept/reject instead.
+		//       No "Reopen thread" counterpart here: resolved comment/anchored threads never render
+		//       a gutter card (see `createMarkers`), so a resolved thread can't open this menu —
+		//       reopen lives in the Annotations View (Resolved filter) and the editor context menu.
+		if (thread_resolvable(this.range)) {
+			menu.addItem((item) => {
 				item.setTitle("Resolve thread")
 					.setIcon("check")
 					.setSection("close-annotation")
 					.onClick(() => {
 						this.marker.view.dispatch({ changes: resolve_thread(this.range) });
 					});
-			}
-		});
+			});
+		}
 
 		menu.addItem((item) => {
 			item.setTitle("Fold gutter")
@@ -443,26 +448,33 @@ export class AnnotationMarker extends GutterMarker {
 		this.annotation_thread = createDiv({ cls: "cmtr-anno-gutter-thread" });
 		this.annotation_thread.addEventListener("click", this.onCommentThreadClick.bind(this));
 
-		// EXPL: Compact per-card actions (visible on hover/focus, see annotation-gutter.scss)
-		const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
-		const resolve_button = actions.createEl("button", {
-			cls: "cmtr-anno-gutter-thread-action",
-			attr: { "aria-label": "Resolve thread" },
-		});
-		setIcon(resolve_button, "check");
-		resolve_button.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.view.dispatch({ changes: resolve_thread(this.annotation) });
-		});
-		const delete_button = actions.createEl("button", {
-			cls: "cmtr-anno-gutter-thread-action",
-			attr: { "aria-label": "Delete thread" },
-		});
-		setIcon(delete_button, "trash-2");
-		delete_button.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.view.dispatch({ changes: removeThreadChanges(this.annotation) });
-		});
+		// EXPL: Compact per-card actions (visible on hover/focus, see annotation-gutter.scss).
+		//       Resolve/Delete are comment-thread concepts: only rendered when the base is a
+		//       HIGHLIGHT anchor or a COMMENT. Suggestion threads keep accept/reject (and
+		//       "Remove all comments" for their replies) in the card's context menu — a Resolve
+		//       there would contradict itself across views, and Delete on a standalone suggestion
+		//       card would be a silent no-op (`removeThreadChanges` returns [] for it).
+		if (thread_resolvable(this.annotation)) {
+			const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
+			const resolve_button = actions.createEl("button", {
+				cls: "cmtr-anno-gutter-thread-action",
+				attr: { "aria-label": "Resolve thread" },
+			});
+			setIcon(resolve_button, "check");
+			resolve_button.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.view.dispatch({ changes: resolve_thread(this.annotation) });
+			});
+			const delete_button = actions.createEl("button", {
+				cls: "cmtr-anno-gutter-thread-action",
+				attr: { "aria-label": "Delete thread" },
+			});
+			setIcon(delete_button, "trash-2");
+			delete_button.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.view.dispatch({ changes: removeThreadChanges(this.annotation) });
+			});
+		}
 
 		for (const range of this.annotations)
 			this.component.addChild(new AnnotationNode(range, this));
@@ -516,8 +528,11 @@ function createMarkers(state: EditorState, changed_ranges: CriticMarkupRange[], 
 
 	const cm_ranges: Range<AnnotationMarker>[] = [];
 	for (const range of changed_ranges) {
-		// EXPL: Resolved threads never render a gutter card (reopen via the Annotations View or context menu)
-		if (thread_resolved(range))
+		// EXPL: Resolved comment/anchored threads never render a gutter card (reopen via the
+		//       Annotations View's Resolved filter or the editor context menu). Suggestion bases
+		//       are exempt: a done-flagged suggestion (legacy "Set completed" data) keeps its card,
+		//       since resolve is not a suggestion concept (see `thread_resolvable`).
+		if (thread_resolvable(range) && thread_resolved(range))
 			continue;
 
 		let full_thread = range.full_thread;

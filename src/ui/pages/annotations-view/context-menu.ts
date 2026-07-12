@@ -10,6 +10,7 @@ import {
 	groupRangeEntryByPath,
 	range_source_with_fields,
 	SuggestionType,
+	thread_resolvable,
 	thread_resolved,
 } from "../../../editor/base";
 import { annotationGutterFocusAnnotation } from "../../../editor/renderers/gutters";
@@ -77,44 +78,50 @@ export function onContextMenu(
 		});
 	}
 
-	menu.addItem((item) => {
-		// EXPL: A thread is resolved iff its base carries `done: true` (see `thread_resolved`).
-		// When multiple threads are selected with a mixed resolved state, resolve wins — the
-		// action always moves every selected thread toward "resolved".
-		const any_unresolved = base_entries.some((entry) => !thread_resolved(entry.range));
-		if (any_unresolved) {
-			item
-				.setTitle(multiple_ranges ? "Resolve selected threads" : "Resolve thread")
-				.setIcon("check")
-				.setSection("close-annotation")
-				.onClick(async () =>
-					applyRangeEditsToVault(
-						plugin,
-						base_entries,
-						applyToFile.bind(
-							null,
-							(range, _) => range_source_with_fields(range, { ...range.fields, done: true }),
-						),
-					)
-				);
-		} else {
-			item
-				.setTitle(multiple_ranges ? "Reopen selected threads" : "Reopen thread")
-				.setIcon("rotate-ccw")
-				.setSection("close-annotation")
-				.onClick(async () =>
-					applyRangeEditsToVault(
-						plugin,
-						base_entries,
-						applyToFile.bind(null, (range, _) => {
-							const fields = { ...range.fields };
-							delete fields.done;
-							return range_source_with_fields(range, fields);
-						}),
-					)
-				);
-		}
-	});
+	// EXPL: Resolve/reopen is a comment-thread concept (HIGHLIGHT/COMMENT base only, see
+	// `thread_resolvable`) — suggestion threads are closed via accept/reject, so done-flagged
+	// suggestions (legacy "Set completed" data) are excluded from both the offer and the edit.
+	const resolvable_entries = base_entries.filter((entry) => thread_resolvable(entry.range));
+	if (resolvable_entries.length) {
+		menu.addItem((item) => {
+			// EXPL: A thread is resolved iff its base carries `done: true` (see `thread_resolved`).
+			// When multiple threads are selected with a mixed resolved state, resolve wins — the
+			// action always moves every selected thread toward "resolved".
+			const any_unresolved = resolvable_entries.some((entry) => !thread_resolved(entry.range));
+			if (any_unresolved) {
+				item
+					.setTitle(multiple_ranges ? "Resolve selected threads" : "Resolve thread")
+					.setIcon("check")
+					.setSection("close-annotation")
+					.onClick(async () =>
+						applyRangeEditsToVault(
+							plugin,
+							resolvable_entries,
+							applyToFile.bind(
+								null,
+								(range, _) => range_source_with_fields(range, { ...range.fields, done: true }),
+							),
+						)
+					);
+			} else {
+				item
+					.setTitle(multiple_ranges ? "Reopen selected threads" : "Reopen thread")
+					.setIcon("rotate-ccw")
+					.setSection("close-annotation")
+					.onClick(async () =>
+						applyRangeEditsToVault(
+							plugin,
+							resolvable_entries,
+							applyToFile.bind(null, (range, _) => {
+								const fields = { ...range.fields };
+								delete fields.done;
+								return range_source_with_fields(range, fields);
+							}),
+						)
+					);
+			}
+		});
+	}
 
 	if (!multiple_ranges) {
 		const { range, path } = ranges[0];

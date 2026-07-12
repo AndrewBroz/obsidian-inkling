@@ -10,6 +10,7 @@ import {
 	rejectSuggestions,
 	reopen_thread,
 	resolve_thread,
+	thread_resolvable,
 	thread_resolved,
 } from "../base";
 
@@ -92,25 +93,31 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 								}));
 							});
 					});
-					submenu.addItem((item) => {
-						if (thread_resolved(range)) {
-							item.setTitle("Reopen thread")
-								.setIcon("lucide-rotate-ccw")
-								.onClick(() => {
-									editor.cm.dispatch(editor.cm.state.update({
-										changes: reopen_thread(range),
-									}));
-								});
-						} else {
-							item.setTitle("Resolve thread")
-								.setIcon("lucide-check")
-								.onClick(() => {
-									editor.cm.dispatch(editor.cm.state.update({
-										changes: resolve_thread(range),
-									}));
-								});
-						}
-					});
+					// EXPL: Resolve/reopen only applies to comment/anchored threads (see
+					//       `thread_resolvable`) — suggestion threads are closed via accept/reject.
+					//       Reopen stays reachable here: a resolved highlight still renders (as
+					//       plain text), so the cursor can sit inside it.
+					if (thread_resolvable(range)) {
+						submenu.addItem((item) => {
+							if (thread_resolved(range)) {
+								item.setTitle("Reopen thread")
+									.setIcon("lucide-rotate-ccw")
+									.onClick(() => {
+										editor.cm.dispatch(editor.cm.state.update({
+											changes: reopen_thread(range),
+										}));
+									});
+							} else {
+								item.setTitle("Resolve thread")
+									.setIcon("lucide-check")
+									.onClick(() => {
+										editor.cm.dispatch(editor.cm.state.update({
+											changes: resolve_thread(range),
+										}));
+									});
+							}
+						});
+					}
 				});
 			}
 		}

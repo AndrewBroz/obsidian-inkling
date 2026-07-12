@@ -1,6 +1,6 @@
 import { PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
 import type { EditorChange } from "../edit-handler";
-import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, type SuggestionType } from "./definitions";
+import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, SuggestionType } from "./definitions";
 import type { CommentRange } from "./types";
 
 const shortHandMapping = {
@@ -319,9 +319,14 @@ export abstract class CriticMarkupRange {
 			else
 				str = this.unwrap();
 		}
-		// EXPL: Resolved ranges render as plain text in reading view (resolve writes `done` to every
-		//       thread member, so a per-range check suffices)
-		const cls = this.fields.done === true ? "cmtr-resolved" : `cmtr-${this.repr.toLowerCase()}`;
+		// EXPL: Resolved HIGHLIGHTS render as plain text in reading view (resolve writes `done` to
+		//       every thread member, so a per-range check suffices). Only HIGHLIGHT takes this
+		//       branch: COMMENT is pre-gated by rangePostProcess (renders as nothing), and resolve
+		//       never applies to suggestion bases — a done-flagged DELETION (legacy "Set completed"
+		//       data) must keep rendering as cmtr-deletion, not as accepted plain text.
+		const cls = this.fields.done === true && this.type === SuggestionType.HIGHLIGHT ?
+			"cmtr-resolved" :
+			`cmtr-${this.repr.toLowerCase()}`;
 		return `<${tag} class='${cls}'>${str}</${tag}>`;
 	}
 

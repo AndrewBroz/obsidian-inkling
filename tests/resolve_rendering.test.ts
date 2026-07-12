@@ -2,11 +2,16 @@ import { EditorSelection, type Range } from "@codemirror/state";
 import type { Decoration, EditorView } from "@codemirror/view";
 import type { App } from "obsidian";
 
-import { DEFAULT_SETTINGS } from "../src/constants";
+import { editorEditorField } from "obsidian";
+
+import { AnnotationInclusionType, DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
+import { CriticMarkupRange as CriticMarkupRangeBase } from "../src/editor/base/ranges";
 import type { CriticMarkupRange } from "../src/editor/base/ranges";
+import { annotationGutterMarkers } from "../src/editor/renderers/gutters/annotations-gutter/marker";
 import { constructDecorations } from "../src/editor/renderers/live-preview/markup-renderer";
 import { rangePostProcess } from "../src/editor/renderers/post-process/renderer";
+import { annotationGutterIncludedTypesState } from "../src/editor/settings";
 import { EditMode, type PluginSettings, PreviewMode } from "../src/types";
 import { createRangeState } from "./helpers";
 
@@ -153,5 +158,66 @@ describe("postprocess for resolved ranges (reading view)", () => {
 		const range = topRange(`{>>{"done":true}@@hi<<}`);
 		const rendered = rangePostProcess(null as unknown as App, range);
 		expect(rendered).toBe("");
+	});
+
+	// EXPL: Resolve is a comment-thread concept — a `done` flag on a suggestion base (legacy
+	//       "Set completed" data) must NOT strip the suggestion styling in reading view, which
+	//       would make an unaccepted change look accepted.
+	test("done-flagged ADDITION keeps its suggestion styling, not cmtr-resolved", () => {
+		const rendered = topRange(`{++{"done":true}@@add++}`).postprocess() as string;
+		expect(rendered).toContain("cmtr-addition");
+		expect(rendered).not.toContain("cmtr-resolved");
+		expect(rendered).toContain("add");
+	});
+
+	test("done-flagged DELETION keeps its suggestion styling, not cmtr-resolved", () => {
+		const rendered = topRange(`{--{"done":true}@@del--}`).postprocess() as string;
+		expect(rendered).toContain("cmtr-deletion");
+		expect(rendered).not.toContain("cmtr-resolved");
+	});
+
+	// EXPL: The base-class postprocess `done` branch is gated to HIGHLIGHT — invoked via the base
+	//       implementation directly (the path shared by TempRange-style prototype dispatch), a
+	//       done-flagged DELETION must keep cmtr-deletion rather than render as accepted plain text.
+	test("done-flagged DELETION through the base postprocess keeps cmtr-deletion", () => {
+		const range = topRange(`{--{"done":true}@@del--}`);
+		const rendered = CriticMarkupRangeBase.prototype.postprocess.call(range) as string;
+		expect(rendered).toContain("class='cmtr-deletion'");
+		expect(rendered).not.toContain("cmtr-resolved");
+	});
+});
+
+describe("annotation gutter marker production for done-flagged threads", () => {
+	const ALL_TYPES = AnnotationInclusionType.ADDITION | AnnotationInclusionType.DELETION |
+		AnnotationInclusionType.SUBSTITUTION | AnnotationInclusionType.HIGHLIGHT |
+		AnnotationInclusionType.COMMENT;
+
+	function gutterMarkerCount(doc: string): number {
+		// EXPL: `annotationGutterMarkers` is a plain StateField over the parsed ranges — it only
+		//       needs the (mocked) editorEditorField and the included-types facet in the state.
+		const state = createRangeState(doc, {}, [
+			editorEditorField,
+			annotationGutterIncludedTypesState.of(ALL_TYPES),
+			annotationGutterMarkers,
+		]);
+		return state.field(annotationGutterMarkers).size;
+	}
+
+	test("an unresolved comment thread produces a gutter marker (sanity)", () => {
+		expect(gutterMarkerCount("x{>>hi<<}y")).toBe(1);
+	});
+
+	test("a resolved COMMENT thread produces no gutter marker", () => {
+		expect(gutterMarkerCount(`x{>>{"done":true}@@hi<<}y`)).toBe(0);
+	});
+
+	test("a resolved anchored HIGHLIGHT thread produces no gutter marker", () => {
+		expect(gutterMarkerCount(`x{=={"done":true}@@sel==}{>>{"done":true}@@c<<}y`)).toBe(0);
+	});
+
+	// EXPL: The `thread_resolved` skip is gated to HIGHLIGHT/COMMENT bases — a done-flagged
+	//       suggestion (legacy "Set completed" data) keeps its card.
+	test("a done-flagged ADDITION keeps its gutter marker", () => {
+		expect(gutterMarkerCount(`x{++{"done":true}@@add++}y`)).toBe(1);
 	});
 });

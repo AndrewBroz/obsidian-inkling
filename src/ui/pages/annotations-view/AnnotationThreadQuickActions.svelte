@@ -5,6 +5,7 @@ import {
 	type CriticMarkupRangeEntry,
 	range_source_with_fields,
 	SuggestionType,
+	thread_resolvable,
 	thread_resolved,
 } from "../../../editor/base";
 import {
@@ -92,7 +93,9 @@ let {
 			/>
 		{/if}
 
-		{#if is_base}
+		<!-- EXPL: Resolve/reopen is a comment-thread concept (HIGHLIGHT/COMMENT base only, see
+		     thread_resolvable) — suggestion threads are closed via accept/reject instead. -->
+		{#if is_base && thread_resolvable(entry.range)}
 			{#if thread_resolved(entry.range)}
 				<Button
 					icon="rotate-ccw"

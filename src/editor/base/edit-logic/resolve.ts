@@ -10,6 +10,17 @@ export function thread_resolved(range: CriticMarkupRange): boolean {
 }
 
 /**
+ * Resolve/reopen is a comment-thread concept: it only applies to threads whose base is a
+ * HIGHLIGHT anchor or a standalone COMMENT. Suggestion bases (addition/deletion/substitution)
+ * have their own lifecycle (accept/reject) — a `done` flag on them (legacy "Set completed"
+ * data) must not make the thread disappear or render as if the suggestion were applied.
+ */
+export function thread_resolvable(range: CriticMarkupRange): boolean {
+	const base_type = range.base_range.type;
+	return base_type === SuggestionType.COMMENT || base_type === SuggestionType.HIGHLIGHT;
+}
+
+/**
  * Marks every member of the thread (base + replies) as done. Reversible — only metadata
  * changes, markup is never deleted. Each member edits its own metadata blob, so the returned
  * changes never overlap and are safe to dispatch together.

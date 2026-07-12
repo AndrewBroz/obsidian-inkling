@@ -177,7 +177,11 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
   Resolve/Reopen in both context menus and Annotations View quick actions (base-row only);
   "Set completed" menu item replaced. Annotations View gained a ResolvedFilter
   (All/Unresolved/Resolved, default Unresolved — resolved threads vanish from the view by
-  default; the StateButton is always visible in the toolbar).
+  default; the StateButton is always visible in the toolbar). Resolve/reopen is offered only for
+  HIGHLIGHT/COMMENT-based threads (`thread_resolvable`) — suggestion threads close via
+  accept/reject, and a done-flagged suggestion (legacy "Set completed" data) keeps its gutter
+  card and suggestion styling. Standalone resolved comment threads (no visible highlight left in
+  the note) are reopened from the Annotations View's Resolved filter.
 - **Empty comments**: blur/submit/Escape on a fresh empty comment silently cancels it
   (anchored highlight unwrapped if it was the only comment); clearing an EXISTING comment then
   blurring reverts, never deletes. Guarded against reentrant blur double-dispatch (a review-caught

@@ -340,7 +340,13 @@ export function requireApiVersion(..._args: any[]) {
 // StateField (rather than a plain object) so tests that *do* need to
 // satisfy `suggestionMode`'s unconditional read of it can add it to their
 // state's extensions.
-export const editorInfoField = {};
+// `editorInfoField` is likewise a real StateField so tests that exercise code reading
+// `state.field(editorInfoField)` (e.g. the annotation gutter's preview rendering) can add it to
+// their state's extensions; its value only needs an `app` for the mocked MarkdownRenderer.
+export const editorInfoField = StateField.define<{ app: App }>({
+	create: () => ({ app: new App() }),
+	update: (value) => value,
+});
 export const editorEditorField = StateField.define<{ cm?: unknown }>({
 	create: () => ({}),
 	update: (value) => value,
