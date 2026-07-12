@@ -19,8 +19,7 @@ module.exports = {
 			tsconfig: {
 				verbatimModuleSyntax: false,
 			}
-		}],
-		"^.+\\.(js|jsx)$": "esbuild-jest"
+		}]
 	},
 
 	setupFiles: ["<rootDir>/tests/setup.ts"],
