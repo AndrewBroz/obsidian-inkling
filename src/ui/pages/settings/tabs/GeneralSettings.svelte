@@ -38,6 +38,7 @@ const preview_mode_notices = {
 				{ value: EditMode.OFF.toString(), text: "Regular Edit Mode" },
 				{ value: EditMode.CORRECTED.toString(), text: "Corrected Edit Mode" },
 				{ value: EditMode.SUGGEST.toString(), text: "Suggestion Mode" },
+				{ value: EditMode.COMMENT.toString(), text: "Comment Mode" },
 			]}
 			value={plugin.settings.default_edit_mode.toString()}
 			onChange={(value) => {

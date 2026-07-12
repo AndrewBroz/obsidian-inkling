@@ -180,6 +180,23 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		},
 	},
 	{
+		id: "toggle-comment-mode",
+		name: "Toggle comment mode",
+		icon: "message-square",
+		editor_context: true,
+		regular_callback: (editor: Editor, view: MarkdownView) => {
+			const current_value = editor.cm.state.facet(editModeValueState);
+			const resulting_mode = current_value === EditMode.COMMENT ? EditMode.CORRECTED : EditMode.COMMENT;
+			editor.cm.dispatch(editor.cm.state.update({
+				effects: [
+					editModeValue.reconfigure(editModeValueState.of(resulting_mode)),
+					editMode.reconfigure(getEditMode(resulting_mode, plugin.settings)),
+				],
+			}));
+			plugin.setEditMode(view, resulting_mode);
+		},
+	},
+	{
 		id: "generate-text-diff",
 		name: "Generate text diff from clipboard",
 		icon: "diff",

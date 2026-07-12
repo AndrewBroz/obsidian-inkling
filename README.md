@@ -67,7 +67,7 @@ Other commands: `bun run test` (jest suite), `bun run lint` (ESLint), `bun run f
 
 - [x] Preview of `Accept/Reject` commands in editor
 - [x] Toggling suggestion mode on/off in editor
-- [ ] Toggling comment mode on/off in editor
+- [x] Toggling comment mode on/off in editor
 - [ ] Integration of toggles for suggestion mode, preview and comment mode with other community plugins
 - [ ] Specify suggestion/comment-only mode in frontmatter (based on authorship)
 

@@ -24,6 +24,7 @@ export const suggestionModeStatusBarButton = (plugin: CommentatorPlugin, render:
 			{ icon: "pencil", text: "Editing (Regular)" },
 			{ icon: "edit", text: "Editing (Corrected)" },
 			{ icon: "file-edit", text: "Suggesting" },
+			{ icon: "message-square", text: "Commenting" },
 		],
 		plugin.setEditMode.bind(plugin),
 		(editor) => {
