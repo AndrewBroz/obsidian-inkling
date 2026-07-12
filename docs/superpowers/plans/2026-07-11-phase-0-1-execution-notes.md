@@ -136,6 +136,33 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
 - Delete across an anchored highlight+comment in suggestion mode — thread must degrade
   gracefully, no render error.
 
+## Phase 3B outcomes
+
+- **Comment mode** (commits b03092a + 050f8cd): `EditMode.COMMENT = 3`. The `commentMode`
+  transaction filter gates user-initiated doc edits (input/delete/paste/move) — allowed only when
+  the whole changed span sits inside one comment range's content; `commentModeAnnotation`-marked
+  transactions (add-comment dispatches) and programmatic transactions pass; blocked edits show a
+  throttled Notice (2s, module-level — shared across panes by design). Undo/redo not gated
+  (history only holds allowed transactions). The annotation lives in comment-mode.ts (cycle-safety
+  verified: cross-cycle bindings only read inside function bodies). `markup_focus` gained a
+  COMMENT entry with `backfillMarkupFocus` protecting legacy saved settings. Toggle command +
+  4-mode status-bar/header cycle + default-mode dropdown option landed; cycle tooltips updated to
+  name the correct successor mode.
+- **Frontmatter-enforced modes** (commit 99b85a3): `commentator: suggest | comment | off` with
+  optional `commentator-authors` exemption list (listed authors write freely; empty local author
+  never exempted). Precedence frontmatter > manual toggle > global default. Enforcement is a
+  per-editor facet; the `setEditMode` guard locks BOTH the commands and the status-bar/header
+  buttons (all call sites verified); removing the key restores the default mode via a
+  pre-dispatch un-enforcement. Documented limitation: inactive panes showing the same file keep
+  stale enforcement until refocused (file-open + active-file metadata events only).
+
+### Manual smoke additions (Phase 3B)
+
+- "Toggle comment mode" blocks typing with a Notice; comment edits still work; 4-mode cycle on
+  status-bar and header buttons.
+- Note with `commentator: comment` opens comment-locked; toggles show the enforcement Notice;
+  removing the key restores the default; your own name in `commentator-authors` exempts you.
+
 ## Test-infrastructure conventions established (use in later phases)
 
 - jest state setup: `EditorState.create` requires more than `[rangeParser]` — use the
