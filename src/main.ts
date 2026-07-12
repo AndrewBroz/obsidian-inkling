@@ -110,10 +110,9 @@ export default class CommentatorPlugin extends Plugin {
 		this.editorExtensions.push(rangeParser);
 
 		if (this.settings.annotation_gutter) {
-			const annotation_gutter = annotationGutter(this);
-			// FIXME: Bad. Bad. Bad. This is drivel of the highest degree.
-			this.annotation_gutter_config = (annotation_gutter as unknown as any)[1][1].value;
-			this.editorExtensions.push(annotationGutterCompartment.of(Prec.low(annotation_gutter)));
+			const { extension, config } = annotationGutter(this);
+			this.annotation_gutter_config = config;
+			this.editorExtensions.push(annotationGutterCompartment.of(Prec.low(extension)));
 		}
 
 		if (this.settings.live_preview) {

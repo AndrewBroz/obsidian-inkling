@@ -12,8 +12,8 @@ import { BlockInfo, EditorView, GutterMarker, ViewUpdate } from "@codemirror/vie
 
 import { debounce, editorInfoField, setIcon } from "obsidian";
 import {
-	createGutter,
 	createGutterViewPlugin,
+	createGutterWithConfig,
 	type GutterConfig,
 	GutterElement,
 	GutterView,
@@ -227,8 +227,9 @@ export interface AnnotationGutterConfig extends GutterConfig {
 }
 
 
-export function annotation_gutter(config: AnnotationGutterConfig): Extension {
-	return createGutter(annotationGutterView, config, activeGutters, unfixGutters);
+export function annotation_gutter(config: AnnotationGutterConfig): { extension: Extension; config: Required<AnnotationGutterConfig> } {
+	return createGutterWithConfig(annotationGutterView, config, activeGutters, unfixGutters) as
+		{ extension: Extension; config: Required<AnnotationGutterConfig> };
 }
 
 class AnnotationUpdateContext extends UpdateContext {

@@ -558,5 +558,23 @@ export function createGutter(
 	activeGutters: Facet<Required<GutterConfig>>,
 	unfixGutters: Facet<boolean, boolean>,
 ) {
-	return [createGutterExtension(viewplugin, {}, unfixGutters), activeGutters.of({ ...defaults, ...config })];
+	return createGutterWithConfig(viewplugin, config, activeGutters, unfixGutters).extension;
+}
+
+/**
+ * Like createGutter, but also returns the merged config object registered in the facet.
+ * EXPL: The returned object is the exact instance the gutter reads; callers may mutate it
+ *       to communicate initial width/fold state before the gutter initializes.
+ */
+export function createGutterWithConfig(
+	viewplugin: ViewPlugin<GutterView>,
+	config: GutterConfig,
+	activeGutters: Facet<Required<GutterConfig>>,
+	unfixGutters: Facet<boolean, boolean>,
+): { extension: Extension; config: Required<GutterConfig> } {
+	const merged = { ...defaults, ...config } as Required<GutterConfig>;
+	return {
+		extension: [createGutterExtension(viewplugin, {}, unfixGutters), activeGutters.of(merged)],
+		config: merged,
+	};
 }
