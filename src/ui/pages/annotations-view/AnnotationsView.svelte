@@ -379,7 +379,7 @@ async function onClickOutside() {
 					/>
 					<StateButton
 						onContextMenu={(e) => {
-							let menu = new Menu();
+							const menu = new Menu();
 
 							resolved_filters.map((filter, index) => {
 								menu.addItem((item) => {

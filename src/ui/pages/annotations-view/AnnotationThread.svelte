@@ -50,7 +50,7 @@ let is_selected = $derived(
 // EXPL: An anchored highlight (HIGHLIGHT with replies) is the quote the thread is attached to,
 // not a comment itself — render it as a muted quote instead of a full comment card. Standalone
 // highlights (no replies) keep today's rendering.
-let is_anchor_quote = $derived(
+const is_anchor_quote = $derived(
 	row.range.type === SuggestionType.HIGHLIGHT && row.range.replies.length > 0,
 );
 </script>
