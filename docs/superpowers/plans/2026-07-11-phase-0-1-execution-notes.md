@@ -89,11 +89,11 @@ All 9 modernization tasks landed on branch `phase-2-modernization`. Versions: es
 formats Svelte 5 runes; 136-file style-only reformat landed). prettier and esbuild-jest removed.
 Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in tests/helpers.ts.
 
-- ~~jest stays on 29~~ **RESOLVED 2026-07-12**: Rosetta node replaced with arm64 (v26.5);
-  jest 30.4.2 + jest-environment-jsdom 30 + @types/jest 30 landed with zero config changes.
-- **jest stays on 29** (historical note): jest 30's `unrs-resolver` native module cannot load under this machine's
-  Rosetta x64 node while bun installs arm64 bindings — same root cause as the dprint postinstall
-  failure. Retry the jest 30 bump after replacing the system node with an arm64 build.
+- **jest 30 landed 2026-07-12** (30.4.2 + jest-environment-jsdom 30 + @types/jest 30, zero
+  config changes) after the Rosetta x64 node was replaced with arm64 (v26.5). It had been
+  pinned to 29 because jest 30's `unrs-resolver` native module couldn't load under the x64
+  node while bun installed arm64 bindings — the same root cause as the dprint postinstall
+  failure.
 - **Lint burn-down list** (12 rules downgraded to warn, 89 pre-existing findings — see task-3
   report table): prioritize `svelte/no-at-html-tags` (XSS-adjacent, AnnotationThread.svelte ×2)
   and the 3 `no-undef` hits (`Row` ×2, `Interval` ×1 — real missing references).
