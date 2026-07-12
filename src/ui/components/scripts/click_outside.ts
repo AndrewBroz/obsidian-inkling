@@ -1,0 +1,19 @@
+// TODO: Find more efficient way to do this (10us per event handling)
+export function clickOutside(node: HTMLElement, ignore?: string) {
+	const handleClick = (event: Event) => {
+		const target = event.target as HTMLElement;
+		if (!event.target || ignore && target.closest(ignore))
+			return;
+
+		if (node && !node.contains(target) && !event.defaultPrevented)
+			node.dispatchEvent(new CustomEvent("click_outside"));
+	};
+
+	node.doc.addEventListener("click", handleClick, true);
+
+	return {
+		destroy() {
+			node.doc.removeEventListener("click", handleClick, true);
+		},
+	};
+}
