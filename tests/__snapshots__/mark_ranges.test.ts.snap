@@ -1,4 +1,4 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
 exports[`mark_ranges characterization (snapshot-pinned) clear action on marked text 1`] = `"hello big world"`;
 
