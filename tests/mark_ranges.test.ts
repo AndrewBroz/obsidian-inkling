@@ -55,17 +55,26 @@ describe("mark_ranges in plain text", () => {
 // EXPL: Characterization tests — they pin down CURRENT behavior of the branches
 //       mark.ts itself flags as uncertain (its TODO/FIXME comments), so any later
 //       change to this logic trips a snapshot diff and gets reviewed deliberately.
+//       Four cases below are annotated // BUG: — they pin reject-all-corrupting behavior deliberately.
 describe("mark_ranges characterization (snapshot-pinned)", () => {
 	const cases: [string, string, number, number, string, MarkType][] = [
 		["insert inside existing addition", "he{++llo++}", 7, 7, "y", SuggestionType.ADDITION],
 		["insert at right edge of addition", "he{++llo++}x", 11, 11, "y", SuggestionType.ADDITION],
+		// BUG: reject-all discrepancy — pre-edit reject-all gives "abef", post-edit gives "abcdef" (resurrects "cd").
+		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
 		["delete spanning plain text and addition", "ab{++cd++}ef", 0, 12, "", SuggestionType.DELETION],
 		["delete inside existing deletion", "ab{--cd--}ef", 5, 6, "", SuggestionType.DELETION],
+		// BUG: reject-all discrepancy — pre-edit reject-all gives "xyu", post-edit gives "xyzu" (resurrects "z").
+		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
 		["substitution across existing substitution", "x{~~y~>z~~}u", 0, 12, "new", SuggestionType.SUBSTITUTION],
+		// BUG: reject-all discrepancy — pre-edit reject-all gives "uvz", post-edit gives "uvwyz" (resurrects "w" and "y").
+		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
 		["substitution spanning two adjacent ranges", "uv{++w++}{++y++}z", 0, 17, "q", SuggestionType.SUBSTITUTION],
 		["deletion across highlight range", "ab{==cd==}ef", 0, 12, "", SuggestionType.DELETION],
 		["clear action on marked text", "hello{++ big++} world", 0, 21, "", MarkAction.CLEAR],
 		["insert between two additions", "uv{++w++}{++y++}z", 9, 9, "x", SuggestionType.ADDITION],
+		// BUG: reject-all discrepancy — pre-edit reject-all gives "abef", post-edit gives "abcdef" (resurrects "cd").
+		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
 		["delete exactly an addition's contents", "ab{++cd++}ef", 5, 7, "", SuggestionType.DELETION],
 	];
 
