@@ -5,6 +5,6 @@
 	"minAppVersion": "1.7.5",
 	"description": "Suggest edits, add comments, and annotate your notes using CriticMarkup syntax. A hard fork of Fevol's Commentator.",
 	"author": "kometenstaub, Fevol, and AndrewBroz",
-	"authorUrl": "https://github.com/AndrewBroz/obsidian-criticmarkup",
+	"authorUrl": "https://github.com/AndrewBroz/obsidian-inkling",
 	"isDesktopOnly": false
 }

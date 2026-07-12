@@ -1,6 +1,6 @@
 # Based on Tasks Plugin's issue templates (https://github.com/obsidian-tasks-group/obsidian-tasks/blob/main/.github/ISSUE_TEMPLATE/bug-report.yaml)
 name: Bug Report
-description: File a bug report for the Commentator plugin for Obsidian.
+description: File a bug report for the Inkling plugin for Obsidian.
 labels: ["type: bug"]
 body:
   - type: markdown
@@ -21,9 +21,9 @@ body:
         The more detail you provide, the easier and faster it will be to narrow down and fix the bug.
         If this is an editor issue, include a minimal example of the situation that causes the bug.
       placeholder: |
-        Example of steps to reproduce a bug in the Commentator plugin:
+        Example of steps to reproduce a bug in the Inkling plugin:
         1. Launch Obsidian Sandbox via the `Open Sandbox Vault` command.
-        2. Install the Commentator plugin.
+        2. Install the Inkling plugin.
         3. Create a new note called `Example note`.
         4. Enable suggestion mode and type in `Test comment`.
         5. An error appears in the developer console (`Mod/Ctrl+Shift+I`).
@@ -54,7 +54,7 @@ body:
       value: |
         ## Additional Data
 
-        If you have opened an issue via Commentator's settings, the following data will have been automatically filled in.
+        If you have opened an issue via Inkling's settings, the following data will have been automatically filled in.
         Feel free to remove any information that you do not want to share, but please keep as much as possible.
 
   - type: input
@@ -85,10 +85,10 @@ body:
       required: false
 
   - type: input
-    id: commentator-version
+    id: inkling-version
     attributes:
-      label: Commentator Plugin Version
-      description: Which Commentator version are you using?
+      label: Inkling Plugin Version
+      description: Which Inkling version are you using?
       placeholder: 0.2.4
     validations:
       required: true

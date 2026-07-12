@@ -5,7 +5,7 @@
 > maintained independently by [@AndrewBroz](https://github.com/AndrewBroz). It diverges from upstream with additional
 > data-safety fixes and collaboration features (see [What's different](#whats-different-in-this-fork)).
 > For the original plugin, use the upstream repository. Bugs in **this fork** belong in
-> [this repo's issue tracker](https://github.com/AndrewBroz/obsidian-criticmarkup/issues) — please don't report
+> [this repo's issue tracker](https://github.com/AndrewBroz/obsidian-inkling/issues) — please don't report
 > fork issues upstream.
 >
 > As for the name: a comment is a note about someone else's writing; an inkling is the first trace of an idea

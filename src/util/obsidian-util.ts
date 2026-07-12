@@ -79,13 +79,13 @@ export async function generateGithubIssueLink(
 	const base_data = await getObsidianData(app);
 	const issue_data = { ...base_data, ...data };
 
-	return `https://github.com/Fevol/obsidian-criticmarkup/issues/new?` +
+	return `https://github.com/AndrewBroz/obsidian-inkling/issues/new?` +
 		new URLSearchParams({
 			title: title,
 			template: "bug-report.yml",
 			"installer-version": issue_data.framework_version,
 			"app-version": issue_data.obsidian_version,
-			"commentator-version": issue_data.plugin_version,
+			"inkling-version": issue_data.plugin_version,
 			"operating-systems": issue_data.operating_system,
 			"installed-plugins": issue_data.other_plugins.join(", "),
 		});
