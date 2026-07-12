@@ -197,6 +197,46 @@
   padding-left: var(--size-4-6);
 }
 
+// ================================================
+//         GDocs-style Add-comment Pill
+// ================================================
+
+// EXPL: CM6's tooltip plugin adds its own `cm-tooltip` class (and light/dark background
+//       colors via a baseTheme) to the exact DOM node our `create()` returns — override
+//       those defaults here so the pill reads as Obsidian chrome, not a CM6 default tooltip.
+.cm-tooltip.cmtr-comment-pill {
+  border: none;
+  background-color: unset;
+  box-shadow: none;
+}
+
+.cmtr-comment-pill-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: var(--size-2-2);
+  border-radius: var(--radius-l);
+
+  background-color: var(--background-primary);
+  box-shadow:
+    0 0 0 1px var(--background-modifier-border),
+    var(--shadow-s);
+
+  color: var(--icon-color);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--icon-color-hover);
+    background-color: var(--background-modifier-hover);
+  }
+
+  svg {
+    width: var(--icon-size);
+    height: var(--icon-size);
+  }
+}
+
 .cmtr-folded-element .cmtr-anno-gutter-annotation {
   width: 0;
   overflow-y: hidden;

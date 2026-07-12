@@ -48,6 +48,7 @@ import {
 import { cmenuGlobalCommands, cmenuViewportCommands, commands } from "./editor/uix";
 import {
 	bracketMatcher,
+	commentPill,
 	editorKeypressCatcher,
 	focusAnnotation,
 	getEditMode,
@@ -153,6 +154,7 @@ export default class CommentatorPlugin extends Plugin {
 		this.editorExtensions.push(editMode.of(getEditMode(this.settings.default_edit_mode, this.settings)));
 
 		this.editorExtensions.push(rangeParser);
+		this.editorExtensions.push(commentPill);
 
 		if (this.settings.annotation_gutter) {
 			const { extension, config } = annotationGutter(this);
