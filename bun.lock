@@ -6,6 +6,7 @@
       "name": "obsidian-criticmarkup",
       "dependencies": {
         "@codemirror/language": "github:fevol-forks/cm-language",
+        "@codemirror/search": "^6.5.0",
         "@fevol/lang-criticmarkup": "^2.1.0",
         "@flatten-js/interval-tree": "^1.1.4",
         "diff-match-patch": "^1.0.5",

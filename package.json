@@ -5,7 +5,7 @@
     "description": "A CriticMarkup plugin for Obsidian",
     "main": "main.js",
     "scripts": {
-        "dev": "bun run esbuild.config.mjs && obsidian plugin:reload id=commentator",
+        "dev": "bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=commentator",
         "build": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts production",
         "build:dev": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development",
         "build:dev:hr": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=commentator",
@@ -56,6 +56,7 @@
     },
     "dependencies": {
         "@codemirror/language": "github:fevol-forks/cm-language",
+        "@codemirror/search": "^6.5.0",
         "@fevol/lang-criticmarkup": "^2.1.0",
         "@flatten-js/interval-tree": "^1.1.4",
         "diff-match-patch": "^1.0.5",
