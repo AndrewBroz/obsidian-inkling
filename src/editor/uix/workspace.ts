@@ -33,6 +33,7 @@ export async function applyRangeEditsToVault(
 		);
 	}
 
+	const skipped_paths: string[] = [];
 	let idx = 0;
 	for (let [path, ranges] of Object.entries(grouped_ranges)) {
 		const file = plugin.app.vault.getAbstractFileByPath(path);
@@ -41,10 +42,7 @@ export async function applyRangeEditsToVault(
 			continue;
 		}
 		if (isEntryStale(file.stat.mtime, plugin.database.getItem(path)?.mtime)) {
-			new Notice(
-				`Commentator: Skipped "${path}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
-				5000,
-			);
+			skipped_paths.push(path);
 			progressBarUpdate(++idx);
 			continue;
 		}
@@ -56,6 +54,19 @@ export async function applyRangeEditsToVault(
 
 		await fn(plugin.app, file, ranges);
 		progressBarUpdate(++idx);
+	}
+	if (skipped_paths.length === 1) {
+		new Notice(
+			`Commentator: Skipped "${
+				skipped_paths[0]
+			}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
+			5000,
+		);
+	} else if (skipped_paths.length > 1) {
+		new Notice(
+			`Commentator: Skipped ${skipped_paths.length} files that changed after their annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
+			5000,
+		);
 	}
 	// EXPL: Only record history for files that were actually modified
 	if (Object.keys(file_history).length > 0)
