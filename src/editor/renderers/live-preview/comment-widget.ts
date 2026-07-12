@@ -63,6 +63,14 @@ export class CommentIconWidget extends WidgetType {
 	focused = false;
 	context_menu: Menu | null = null;
 
+	// EXPL: Reentrancy latch for the empty-comment auto-cancel path (same concern as marker.ts's
+	//       `cancelling` guard): unloading/detaching a still-focused editor fires a native blur
+	//       (see the NOTE at embeddable-editor.ts's constructor blur listener) that re-enters
+	//       commitRangeEdit for the same range — at most one cancel dispatch per range object may
+	//       go through, since a second dispatch would reuse from/to offsets already invalidated
+	//       by the first.
+	private cancel_dispatched = new WeakSet<CommentRange>();
+
 	constructor(private view: EditorView, public range: CriticMarkupRange, public annotation_gutter = false) {
 		super();
 		this.component = new Component();
@@ -102,17 +110,28 @@ export class CommentIconWidget extends WidgetType {
 
 		if (!was_empty) return;
 
+		// EXPL: Latch BEFORE dispatching — the cancel dispatch itself (widget rebuild/destroy) or
+		//       the DOM teardown below can synchronously re-enter this handler via a native blur
+		//       with the same (now-stale) range; the second entry must be a no-op.
+		if (this.cancel_dispatched.has(range)) return;
+		this.cancel_dispatched.add(range);
+
+		// EXPL: Cancel dispatch goes FIRST, before any DOM mutation, while range.from/to are still
+		//       valid document offsets.
+		this.view.dispatch(this.view.state.update({ changes: cancel_empty_comment(range) }));
+
 		if (range === this.range) {
-			this.view.dispatch(this.view.state.update({ changes: cancel_empty_comment(range) }));
 			this.unrenderTooltip();
 			return;
 		}
 
-		if (this.tooltip?.contains(rangeContainer)) {
-			this.tooltip.removeChild(rangeContainer);
-			editorComponent.unload();
-		}
-		this.view.dispatch(this.view.state.update({ changes: cancel_empty_comment(range) }));
+		// EXPL: Unload BEFORE detaching the container: Component.unload flips _loaded to false
+		//       before tearing down, which suppresses the editor's removal-triggered native blur
+		//       (embeddable-editor.ts checks _loaded in its blur listener) — same safe ordering the
+		//       base branch gets from unrenderTooltip. `remove()` is safe on already-detached nodes
+		//       (the dispatch above may have destroyed the whole tooltip).
+		editorComponent.unload();
+		rangeContainer.remove();
 	}
 
 	renderRange(app: App, range: CommentRange, cls: string[] = []) {
