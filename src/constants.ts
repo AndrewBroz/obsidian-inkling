@@ -48,8 +48,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 		},
 	},
 
-	diff_gutter: true,
+	diff_gutter: false,
 	diff_gutter_hide_empty: true,
+	diff_gutter_migrated: true,
 
 	annotation_gutter: true,
 	annotation_gutter_included_types: 31,
@@ -139,6 +140,27 @@ export function backfillLegacyMetadataFlags(
 	for (const key of LEGACY_METADATA_KEYS) {
 		if (!(key in saved))
 			settings[key] = false;
+	}
+}
+
+// EXPL: Phase 5 decision (5) — diff_gutter flipped from `true` to `false` as the DEFAULT_SETTINGS
+//       (quiet margins by default). `settings.version` isn't granular enough to gate this: existing
+//       users are already saved at the current PLUGIN_VERSION, so the versioned-migration branch in
+//       migrateSettings (src/main.ts) wouldn't fire for them without an unrelated version bump. Use a
+//       dedicated `diff_gutter_migrated` flag instead, following the same "in saved" check pattern as
+//       backfillLegacyMetadataFlags: settings saved before the flag existed predate the flip and get
+//       diff_gutter forced to false exactly once; the flag is then persisted as true so a user who
+//       re-enables the gutter afterwards is never migrated again. No-op when `saved` is null/undefined
+//       (fresh installs already get the new `false` default via DEFAULT_SETTINGS).
+export function disableDiffGutterOnce(
+	settings: PluginSettings,
+	saved: Partial<PluginSettings> | null | undefined,
+): void {
+	if (saved == null)
+		return;
+	if (!("diff_gutter_migrated" in saved)) {
+		settings.diff_gutter = false;
+		settings.diff_gutter_migrated = true;
 	}
 }
 

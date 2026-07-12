@@ -119,6 +119,12 @@ export interface PluginSettings {
 	 * Hide the diff gutter if no suggestions are present in the note
 	 */
 	diff_gutter_hide_empty: boolean;
+	/**
+	 * Internal bookkeeping flag (not exposed in the settings UI): tracks whether the one-time
+	 * Phase 5 migration that flips `diff_gutter` to `false` for pre-existing saves has already
+	 * run, so a user re-enabling the gutter afterwards is not migrated again.
+	 */
+	diff_gutter_migrated: boolean;
 
 	/**
 	 * Show the annotation gutter in the editor

@@ -66,6 +66,7 @@ import {
 	backfillMarkupFocus,
 	DATABASE_VERSION,
 	DEFAULT_SETTINGS,
+	disableDiffGutterOnce,
 	REQUIRES_DATABASE_REINDEX,
 	REQUIRES_EDITOR_RELOAD,
 	REQUIRES_FULL_RELOAD,
@@ -354,6 +355,7 @@ export default class CommentatorPlugin extends Plugin {
 		//       attribution defaults. See backfillLegacyMetadataFlags in constants.ts.
 		backfillLegacyMetadataFlags(this.settings, new_settings);
 		backfillMarkupFocus(this.settings);
+		disableDiffGutterOnce(this.settings, new_settings);
 		this.previous_settings = Object.assign({}, original_settings, this.settings);
 
 		// EXPL: Do not migrate new installs, immediately save settings

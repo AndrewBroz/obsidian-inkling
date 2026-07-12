@@ -3,8 +3,8 @@
 	"name": "Inkling",
 	"version": "0.5.0",
 	"minAppVersion": "1.7.5",
-	"description": "Suggest edits, add comments, and annotate your notes using CriticMarkup syntax. A hard fork of Fevol's Commentator.",
-	"author": "kometenstaub, Fevol, and AndrewBroz",
+	"description": "Suggest edits, add comments, and annotate your notes using CriticMarkup syntax.",
+	"author": "Andrew Brož",
 	"authorUrl": "https://github.com/AndrewBroz/obsidian-inkling",
 	"isDesktopOnly": false
 }
