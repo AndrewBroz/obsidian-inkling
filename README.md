@@ -1,4 +1,4 @@
-# Inkling: Collaborative CriticMarkup Editing for Obsidian
+# Inkling: Collaborative Editing for Obsidian
 
 **Inkling** is a [CriticMarkup](https://github.com/CriticMarkup/CriticMarkup-toolkit) editor for [Obsidian](https://obsidian.md/).
 It is designed both for collaborative editing (with tools like Relay) and for reviewing your notes, providing a suggestion mode
