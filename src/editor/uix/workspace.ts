@@ -27,15 +27,17 @@ export async function applyRangeEditsToVault(plugin: CommentatorPlugin, ranges: 
     for (let [path, ranges] of Object.entries(grouped_ranges)) {
         const file = plugin.app.vault.getAbstractFileByPath(path);
         if (!file || !(file instanceof TFile)) {
+            progressBarUpdate(++idx);
             continue;
         }
-		if (isEntryStale(file.stat.mtime, plugin.database.getItem(path)?.mtime)) {
-			new Notice(
-				`Commentator: Skipped "${path}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
-				5000,
-			);
-			continue;
-		}
+        if (isEntryStale(file.stat.mtime, plugin.database.getItem(path)?.mtime)) {
+            new Notice(
+                `Commentator: Skipped "${path}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
+                5000,
+            );
+            progressBarUpdate(++idx);
+            continue;
+        }
         file_history[path] = await plugin.app.vault.cachedRead(file);
         if (include_replies) {
             ranges = ranges.flatMap(range => [range, ...range.replies]);

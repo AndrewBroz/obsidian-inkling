@@ -69,4 +69,24 @@ describe("rangeCorrecter still corrects ranges without metadata", () => {
 		});
 		expect(tr.state.doc.toString()).toBe("x{==hl==}y");
 	});
+
+	// EXPL: Guards the substitution-without-metadata rejoin path (no separate metadata child
+	// for the parser to key off of): "x{~~ ab~>cd~~}y" has a leading space in the deleted
+	// part. Correcting it must strip the leading space while rebuilding the range via
+	// unwrap_parts().join("~>") -- i.e. the "~>" separator must survive the rejoin, not just
+	// the metadata-bearing case covered above.
+	test("leading whitespace in a substitution's deleted part is stripped, separator survives", () => {
+		const plain_doc = "x{~~ ab~>cd~~}y";
+		const state = EditorState.create({
+			doc: plain_doc,
+			selection: EditorSelection.cursor(8),
+			extensions: [rangeParser, pluginSettingsField, rangeCorrecter],
+		});
+		const tr = state.update({
+			selection: EditorSelection.cursor(0),
+			userEvent: "select",
+		});
+		expect(tr.state.doc.toString()).toBe("x{~~ab~>cd~~}y");
+		expect(tr.state.selection.main.head).toBe(0);
+	});
 });

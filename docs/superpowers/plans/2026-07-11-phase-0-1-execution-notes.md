@@ -29,6 +29,17 @@ Final state: `bun run build` clean; `bun run test` 1081/1081 across 6 suites (ba
    deletion/substitution). Should be scheduled early in Phase 3 (before comment mode builds on
    suggestion semantics) or as a Phase 2 rider. Do NOT update the snapshots to hide this.
 
+## Recorded spec deviation (Task 6)
+
+The Phase 1 spec (plan item 2) called for stale files to be re-indexed and then have the
+edit applied. The landed implementation deliberately downgrades this to skip-with-Notice
+instead: `isEntryStale` blocks the write and surfaces a Notice telling the user to retry,
+rather than triggering a re-index inline. This satisfies the safety invariant ("never apply
+blind offsets" — a write never proceeds against a database entry that may be out of date)
+without taking on the complexity of a synchronous re-index-then-apply path. Auto-re-index-and-apply
+remains a Phase 2/3 candidate once the indexing pipeline has a cheap, awaitable single-file
+re-index primitive to build on.
+
 ## Manual verification still pending (needs a human in Obsidian — cannot run headless)
 
 - **Task 6 (staleness guard):** in a test vault, accept from the Annotations View on an untouched
