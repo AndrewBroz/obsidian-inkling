@@ -1,6 +1,7 @@
 import type { Text } from "@codemirror/state";
 import IntervalTree from "@flatten-js/interval-tree";
 import type { CriticMarkupRange } from "./base_range";
+import { SuggestionType } from "./definitions";
 
 export class CriticMarkupRanges {
 	ranges: CriticMarkupRange[];
@@ -103,6 +104,7 @@ export class CriticMarkupRanges {
 		from = 0,
 		to = doc.length,
 		ranges: CriticMarkupRange[] | null = null,
+		drop_pending_additions = false,
 	): { output: string; from: number; to: number; front_range?: CriticMarkupRange; back_range?: CriticMarkupRange } {
 		let front_range: undefined | CriticMarkupRange, back_range: undefined | CriticMarkupRange;
 
@@ -122,7 +124,19 @@ export class CriticMarkupRanges {
 		for (const range of ranges) {
 			if (prev_range !== -1)
 				output += doc.sliceString(prev_range, range.from);
-			output += range.unwrap_slice(Math.max(0, from), to);
+			if (drop_pending_additions && from <= range.from && range.to <= to) {
+				// EXPL: A pending addition consumed by a deletion/substitution mark is a retracted
+				//       suggestion — its text was never in the base document, so folding it into
+				//       the new range would make reject-all resurrect it.
+				if (range.type === SuggestionType.ADDITION) {
+					// contributes nothing
+				} else if (range.type === SuggestionType.SUBSTITUTION)
+					output += range.unwrap_parts()[0];
+				else
+					output += range.unwrap_slice(Math.max(0, from), to);
+			} else {
+				output += range.unwrap_slice(Math.max(0, from), to);
+			}
 			prev_range = range.to;
 		}
 

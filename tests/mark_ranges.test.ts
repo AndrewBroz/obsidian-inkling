@@ -1,4 +1,4 @@
-import { rangeParser, SuggestionType } from "../src/editor/base";
+import { applyToText, rangeParser, SuggestionType } from "../src/editor/base";
 import type { EditorSuggestion } from "../src/editor/base/edit-handler";
 import { mark_ranges, MarkAction, type MarkType } from "../src/editor/base/edit-logic/mark";
 import type { MetadataFields } from "../src/editor/base/ranges";
@@ -33,6 +33,16 @@ function mark(
 	return output;
 }
 
+function accept_all(doc: string): string {
+	const state = createRangeState(doc);
+	return applyToText(doc, (range) => range.accept(), state.field(rangeParser).ranges.ranges);
+}
+
+function reject_all(doc: string): string {
+	const state = createRangeState(doc);
+	return applyToText(doc, (range) => range.reject(), state.field(rangeParser).ranges.ranges);
+}
+
 describe("mark_ranges in plain text", () => {
 	test("insertion wraps in addition markup", () => {
 		expect(mark("hello world", 5, 5, " big", SuggestionType.ADDITION)).toBe("hello{++ big++} world");
@@ -52,30 +62,67 @@ describe("mark_ranges in plain text", () => {
 	});
 });
 
+describe("marking over pending additions consumes them (reject-all safety)", () => {
+	// [name, doc, from, to, inserted, type, expected output, expected accept-all]
+	const cases: [string, string, number, number, string, MarkType, string, string][] = [
+		["delete spanning plain text and addition", "ab{++cd++}ef", 0, 12, "", SuggestionType.DELETION, "{--abef--}", ""],
+		["delete exactly an addition's contents", "ab{++cd++}ef", 5, 7, "", SuggestionType.DELETION, "abef", "abef"],
+		[
+			"delete over an addition, ending inside the next range's bracket",
+			"ab{++cd++}{--x--}ef",
+			2,
+			12,
+			"",
+			SuggestionType.DELETION,
+			"ab{--x--}ef",
+			"abef",
+		],
+		[
+			"substitution across existing substitution",
+			"x{~~y~>z~~}u",
+			0,
+			12,
+			"new",
+			SuggestionType.SUBSTITUTION,
+			"{~~xyu~>new~~}",
+			"new",
+		],
+		[
+			"substitution spanning two adjacent ranges",
+			"uv{++w++}{++y++}z",
+			0,
+			17,
+			"q",
+			SuggestionType.SUBSTITUTION,
+			"{~~uvz~>q~~}",
+			"q",
+		],
+	];
+
+	for (const [name, doc, from, to, inserted, type, expected, accept_expected] of cases) {
+		test(name, () => {
+			const output = mark(doc, from, to, inserted, type);
+			expect(output).toBe(expected);
+			// EXPL: The data-safety invariants this fix exists for:
+			//       reject-all must restore what reject-all on the input would give,
+			//       and accept-all must be unchanged from pre-fix behavior.
+			expect(reject_all(output)).toBe(reject_all(doc));
+			expect(accept_all(output)).toBe(accept_expected);
+		});
+	}
+});
+
 // EXPL: Characterization tests — they pin down CURRENT behavior of the branches
 //       mark.ts itself flags as uncertain (its TODO/FIXME comments), so any later
 //       change to this logic trips a snapshot diff and gets reviewed deliberately.
-//       Four cases below are annotated // BUG: — they pin reject-all-corrupting behavior deliberately.
 describe("mark_ranges characterization (snapshot-pinned)", () => {
 	const cases: [string, string, number, number, string, MarkType][] = [
 		["insert inside existing addition", "he{++llo++}", 7, 7, "y", SuggestionType.ADDITION],
 		["insert at right edge of addition", "he{++llo++}x", 11, 11, "y", SuggestionType.ADDITION],
-		// BUG: reject-all discrepancy — pre-edit reject-all gives "abef", post-edit gives "abcdef" (resurrects "cd").
-		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
-		["delete spanning plain text and addition", "ab{++cd++}ef", 0, 12, "", SuggestionType.DELETION],
 		["delete inside existing deletion", "ab{--cd--}ef", 5, 6, "", SuggestionType.DELETION],
-		// BUG: reject-all discrepancy — pre-edit reject-all gives "xyu", post-edit gives "xyzu" (resurrects "z").
-		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
-		["substitution across existing substitution", "x{~~y~>z~~}u", 0, 12, "new", SuggestionType.SUBSTITUTION],
-		// BUG: reject-all discrepancy — pre-edit reject-all gives "uvz", post-edit gives "uvwyz" (resurrects "w" and "y").
-		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
-		["substitution spanning two adjacent ranges", "uv{++w++}{++y++}z", 0, 17, "q", SuggestionType.SUBSTITUTION],
 		["deletion across highlight range", "ab{==cd==}ef", 0, 12, "", SuggestionType.DELETION],
 		["clear action on marked text", "hello{++ big++} world", 0, 21, "", MarkAction.CLEAR],
 		["insert between two additions", "uv{++w++}{++y++}z", 9, 9, "x", SuggestionType.ADDITION],
-		// BUG: reject-all discrepancy — pre-edit reject-all gives "abef", post-edit gives "abcdef" (resurrects "cd").
-		// Fix tracked for a later phase; do NOT update this snapshot to hide the discrepancy.
-		["delete exactly an addition's contents", "ab{++cd++}ef", 5, 7, "", SuggestionType.DELETION],
 	];
 
 	for (const [name, doc, from, to, inserted, type] of cases) {

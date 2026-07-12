@@ -13,9 +13,12 @@ Final state: `bun run build` clean; `bun run test` 1081/1081 across 6 suites (ba
    separator along with the metadata. The plan's replacement code shared the bug; the landed fix
    rebuilds via `unwrap_parts().join("~>")`. Regression-tested with a separator-survival assertion.
 
-### Known, deliberately NOT fixed (pinned by the mark_ranges harness, `// BUG:` annotated)
+### Known at end of Phase 1, since fixed (FIXED in Phase 3A)
 
-2. **Reject-all resurrects never-accepted text** — 4 characterization cases in
+2. **Reject-all resurrects never-accepted text** (FIXED in Phase 3A, Task 1 of
+   `2026-07-11-phase-3a-parity.md`, commit "fix: deleting or substituting over pending additions
+   retracts them instead of folding their text" on branch `phase-3a-parity`; the four `// BUG:`
+   snapshot cases are now explicit round-trip-invariant tests) — 4 characterization cases in
    `tests/mark_ranges.test.ts` (annotated `// BUG:`): marking DELETION or SUBSTITUTION across a
    pending `AdditionRange` folds the addition's text into the new range. `AdditionRange.reject()`
    returns `""` but `DeletionRange.reject()` returns `unwrap()` (and

@@ -362,8 +362,29 @@ function mark_range(
 		} else {
 			// NOTE: <OPᶠʳᵒᵐ>░ Lᵃᶠᶠᶦˣ Lᵇʳᵃ (ᵐᵉᵗᵃ) Lᵐᵉʳᵍᵉ ░start░ Lᵈᵉˡ (ˢᵉᵖ) Rᵈᵉˡ Rᵃᵈᵈ ░end░ Rᵐᵉʳᵍᵉ Rᵇʳᵃ Rᵃᶠᶠᶦˣ ░<OPᵗᵒ>
 			//       start/end attempt to cheaply calculate the adjusted cursor position after the mark operation
-			let deleted = from === to ? "" : ranges.unwrap_in_range(text, from, to, in_range).output;
+			const drop_additions = type === SuggestionType.DELETION || type === SuggestionType.SUBSTITUTION;
+			let deleted = from === to ?
+				"" :
+				ranges.unwrap_in_range(text, from, to, in_range, drop_additions).output;
 			if (!deleted) {
+				// EXPL: Distinguish "selection contains nothing" from "selection covers only
+				//       pending additions" — the latter must remove those additions outright
+				//       (retracting a suggestion), not no-op.
+				const covered = in_range.filter(r => from <= r.from && r.to <= to);
+				if (drop_additions && covered.length > 0) {
+					// EXPL: With deleted === "", everything inside [from, to] but outside the covered
+					//       ranges is bracket syntax of partially-covered neighbours (or nothing) —
+					//       it must survive, so the removal is bounded by the covered span alone.
+					const removal_from = covered[0].from;
+					const removal_to = covered[covered.length - 1].to;
+					return {
+						from: removal_from,
+						to: removal_to,
+						insert: inserted,
+						start: removal_from,
+						end: removal_from + inserted.length,
+					};
+				}
 				if (type === SuggestionType.SUBSTITUTION)
 					type = SuggestionType.ADDITION;
 				else if (type === SuggestionType.DELETION)
