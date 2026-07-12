@@ -30,7 +30,17 @@ module.exports = {
 		// The real module extends a class resolved at import time from the
 		// live Obsidian app (resolveEditorPrototype(app)), which is
 		// unavailable under jest. Stub it out for any importer.
-		"embeddable-editor$": "<rootDir>/tests/__mocks__/embeddable-editor.ts",
+		//
+		// Anchored to a leading path separator (not just the bare "ui/"
+		// segment) because real importers use both "../../../ui/embeddable-editor"
+		// (from outside src/ui/) and "./embeddable-editor" (from
+		// src/ui/preview-editor.ts, which lives inside src/ui/ itself and so
+		// has no literal "ui/" segment in its specifier). This still rejects
+		// an unrelated module whose name merely ends in "embeddable-editor"
+		// without a path separator directly before it (e.g. "my-embeddable-editor"),
+		// which the previous bare "embeddable-editor$" pattern would have
+		// matched.
+		"/embeddable-editor$": "<rootDir>/tests/__mocks__/embeddable-editor.ts",
 	},
 
 	setupFilesAfterEnv: ["jest-expect-message"],

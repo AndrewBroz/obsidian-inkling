@@ -1,11 +1,8 @@
-import { EditorState } from "@codemirror/state";
-
-import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser, SuggestionType } from "../src/editor/base";
 import type { EditorSuggestion } from "../src/editor/base/edit-handler";
 import { mark_ranges, MarkAction, type MarkType } from "../src/editor/base/edit-logic/mark";
 import type { MetadataFields } from "../src/editor/base/ranges";
-import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
+import { createRangeState } from "./helpers";
 
 // EXPL: Bare `extensions: [rangeParser]` crashes ("Field is not present in this state") per
 // Tasks 5/7/8 test-infrastructure findings (see tests/range_correcter.test.ts,
@@ -13,10 +10,6 @@ import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
 // is turned on so the last (metadata) case can parse; the plain-text cases carry no metadata
 // in their source docs, so mark_ranges only ADDS metadata when metadata_fields is explicitly
 // passed -- enabling parsing of metadata does not change their expected output.
-const pluginSettingsField = providePluginSettingsExtension(
-	<any> { settings: { ...DEFAULT_SETTINGS, enable_metadata: true, enable_author_metadata: true } },
-);
-
 function mark(
 	doc: string,
 	from: number,
@@ -25,7 +18,7 @@ function mark(
 	type: MarkType,
 	metadata_fields?: MetadataFields,
 ): string {
-	const state = EditorState.create({ doc, extensions: [rangeParser, pluginSettingsField] });
+	const state = createRangeState(doc, { enable_metadata: true, enable_author_metadata: true });
 	const ranges = state.field(rangeParser).ranges;
 	const edits: EditorSuggestion[] = mark_ranges(ranges, state.doc, from, to, inserted, type, metadata_fields);
 

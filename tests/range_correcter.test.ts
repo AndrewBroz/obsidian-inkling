@@ -1,9 +1,7 @@
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { EditorSelection } from "@codemirror/state";
 
-import { DEFAULT_SETTINGS } from "../src/constants";
-import { rangeParser } from "../src/editor/base";
-import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
 import { rangeCorrecter } from "../src/editor/uix/extensions/range-correcter";
+import { createRangeState } from "./helpers";
 
 // EXPL: DEFAULT_SETTINGS.enable_metadata is false; with it false, cursorGenerateRanges()
 // (src/editor/base/edit-util/range-parser.ts:12-25) never recognizes the MDSepSub child as
@@ -11,20 +9,17 @@ import { rangeCorrecter } from "../src/editor/uix/extensions/range-correcter";
 // returns undefined for the whole range -- the parser produces ZERO ranges for the FIXME
 // document below, not just metadata-less ones. Re-providing the settings field with
 // enable_metadata: true is required for the parser to construct the substitution range at all.
-const pluginSettingsField = providePluginSettingsExtension(
-	<any> { settings: { ...DEFAULT_SETTINGS, enable_metadata: true } },
-);
 
 // EXPL: This is the exact document from the FIXME at range-correcter.ts:10
 const METADATA = `{"author":"Fevol","time":1708879304}`;
 const doc = `In ad{~~${METADATA}@@dition to document files, metadata is used for:\n\n- videos~>audio~~}\n- audio files`;
 
 function exitRange(from_pos: number, to_pos: number) {
-	const state = EditorState.create({
-		doc,
-		selection: EditorSelection.cursor(from_pos),
-		extensions: [rangeParser, pluginSettingsField, rangeCorrecter],
-	});
+	// EXPL: setting the initial selection via a plain `.update()` (no userEvent) does not
+	//       trigger rangeCorrecter, which only reacts to `tr.isUserEvent("select")` -- so this
+	//       is equivalent to passing `selection` directly into EditorState.create().
+	const state = createRangeState(doc, { enable_metadata: true }, [rangeCorrecter])
+		.update({ selection: EditorSelection.cursor(from_pos) }).state;
 	return state.update({
 		selection: EditorSelection.cursor(to_pos),
 		userEvent: "select",
@@ -58,11 +53,8 @@ describe("rangeCorrecter on substitution range with metadata", () => {
 describe("rangeCorrecter still corrects ranges without metadata", () => {
 	test("leading whitespace inside a highlight is stripped on exit", () => {
 		const plain_doc = "x{== hl==}y";
-		const state = EditorState.create({
-			doc: plain_doc,
-			selection: EditorSelection.cursor(6),
-			extensions: [rangeParser, pluginSettingsField, rangeCorrecter],
-		});
+		const state = createRangeState(plain_doc, { enable_metadata: true }, [rangeCorrecter])
+			.update({ selection: EditorSelection.cursor(6) }).state;
 		const tr = state.update({
 			selection: EditorSelection.cursor(plain_doc.length),
 			userEvent: "select",
@@ -77,11 +69,8 @@ describe("rangeCorrecter still corrects ranges without metadata", () => {
 	// the metadata-bearing case covered above.
 	test("leading whitespace in a substitution's deleted part is stripped, separator survives", () => {
 		const plain_doc = "x{~~ ab~>cd~~}y";
-		const state = EditorState.create({
-			doc: plain_doc,
-			selection: EditorSelection.cursor(8),
-			extensions: [rangeParser, pluginSettingsField, rangeCorrecter],
-		});
+		const state = createRangeState(plain_doc, { enable_metadata: true }, [rangeCorrecter])
+			.update({ selection: EditorSelection.cursor(8) }).state;
 		const tr = state.update({
 			selection: EditorSelection.cursor(0),
 			userEvent: "select",

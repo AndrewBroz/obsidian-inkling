@@ -1,20 +1,16 @@
-import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { editorEditorField } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
-import { rangeParser } from "../src/editor/base";
 import { acceptSuggestions, rejectSuggestions } from "../src/editor/base/edit-logic/alter-suggestion";
-import { pluginSettingsField, suggestionMode } from "../src/editor/uix/extensions";
+import { suggestionMode } from "../src/editor/uix/extensions";
+import { createRangeState } from "./helpers";
 
 describe("accept/reject suggestion interval handling", () => {
 	const doc = "hello {++world++}";
 	const view = new EditorView({
-		state: EditorState.create({
-			doc,
-			extensions: [rangeParser, pluginSettingsField, editorEditorField, suggestionMode(DEFAULT_SETTINGS)],
-		}),
+		state: createRangeState(doc, {}, [editorEditorField, suggestionMode(DEFAULT_SETTINGS)]),
 	});
 	const state = view.state;
 

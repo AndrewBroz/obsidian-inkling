@@ -1,17 +1,10 @@
-import { EditorState } from "@codemirror/state";
-
-import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
-import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
+import { createRangeState } from "./helpers";
 
 // EXPL: DEFAULT_SETTINGS.enable_metadata is false; enabling it is required for the parser
 // to recognize and construct metadata fields in ranges. Without it, metadata blocks are ignored.
-const pluginSettingsField = providePluginSettingsExtension(
-	<any> { settings: { ...DEFAULT_SETTINGS, enable_metadata: true } },
-);
-
 function parseFirstRange(doc: string) {
-	const state = EditorState.create({ doc, extensions: [rangeParser, pluginSettingsField] });
+	const state = createRangeState(doc, { enable_metadata: true });
 	return state.field(rangeParser).ranges.ranges[0];
 }
 
