@@ -14,7 +14,5 @@ styles.css
 # obsidian
 data.json
 
-parser/build/
-
 *.zip
 .vscode/

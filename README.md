@@ -17,12 +17,14 @@ crashes/malfuctions in Obsidian. In the [Obsidian Discord](https://discord.com/i
 under `Extensions > Plugin Advanced > Commentator`, you can report bugs there, or in the [Github issues page](https://github.com/Fevol/obsidian-criticmarkup/issues).
 
 ### Developing
-To set up a development environment, please follow the following instructions:
+To set up a development environment:
 1. Install the `bun` package manager from https://bun.sh/
-2. Clone this repository (`git clone --recurse-submodules https://github.com/Fevol/obsidian-criticmarkup.git`)
-3. Run `bun install` in the root of the repository to install all dependencies
-4. Run `bun run build:dev` to build the plugin. This will also reload the plugin in your currently active Obsidian vault
-5. (_Optional_) If you want the plugin to reload on every build, use `bun run build:dev:hr` instead. For this, you will need to install the [Obsidian CLI](https://obsidian.md/cli).
+2. Clone this repository (`git clone https://github.com/AndrewBroz/obsidian-criticmarkup.git`)
+3. Run `bun install` in the root of the repository
+4. Run `bun run build:dev` to build the plugin
+5. (_Optional_) For automatic plugin reload on each build, use `bun run build:dev:hr` (requires the [Obsidian CLI](https://obsidian.md/cli))
+
+Other commands: `bun run test` (jest suite), `bun run lint` (ESLint), `bun run format` (dprint).
 
 ### Parser
 
@@ -53,8 +55,8 @@ To set up a development environment, please follow the following instructions:
   - [x] Keep up-to-date with immediate changes in vault
 - [x] Custom view for viewing suggestions and comments over entire vault
   - [x] Metadata rendering
-  - [ ] Filter by recency
-  - [ ] Filter by author (see also custom syntax)
+  - [x] Filter by recency
+  - [x] Filter by author (see also custom syntax)
   - [x] Performance improvements
   - [x] UIX/Scrolling improvements
   - [x] Accept/Close selection of suggestions and comments
