@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "*"
+  # Fallback: run from a tag ref (gh workflow run releases.yml --ref <tag>) if the
+  # tag-push event fails to trigger (observed 2026-07-12: tag pushes produced no run)
+  workflow_dispatch:
 
 env:
   PLUGIN_NAME: commentator
