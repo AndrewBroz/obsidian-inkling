@@ -5,6 +5,15 @@ import { showProgressBarNotice } from "../../util/obsidian-util";
 import { centerRangeInEditorView } from "./editor";
 
 
+/**
+ * EXPL: Range offsets come from the vault index, which refreshes on a debounce.
+ *       If the file changed after it was indexed, those offsets may no longer match
+ *       the file contents, and applying them would corrupt the file.
+ */
+export function isEntryStale(file_mtime: number, db_mtime: number | undefined): boolean {
+	return db_mtime === undefined || file_mtime > db_mtime;
+}
+
 export async function applyRangeEditsToVault(plugin: CommentatorPlugin, ranges: CriticMarkupRangeEntry[], fn: (app: App, file: TFile, value: CriticMarkupRange[]) => Promise<void>, include_replies: boolean = true) {
     const grouped_ranges = groupRangeEntryByPath(ranges);
 
@@ -20,6 +29,13 @@ export async function applyRangeEditsToVault(plugin: CommentatorPlugin, ranges: 
         if (!file || !(file instanceof TFile)) {
             continue;
         }
+		if (isEntryStale(file.stat.mtime, plugin.database.getItem(path)?.mtime)) {
+			new Notice(
+				`Commentator: Skipped "${path}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
+				5000,
+			);
+			continue;
+		}
         file_history[path] = await plugin.app.vault.cachedRead(file);
         if (include_replies) {
             ranges = ranges.flatMap(range => [range, ...range.replies]);
@@ -31,7 +47,9 @@ export async function applyRangeEditsToVault(plugin: CommentatorPlugin, ranges: 
         await fn(plugin.app, file, ranges);
         progressBarUpdate(++idx);
     }
-    plugin.file_history.push({changes: file_history, mtime: Date.now()});
+    // EXPL: Only record history for files that were actually modified
+    if (Object.keys(file_history).length > 0)
+        plugin.file_history.push({ changes: file_history, mtime: Date.now() });
 }
 
 export async function undoRangeEditsToVault(plugin: CommentatorPlugin) {
