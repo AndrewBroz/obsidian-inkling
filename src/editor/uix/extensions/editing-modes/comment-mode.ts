@@ -43,7 +43,7 @@ export const commentMode = (settings: PluginSettings): Extension =>
 		if (Date.now() - last_block_notice > 2000) {
 			last_block_notice = Date.now();
 			new Notice(
-				"Commentator: comment mode — text edits are disabled; add or edit comments instead.",
+				"Inkling: comment mode — text edits are disabled; add or edit comments instead.",
 				3000,
 			);
 		}

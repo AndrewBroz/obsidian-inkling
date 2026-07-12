@@ -1,12 +1,16 @@
-# Commentator (AndrewBroz fork) — CriticMarkup plugin for Obsidian
+# Inkling — collaborative CriticMarkup editing for Obsidian
 
 > [!IMPORTANT]
-> **This is a fork** of [Fevol/obsidian-criticmarkup](https://github.com/Fevol/obsidian-criticmarkup) ("Commentator"),
+> **This is a hard fork** of [Fevol/obsidian-criticmarkup](https://github.com/Fevol/obsidian-criticmarkup) ("Commentator"),
 > maintained independently by [@AndrewBroz](https://github.com/AndrewBroz). It diverges from upstream with additional
 > data-safety fixes and collaboration features (see [What's different](#whats-different-in-this-fork)).
 > For the original plugin, use the upstream repository. Bugs in **this fork** belong in
 > [this repo's issue tracker](https://github.com/AndrewBroz/obsidian-criticmarkup/issues) — please don't report
 > fork issues upstream.
+>
+> As for the name: a comment is a note about someone else's writing; an inkling is the first trace of an idea
+> before it's fully formed. That's closer to what suggestion mode and comment threads are for here — a slight
+> suggestion, not a verdict. Same plugin, new name.
 
 A [CriticMarkup](https://github.com/CriticMarkup/CriticMarkup-toolkit) editor for [Obsidian](https://obsidian.md/) for
 collaborative editing and reviewing your notes: a suggestion mode for tracking changes (like Word's Track Changes /
@@ -19,14 +23,18 @@ and [parser](https://github.com/kometenstaub/lang-criticmarkup)). All credit for
 ## Installing (via BRAT)
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin
-2. In BRAT: **Add beta plugin** → `AndrewBroz/obsidian-criticmarkup`
-3. Enable **Commentator** in Settings → Community plugins
+2. In BRAT: **Add beta plugin** → `AndrewBroz/obsidian-inkling` (this repository was renamed from
+   `obsidian-criticmarkup`; old links to it redirect here automatically)
+3. Enable **Inkling** in Settings → Community plugins
 
 > [!WARNING]
 > This fork is in beta. It carries an extensive automated regression suite (1,100+ tests, including
 > round-trip safety tests for accept/reject), but has not yet finished manual validation in live vaults.
-> Use it in a test vault or a synced/backed-up vault first. Note the plugin id is `commentator` — it
-> cannot be installed side-by-side with upstream Commentator.
+> Use it in a test vault or a synced/backed-up vault first.
+>
+> Inkling uses its own plugin id (`inkling`), so it can coexist side-by-side with upstream Commentator —
+> installing both at once is safe. If you were already running an earlier build of this fork under the
+> `commentator` id, Inkling automatically imports its settings the first time it loads, so nothing is lost.
 
 ## What's different in this fork
 
@@ -52,17 +60,20 @@ Enforce an editing mode for a note via frontmatter (overrides the per-editor tog
 
 ```yaml
 ---
-commentator: suggest   # or: comment, off
-commentator-authors: [Alice]   # optional: these authors are exempt from enforcement
+inkling: suggest   # or: comment, off
+inkling-authors: [Alice]   # optional: these authors are exempt from enforcement
 ---
 ```
+
+The legacy `commentator:` / `commentator-authors:` keys still work (checked when no `inkling` key is present),
+so existing notes from before the rename don't need to be updated.
 
 ## Developing
 
 To set up a development environment:
 
 1. Install the `bun` package manager from https://bun.sh/
-2. Clone this repository (`git clone https://github.com/AndrewBroz/obsidian-criticmarkup.git`)
+2. Clone this repository (`git clone https://github.com/AndrewBroz/obsidian-inkling.git`)
 3. Run `bun install` in the root of the repository
 4. Run `bun run build:dev` to build the plugin
 5. (_Optional_) For automatic plugin reload on each build, use `bun run build:dev:hr` (requires the [Obsidian CLI](https://obsidian.md/cli))

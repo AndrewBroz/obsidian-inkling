@@ -66,15 +66,15 @@ class AnnotationNode extends Component {
 	renderSource(e?: MouseEvent) {
 		if (this.range.type !== SuggestionType.COMMENT) {
 			// TODO: Should editing non-comments within the annotation gutter be allowed?
-			new Notice("[Commentator] You can only edit comments.");
+			new Notice("[Inkling] You can only edit comments.");
 		} else {
 			e?.stopPropagation();
 			if (this.currentMode === "source") return;
 
 			const { app } = this.marker.view.state.field(editorInfoField);
 			this.annotation_container.toggleClass("cmtr-anno-gutter-annotation-editing", true);
-			if (this.range.fields.author && this.range.fields.author !== app.plugins.plugins.commentator.settings.author) {
-				new Notice("[Commentator] You cannot edit comments from other authors.");
+			if (this.range.fields.author && this.range.fields.author !== app.plugins.plugins.inkling.settings.author) {
+				new Notice("[Inkling] You cannot edit comments from other authors.");
 				return;
 			}
 
@@ -87,7 +87,7 @@ class AnnotationNode extends Component {
 						this.new_text = editor.get();
 						this.renderPreview();
 					},
-					filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
+					filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
 					onBlur: (editor) => {
 						// Save on blur (same as onSubmit)
 						this.new_text = editor.get();
@@ -393,7 +393,7 @@ export class AnnotationMarker extends GutterMarker {
 		else if (index >= 0 && index < this.annotation_thread.children.length)
 			this.annotation_thread.children.item(index)!.dispatchEvent(new MouseEvent("dblclick"));
 		else
-			console.error("[Commentator] Invalid index for focusing annotation:", index);
+			console.error("[Inkling] Invalid index for focusing annotation:", index);
 
 		if (scroll) {
 			activeWindow.setTimeout(() => {

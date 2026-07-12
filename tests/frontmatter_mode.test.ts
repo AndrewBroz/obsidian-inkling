@@ -43,4 +43,40 @@ describe("resolveFrontmatterMode", () => {
 			}, "Alice"),
 		).toBe(EditMode.OFF);
 	});
+
+	test("the inkling key works the same as the legacy commentator key", () => {
+		expect(resolveFrontmatterMode({ inkling: "suggest" }, "")).toBe(
+			EditMode.SUGGEST,
+		);
+		expect(resolveFrontmatterMode({ inkling: "Comment" }, "")).toBe(
+			EditMode.COMMENT,
+		);
+		expect(resolveFrontmatterMode({ inkling: "off" }, "")).toBe(
+			EditMode.OFF,
+		);
+	});
+
+	test("inkling key takes precedence over a coexisting commentator key", () => {
+		const fm = { inkling: "suggest", commentator: "comment" };
+		expect(resolveFrontmatterMode(fm, "")).toBe(EditMode.SUGGEST);
+	});
+
+	test("inkling-authors exempts listed authors when inkling is the matched key", () => {
+		const fm = {
+			inkling: "suggest",
+			"inkling-authors": ["Alice"],
+			"commentator-authors": ["Bob"],
+		};
+		// EXPL: Alice is exempt via the matched (inkling) family
+		expect(resolveFrontmatterMode(fm, "Alice")).toBeNull();
+		// EXPL: Bob is only listed in the other (commentator) family, which is not
+		//       consulted since the matched family already has an authors entry
+		expect(resolveFrontmatterMode(fm, "Bob")).toBe(EditMode.SUGGEST);
+	});
+
+	test("authors lookup falls back to the other family when the matched family has no authors entry", () => {
+		const fm = { inkling: "suggest", "commentator-authors": ["Bob"] };
+		expect(resolveFrontmatterMode(fm, "Bob")).toBeNull();
+		expect(resolveFrontmatterMode(fm, "Mallory")).toBe(EditMode.SUGGEST);
+	});
 });

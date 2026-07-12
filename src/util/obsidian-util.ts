@@ -7,7 +7,7 @@ import { apiVersion, App, type Menu, MenuItem, Notice, Platform } from "obsidian
  * @param plugin_id - ID of the tab to open
  * @remark prevents the plugin tab to be opened again, despite already being open (otherwise, some nasty bugs can occur due to settings mount logic of settings page unnecessarily being executed twice)
  */
-export function openSettingTab(app: App, plugin_id: string = "commentator") {
+export function openSettingTab(app: App, plugin_id: string = "inkling") {
 	app.setting.open();
 	if (app.setting.lastTabId !== plugin_id)
 		app.setting.openTabById(plugin_id);
@@ -46,13 +46,13 @@ export async function getObsidianData(app: App) {
 	}
 
 	const other_plugins = Object.values(app.plugins.plugins)
-		.filter((plugin) => plugin.manifest.id !== "commentator")
+		.filter((plugin) => plugin.manifest.id !== "inkling")
 		.map((plugin) => {
 			return plugin.manifest.id + (plugin.manifest.version ? ` (v${plugin.manifest.version})` : "");
 		});
 
 	return {
-		plugin_version: app.plugins.plugins["commentator"].manifest.version,
+		plugin_version: app.plugins.plugins["inkling"].manifest.version,
 		other_plugins,
 		operating_system: operating_system!,
 		platform: Platform.isMobileApp ?

@@ -80,7 +80,7 @@ export class CommentIconWidget extends WidgetType {
 
 				click_container: rangeContainer,
 
-				filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
+				filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
 
 				onSubmit: (editor) => {
 					this.view.dispatch(this.view.state.update({
@@ -104,8 +104,8 @@ export class CommentIconWidget extends WidgetType {
 				},
 
 				isEditable: (editor) => {
-					if (range.fields.author && range.fields.author !== app.plugins.plugins.commentator.settings.author) {
-						new Notice("[Commentator] You cannot edit comments from other authors.");
+					if (range.fields.author && range.fields.author !== app.plugins.plugins.inkling.settings.author) {
+						new Notice("[Inkling] You cannot edit comments from other authors.");
 						return false;
 					}
 					return true;
@@ -156,7 +156,7 @@ export class CommentIconWidget extends WidgetType {
 							new EmbeddableMarkdownEditor(app, replyContainer, {
 								value: "",
 								cls: ["markdown-source-view", "mod-cm6", "cmtr-comment-tooltip-editor"],
-								filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
+								filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
 
 								onSubmit: (editor) => {
 									this.view.dispatch(this.view.state.update({

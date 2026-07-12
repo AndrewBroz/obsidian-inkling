@@ -57,14 +57,14 @@ export async function applyRangeEditsToVault(
 	}
 	if (skipped_paths.length === 1) {
 		new Notice(
-			`Commentator: Skipped "${
+			`Inkling: Skipped "${
 				skipped_paths[0]
 			}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
 			5000,
 		);
 	} else if (skipped_paths.length > 1) {
 		new Notice(
-			`Commentator: Skipped ${skipped_paths.length} files that changed after their annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
+			`Inkling: Skipped ${skipped_paths.length} files that changed after their annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
 			5000,
 		);
 	}

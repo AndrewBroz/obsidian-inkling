@@ -171,7 +171,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		regular_callback: (editor: Editor, view: MarkdownView) => {
 			if (editor.cm.state.facet(editModeEnforcedState)) {
 				new Notice(
-					"Commentator: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
+					"Inkling: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
 					4000,
 				);
 				return;
@@ -195,7 +195,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		regular_callback: (editor: Editor, view: MarkdownView) => {
 			if (editor.cm.state.facet(editModeEnforcedState)) {
 				new Notice(
-					"Commentator: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
+					"Inkling: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
 					4000,
 				);
 				return;

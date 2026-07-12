@@ -1,14 +1,14 @@
 {
-	"name": "obsidian-criticmarkup",
+	"name": "obsidian-inkling",
 	"version": "0.3.0",
 	"type": "module",
 	"description": "A CriticMarkup plugin for Obsidian",
 	"main": "main.js",
 	"scripts": {
-		"dev": "bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=commentator",
+		"dev": "bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=inkling",
 		"build": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts production",
 		"build:dev": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development",
-		"build:dev:hr": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=commentator",
+		"build:dev:hr": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=inkling",
 		"lint": "bun eslint src/",
 		"format": "bun dprint fmt",
 		"test": "jest --verbose",
@@ -19,7 +19,7 @@
 		"postinstall": "bun run scripts/postinstall.ts"
 	},
 	"keywords": [],
-	"author": "kometenstaub and Fevol",
+	"author": "AndrewBroz, kometenstaub and Fevol",
 	"license": "MIT",
 	"devDependencies": {
 		"@eslint/js": "^10.0.0",

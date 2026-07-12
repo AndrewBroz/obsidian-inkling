@@ -174,3 +174,50 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
 - The `obsidian` npm package has no runtime code; the root `__mocks__/obsidian.ts` provides the
   runtime surface and jest auto-applies it. `src/ui/embeddable-editor.ts` is stubbed via
   `moduleNameMapper` because it extends a live-Obsidian class at module load.
+
+## Rename to Inkling (2026-07-12)
+
+- **New identity**: manifest id/name → `inkling` / "Inkling", `package.json` name →
+  `obsidian-inkling`, release workflow `PLUGIN_NAME` → `inkling`. Version, minAppVersion,
+  isDesktopOnly, author/authorUrl untouched. README retitled, BRAT slug updated to
+  `AndrewBroz/obsidian-inkling`, fork callout keeps the Fevol/kometenstaub attribution and now
+  explains the name.
+- **What stayed internal (deliberately)**: the `COMMENTATOR_ANNOTATIONS_VIEW` view-type string
+  (`"commentator-annotations-view"`) is unchanged — renaming it would orphan saved workspace
+  layouts that reference the view by type string. The `cmtr-` CSS class prefix, the
+  `CommentatorPlugin`/`CommentatorSettings`/`CommentatorAnnotationsView*` TypeScript identifiers,
+  and the `window.COMMENTATOR_DEBUG` debug global all stay as-is — these are internal code
+  identifiers, not user-visible surface.
+- **Runtime plugin-id self-references (not in the original scope list, fixed for correctness)**:
+  renaming `manifest.json`'s `id` to `inkling` means every place the plugin looked itself up in
+  Obsidian's plugin registry by the OLD id (`app.plugins.plugins["commentator"]` /
+  `app.plugins.plugins.commentator`) would otherwise silently break at runtime (undefined access →
+  TypeError) the moment the rename shipped. Updated to `inkling` in:
+  `src/util/obsidian-util.ts` (`openSettingTab` default, other-plugins filter, bug-report plugin
+  version lookup), `src/editor/renderers/gutters/annotations-gutter/marker.ts` and
+  `src/editor/renderers/live-preview/comment-widget.ts` (author-comparison and embeddable-editor
+  filtered-extensions lookups), `src/types/extensions.d.ts` (`PluginsPluginsRecord` key), and
+  `src/main.ts`'s `beforePluginUninstallPatch` id argument. Left `"commentator-version"` in the
+  GitHub issue-link query params untouched — it targets a field id in the upstream Fevol repo's
+  issue template, unrelated to this fork's own id.
+- **Cache rename + old-store cleanup**: the `Database` name moved from `"commentator/cache"` to
+  `"inkling/cache"` (rebuilds automatically, no migration needed — see `src/main.ts`). Added a
+  one-time, best-effort `localforage.dropInstance({ name: "commentator/cache/" + this.app.appId })`
+  in `onload`'s `onLayoutReady`, wrapped in `.catch(() => {})` since the old instance may not
+  exist for fresh installs.
+- **Settings-import shim**: `migrateSettings` in `src/main.ts` now runs, when `loadData()` returns
+  `null` (fresh install), a best-effort read of
+  `${configDir}/plugins/commentator/data.json` before falling back to defaults — so testers who
+  installed an earlier build of this fork under the `commentator` id keep their settings across
+  the rename. Placed before `first_install` is computed (an import counts as not-first-install, so
+  no author re-prompt) and before the defaults merge, so imported settings flow through the
+  existing legacy backfills (`backfillLegacyMetadataFlags`, `backfillMarkupFocus`) untouched.
+- **Frontmatter dual keys**: `FRONTMATTER_MODE_KEYS = ["inkling", "commentator"]` and
+  `FRONTMATTER_AUTHORS_KEYS = ["inkling-authors", "commentator-authors"]` in
+  `src/editor/uix/frontmatter-mode.ts`. First mode-key match wins (`inkling` beats a coexisting
+  `commentator` key). The authors list is looked up by the SAME index/family as the matched mode
+  key first, falling back to the other family only if the matched family has no authors entry at
+  all — so `inkling-authors` doesn't need to duplicate everyone already listed under a legacy
+  `commentator-authors`, but a present (even empty-effect) `inkling-authors` entry is authoritative
+  once `inkling` is the matched key. Covered by new TDD cases in `tests/frontmatter_mode.test.ts`
+  (the 5 pre-existing legacy-key cases still pass unmodified).

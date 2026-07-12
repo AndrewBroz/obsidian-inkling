@@ -11,10 +11,10 @@ export class AuthorNameModal extends Modal {
 
 	onOpen() {
 		let value = "";
-		this.titleEl.setText("Commentator: choose your author name");
+		this.titleEl.setText("Inkling: choose your author name");
 		this.contentEl.createEl("p", {
 			text: "Suggestions and comments you make will be attributed to this name. " +
-				"You can change it any time under Settings → Commentator → Metadata.",
+				"You can change it any time under Settings → Inkling → Metadata.",
 		});
 		new Setting(this.contentEl)
 			.setName("Display name")

@@ -10,6 +10,7 @@ import {
 
 import { EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import localforage from "localforage";
 import { type PluginSettings } from "./types";
 
 import { Database } from "./database";
@@ -114,10 +115,10 @@ export default class CommentatorPlugin extends Plugin {
 
 	database: Database<CriticMarkupRange[]> = new Database(
 		this,
-		"commentator/cache",
-		"Commentator cache",
+		"inkling/cache",
+		"Inkling cache",
 		DATABASE_VERSION,
-		"Vault-wide cache for Commentator plugin",
+		"Vault-wide cache for Inkling plugin",
 		() => [],
 		async (file, state?: EditorState) => {
 			return state ?
@@ -247,7 +248,7 @@ export default class CommentatorPlugin extends Plugin {
 
 	async onload() {
 		if (process.env.NODE_ENV === "development") {
-			console.info("Commentator plugin loaded in debug mode");
+			console.info("Inkling plugin loaded in debug mode");
 
 			// NOTE: debug options only accessible via main Obsidian window
 			window["COMMENTATOR_DEBUG"] = {
@@ -277,6 +278,13 @@ export default class CommentatorPlugin extends Plugin {
 					}
 				}).open();
 			}
+		});
+
+		// EXPL: One-time cleanup of the orphaned pre-rename cache store; the "inkling/cache"
+		//       database above rebuilds automatically, so there is nothing to migrate — this
+		//       just reclaims the leftover "commentator/cache" IndexedDB instance, if any.
+		this.app.workspace.onLayoutReady(() => {
+			localforage.dropInstance({ name: "commentator/cache/" + this.app.appId }).catch(() => {});
 		});
 
 		this.defaultEditModeExtension = getEditMode(this.settings.default_edit_mode, this.settings);
@@ -319,13 +327,26 @@ export default class CommentatorPlugin extends Plugin {
 		for (const command of commands(this))
 			this.addCommand(command);
 
-		this.register(beforePluginUninstallPatch(this, "commentator", () => {
+		this.register(beforePluginUninstallPatch(this, "inkling", () => {
 			return this.database.dropDatabase();
 		}));
 	}
 
 	async migrateSettings(new_settings: PluginSettings) {
 		const original_settings = this.settings;
+
+		if (new_settings == null) {
+			// EXPL: One-time import from the pre-rename plugin id, so existing
+			//       Commentator-fork testers keep their settings across the rename
+			try {
+				const legacy_path = `${this.app.vault.configDir}/plugins/commentator/data.json`;
+				if (await this.app.vault.adapter.exists(legacy_path))
+					new_settings = JSON.parse(await this.app.vault.adapter.read(legacy_path));
+			} catch (e) {
+				console.error("Inkling: failed to import legacy Commentator settings", e);
+			}
+		}
+
 		this.first_install = new_settings == null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, new_settings);
 		// EXPL: Runs on every existing-settings load (not just the versioned-migration
@@ -346,9 +367,9 @@ export default class CommentatorPlugin extends Plugin {
 					// EXPL: Migrate settings from 0.1.x, where the settings did not contain a version field
 					if (!old_version) {
 						this.app.workspace.onLayoutReady(async () => {
-							new Notice("Commentator: rebuilding database for new version", 5000);
+							new Notice("Inkling: rebuilding database for new version", 5000);
 							new Notice(
-								"Commentator: metadata and replies features are now available, you can opt-in to these features in the settings",
+								"Inkling: metadata and replies features are now available, you can opt-in to these features in the settings",
 								0,
 							);
 						});
@@ -386,9 +407,9 @@ export default class CommentatorPlugin extends Plugin {
 					await this.setSettings();
 				}
 			} catch (e) {
-				console.error("Commentator: settings migration failed", e);
+				console.error("Inkling: settings migration failed", e);
 				new Notice(
-					"Commentator: Migration to new settings failed, using the default settings provided by the plugin",
+					"Inkling: Migration to new settings failed, using the default settings provided by the plugin",
 					0,
 				);
 			}
@@ -533,7 +554,7 @@ export default class CommentatorPlugin extends Plugin {
 			//       while the note's frontmatter enforces a mode.
 			if (!enforced && view.editor.cm.state.facet(editModeEnforcedState)) {
 				new Notice(
-					"Commentator: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
+					"Inkling: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
 					4000,
 				);
 				return;

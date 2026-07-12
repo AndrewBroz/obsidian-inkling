@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  PLUGIN_NAME: commentator
+  PLUGIN_NAME: inkling
 
 jobs:
   build:
