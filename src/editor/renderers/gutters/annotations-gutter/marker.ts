@@ -8,6 +8,8 @@ import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 import {
 	acceptSuggestions,
 	addCommentToView,
+	cancel_empty_comment,
+	type CommentRange,
 	create_range,
 	CriticMarkupRange,
 	type EditorChange,
@@ -53,6 +55,10 @@ function removeThreadChanges(range: CriticMarkupRange): EditorChange[] {
 class AnnotationNode extends Component {
 	text: string;
 	new_text: string | null = null;
+	// EXPL: Guards the empty-comment auto-cancel dispatch against firing twice when both
+	//       onSubmit and onBlur (or the container's own "blur" listener) fire for one action —
+	//       same double-call concern the write path below guards against.
+	cancelling = false;
 	annotation_container: HTMLElement;
 	metadata_view: HTMLElement | null = null;
 	annotation_view: HTMLElement;
@@ -134,6 +140,30 @@ class AnnotationNode extends Component {
 		//    And again when the comments get updated
 		//    -> This caused an issue where the range gets added twice, temporarily fixed by setting text to new text
 		this.annotation_container.toggleClass("cmtr-anno-gutter-annotation-editing", false);
+
+		// EXPL: An empty submit/blur is routed here before the write path below, since renderPreview
+		//       is the single choke point every caller (onSubmit, onBlur, the container's own "blur"
+		//       listener) funnels through:
+		//        - comment was freshly created empty (`this.text` itself is still empty) -> silent
+		//          auto-cancel via Task 1's cancel_empty_comment (mirrors the reply editor's guard in
+		//          comment-widget.ts); guarded by `cancelling` against the same double-call concern the
+		//          write path below already handles for non-empty saves.
+		//        - comment already had content -> do not write; reset `new_text` to null so the branch
+		//          below takes the regular re-render path and shows the still-current `text` (revert).
+		if (this.new_text !== null && !this.new_text.trim()) {
+			if (!this.text.trim()) {
+				if (!this.cancelling) {
+					this.cancelling = true;
+					const range = this.range as CommentRange;
+					activeWindow.setTimeout(() => {
+						this.marker.view.dispatch({ changes: cancel_empty_comment(range) });
+					});
+				}
+				this.new_text = null;
+				return;
+			}
+			this.new_text = null;
+		}
 
 		// EXPL: Regular (re-)rendering of the annotation
 		if (this.text === this.new_text || this.new_text === null) {

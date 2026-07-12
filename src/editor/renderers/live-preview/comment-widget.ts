@@ -2,7 +2,14 @@ import { EditorView, WidgetType } from "@codemirror/view";
 
 import { App, Component, editorInfoField, MarkdownRenderer, Menu, Notice, setIcon } from "obsidian";
 
-import { addCommentToView, CM_All_Brackets, CommentRange, create_range, CriticMarkupRange } from "../../base";
+import {
+	addCommentToView,
+	cancel_empty_comment,
+	CM_All_Brackets,
+	CommentRange,
+	create_range,
+	CriticMarkupRange,
+} from "../../base";
 import { pluginSettingsField } from "../../uix";
 import { annotationGutterFocusAnnotation } from "../gutters";
 
@@ -66,10 +73,54 @@ export class CommentIconWidget extends WidgetType {
 		this.focused = focused;
 	}
 
-	renderRange(app: App, range: CriticMarkupRange, cls: string[] = []) {
+	/**
+	 * Shared onSubmit/onBlur handler for a base/reply comment editor rendered within the tooltip.
+	 * - Non-empty content: writes it (unchanged behavior).
+	 * - Empty content on a comment that already had content: no dispatch — PreviewEditor's own
+	 *   switchMode() reverts to the still-current `options.value` (never mutated here).
+	 * - Empty content on a comment that was freshly created empty (fresh `{>><<}`): silent
+	 *   auto-cancel via Task 1's `cancel_empty_comment` (unwraps the anchor too if this was its
+	 *   only reply), mirroring the "Add reply" editor's guard just below.
+	 */
+	private commitRangeEdit(
+		range: CommentRange,
+		content: string,
+		was_empty: boolean,
+		rangeContainer: HTMLElement,
+		editorComponent: PreviewEditor,
+	) {
+		if (content.trim()) {
+			this.view.dispatch(this.view.state.update({
+				changes: {
+					from: range.from,
+					to: range.to,
+					insert: create_range(this.view.state.field(pluginSettingsField), range.type, content),
+				},
+			}));
+			return;
+		}
+
+		if (!was_empty) return;
+
+		if (range === this.range) {
+			this.view.dispatch(this.view.state.update({ changes: cancel_empty_comment(range) }));
+			this.unrenderTooltip();
+			return;
+		}
+
+		if (this.tooltip?.contains(rangeContainer)) {
+			this.tooltip.removeChild(rangeContainer);
+			editorComponent.unload();
+		}
+		this.view.dispatch(this.view.state.update({ changes: cancel_empty_comment(range) }));
+	}
+
+	renderRange(app: App, range: CommentRange, cls: string[] = []) {
 		const rangeContainer = createDiv({ cls });
 		if (range.metadata)
 			rangeContainer.appendChild(createMetadataInfoElement(range, "cmtr-comment-tooltip-metadata"));
+
+		const was_empty = !range.unwrap().trim();
 
 		const editorContainer = rangeContainer.appendChild(createDiv());
 		const editorComponent = this.component.addChild(
@@ -82,26 +133,9 @@ export class CommentIconWidget extends WidgetType {
 
 				filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
 
-				onSubmit: (editor) => {
-					this.view.dispatch(this.view.state.update({
-						changes: {
-							from: range.from,
-							to: range.to,
-							insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
-						},
-					}));
-				},
+				onSubmit: (editor) => this.commitRangeEdit(range, editor.get(), was_empty, rangeContainer, editorComponent),
 
-				onBlur: (editor) => {
-					// Save comment on blur (same as onSubmit)
-					this.view.dispatch(this.view.state.update({
-						changes: {
-							from: range.from,
-							to: range.to,
-							insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
-						},
-					}));
-				},
+				onBlur: (editor) => this.commitRangeEdit(range, editor.get(), was_empty, rangeContainer, editorComponent),
 
 				isEditable: (editor) => {
 					if (range.fields.author && range.fields.author !== app.plugins.plugins.inkling.settings.author) {
@@ -240,8 +274,10 @@ export class CommentIconWidget extends WidgetType {
 			});
 
 			// EXPL: Render the comment range and all replies
+			// NOTE: CommentIconWidget.range is always the base of a standalone (non-anchored) COMMENT
+			//       thread — see markup-renderer.ts's `range.type === COMMENT && range.base_range === range` gate.
 			this.tooltip.appendChild(
-				this.renderRange(app, this.range, ["cmtr-comment-tooltip-range cmtr-comment-tooltip-base"]),
+				this.renderRange(app, this.range as CommentRange, ["cmtr-comment-tooltip-range cmtr-comment-tooltip-base"]),
 			);
 			for (const reply of this.range.replies) {
 				this.tooltip.appendChild(
