@@ -67,9 +67,9 @@ if (!isRC)
 	manifest.version = newVersion;
 manifest_beta.version = newVersion;
 
-await Bun.write("package.json", JSON.stringify(package_json, null, "\t").replace(/\n/g, "\r\n") + "\r\n");
-await Bun.write(manifest_file, JSON.stringify(manifest, null, "\t").replace(/\n/g, "\r\n") + "\r\n");
-await Bun.write("manifest-beta.json", JSON.stringify(manifest_beta, null, "\t").replace(/\n/g, "\r\n") + "\r\n");
+await Bun.write("package.json", JSON.stringify(package_json, null, "\t") + "\n");
+await Bun.write(manifest_file, JSON.stringify(manifest, null, "\t") + "\n");
+await Bun.write("manifest-beta.json", JSON.stringify(manifest_beta, null, "\t") + "\n");
 
 try {
 	Bun.spawnSync(["git", "add", "package.json", "manifest.json", "manifest-beta.json"]);
