@@ -35,27 +35,30 @@
 ### Task 1: Reject-all corruption fix in mark_range
 
 **Files:**
+
 - Modify: `src/editor/base/ranges/grouped_range.ts` (`unwrap_in_range` gains a drop-pending-additions mode)
 - Modify: `src/editor/base/edit-logic/mark.ts` (suggestion branch uses it; empty-deleted handling distinguishes "nothing there" from "only pending additions there")
 - Test: `tests/mark_ranges.test.ts` (amend the four `// BUG:` cases), `tests/__snapshots__/mark_ranges.test.ts.snap` (their entries removed)
 
 **Interfaces:**
+
 - Produces: `unwrap_in_range(doc, from, to, ranges, drop_pending_additions = false)` — same return shape; when the flag is true, a range **fully covered** by [from,to] contributes `""` if ADDITION and only its deletion part (`unwrap_parts()[0]`) if SUBSTITUTION; partially-covered ranges and other types contribute exactly as today. Callers other than the mark.ts suggestion branch are untouched (default `false`).
 
 **Target semantics (these ARE the requirements):**
 
-| # | Input doc | Operation | OLD output (corrupting) | NEW required output |
-|---|---|---|---|---|
-| 1 | `ab{++cd++}ef` | DELETION over whole doc | `{--abcdef--}` | `{--abef--}` |
-| 2 | `ab{++cd++}ef` | DELETION over exactly `cd` (positions 5–7) | `ab{--cd--}ef` | `abef` (addition retracted outright) |
-| 3 | `x{~~y~>z~~}u` | SUBSTITUTION over whole doc, insert `new` | `{~~xyzu~>new~~}` | `{~~xyu~>new~~}` |
-| 4 | `uv{++w++}{++y++}z` | SUBSTITUTION over whole doc, insert `q` | `{~~uvwyz~>q~~}` | `{~~uvz~>q~~}` |
+| # | Input doc           | Operation                                  | OLD output (corrupting) | NEW required output                  |
+| - | ------------------- | ------------------------------------------ | ----------------------- | ------------------------------------ |
+| 1 | `ab{++cd++}ef`      | DELETION over whole doc                    | `{--abcdef--}`          | `{--abef--}`                         |
+| 2 | `ab{++cd++}ef`      | DELETION over exactly `cd` (positions 5–7) | `ab{--cd--}ef`          | `abef` (addition retracted outright) |
+| 3 | `x{~~y~>z~~}u`      | SUBSTITUTION over whole doc, insert `new`  | `{~~xyzu~>new~~}`       | `{~~xyu~>new~~}`                     |
+| 4 | `uv{++w++}{++y++}z` | SUBSTITUTION over whole doc, insert `q`    | `{~~uvwyz~>q~~}`        | `{~~uvz~>q~~}`                       |
 
 Verify by hand before coding: in every row, accept-all on NEW output equals accept-all on OLD output (`""`, `abef`, `new`, `q` respectively), and reject-all on NEW output equals reject-all on the INPUT doc (`abef`, `abef`, `xyu`, `uvz`) — which OLD violated.
 
 - [ ] **Step 1: Write the failing tests**
 
 In `tests/mark_ranges.test.ts`:
+
 1. Add round-trip helpers at top (after the existing `mark` helper):
 
 ```typescript
@@ -63,14 +66,23 @@ import { applyToText } from "../src/editor/base";
 
 function accept_all(doc: string): string {
 	const state = createRangeState(doc);
-	return applyToText(doc, (range) => range.accept(), state.field(rangeParser).ranges.ranges);
+	return applyToText(
+		doc,
+		(range) => range.accept(),
+		state.field(rangeParser).ranges.ranges,
+	);
 }
 
 function reject_all(doc: string): string {
 	const state = createRangeState(doc);
-	return applyToText(doc, (range) => range.reject(), state.field(rangeParser).ranges.ranges);
+	return applyToText(
+		doc,
+		(range) => range.reject(),
+		state.field(rangeParser).ranges.ranges,
+	);
 }
 ```
+
 (Adapt the exact `applyToText` callback signature to the one used in tests/cursor_movement.test.ts — `(range, text) => range.unwrap()` pattern — and reuse `createRangeState` / imports already present in this file. If `accept()`/`reject()` need arguments, match their signatures from base_range.ts.)
 
 2. Convert the four `// BUG:` snapshot cases into explicit tests in a new describe block, and REMOVE them from the `cases` snapshot array:
@@ -78,14 +90,62 @@ function reject_all(doc: string): string {
 ```typescript
 describe("marking over pending additions consumes them (reject-all safety)", () => {
 	// [name, doc, from, to, inserted, type, expected output, expected accept-all]
-	const cases: [string, string, number, number, string, MarkType, string, string][] = [
-		["delete spanning plain text and addition", "ab{++cd++}ef", 0, 12, "", SuggestionType.DELETION, "{--abef--}", ""],
-		["delete exactly an addition's contents", "ab{++cd++}ef", 5, 7, "", SuggestionType.DELETION, "abef", "abef"],
-		["substitution across existing substitution", "x{~~y~>z~~}u", 0, 12, "new", SuggestionType.SUBSTITUTION, "{~~xyu~>new~~}", "new"],
-		["substitution spanning two adjacent ranges", "uv{++w++}{++y++}z", 0, 17, "q", SuggestionType.SUBSTITUTION, "{~~uvz~>q~~}", "q"],
+	const cases: [
+		string,
+		string,
+		number,
+		number,
+		string,
+		MarkType,
+		string,
+		string,
+	][] = [
+		[
+			"delete spanning plain text and addition",
+			"ab{++cd++}ef",
+			0,
+			12,
+			"",
+			SuggestionType.DELETION,
+			"{--abef--}",
+			"",
+		],
+		[
+			"delete exactly an addition's contents",
+			"ab{++cd++}ef",
+			5,
+			7,
+			"",
+			SuggestionType.DELETION,
+			"abef",
+			"abef",
+		],
+		[
+			"substitution across existing substitution",
+			"x{~~y~>z~~}u",
+			0,
+			12,
+			"new",
+			SuggestionType.SUBSTITUTION,
+			"{~~xyu~>new~~}",
+			"new",
+		],
+		[
+			"substitution spanning two adjacent ranges",
+			"uv{++w++}{++y++}z",
+			0,
+			17,
+			"q",
+			SuggestionType.SUBSTITUTION,
+			"{~~uvz~>q~~}",
+			"q",
+		],
 	];
 
-	for (const [name, doc, from, to, inserted, type, expected, accept_expected] of cases) {
+	for (
+		const [name, doc, from, to, inserted, type, expected, accept_expected]
+			of cases
+	) {
 		test(name, () => {
 			const output = mark(doc, from, to, inserted, type);
 			expect(output).toBe(expected);
@@ -104,7 +164,7 @@ describe("marking over pending additions consumes them (reject-all safety)", () 
 - [ ] **Step 2: Run tests to verify they fail correctly**
 
 Run: `bun run test -- tests/mark_ranges.test.ts`
-Expected: the four new explicit tests FAIL with the OLD outputs from the table (e.g. received `{--abcdef--}`, expected `{--abef--}`). Everything else passes. If a case fails with a *different* wrong output than the table's OLD column, STOP — the code has drifted from the characterization and the analysis needs redoing.
+Expected: the four new explicit tests FAIL with the OLD outputs from the table (e.g. received `{--abcdef--}`, expected `{--abef--}`). Everything else passes. If a case fails with a _different_ wrong output than the table's OLD column, STOP — the code has drifted from the characterization and the analysis needs redoing.
 
 - [ ] **Step 3: Implement**
 
@@ -113,52 +173,54 @@ Suggested implementation (the tests are the contract; internals may deviate if a
 1. `grouped_range.ts` — extend `unwrap_in_range` with `drop_pending_additions = false` as the fifth parameter. In the per-range loop, replace `output += range.unwrap_slice(Math.max(0, from), to);` with:
 
 ```typescript
-			if (drop_pending_additions && from <= range.from && range.to <= to) {
-				// EXPL: A pending addition consumed by a deletion/substitution mark is a retracted
-				//       suggestion — its text was never in the base document, so folding it into
-				//       the new range would make reject-all resurrect it.
-				if (range.type === SuggestionType.ADDITION) {
-					// contributes nothing
-				} else if (range.type === SuggestionType.SUBSTITUTION) {
-					output += (range as SubstitutionRange).unwrap_parts()[0];
-				} else {
-					output += range.unwrap_slice(Math.max(0, from), to);
-				}
-			} else {
-				output += range.unwrap_slice(Math.max(0, from), to);
-			}
+if (drop_pending_additions && from <= range.from && range.to <= to) {
+	// EXPL: A pending addition consumed by a deletion/substitution mark is a retracted
+	//       suggestion — its text was never in the base document, so folding it into
+	//       the new range would make reject-all resurrect it.
+	if (range.type === SuggestionType.ADDITION) {
+		// contributes nothing
+	} else if (range.type === SuggestionType.SUBSTITUTION)
+		output += (range as SubstitutionRange).unwrap_parts()[0];
+	else
+		output += range.unwrap_slice(Math.max(0, from), to);
+} else {
+	output += range.unwrap_slice(Math.max(0, from), to);
+}
 ```
+
 (Import `SuggestionType`/`SubstitutionRange` as needed within the file — check what it already imports.)
 
 2. `mark.ts` suggestion branch (final `else` of the big type dispatch): change the deleted computation to pass the flag for deletion/substitution marks, and fix the empty-deleted early return:
 
 ```typescript
-			const drop_additions = type === SuggestionType.DELETION || type === SuggestionType.SUBSTITUTION;
-			let deleted = from === to ?
-				"" :
-				ranges.unwrap_in_range(text, from, to, in_range, drop_additions).output;
-			if (!deleted) {
-				// EXPL: Distinguish "selection contains nothing" from "selection covers only
-				//       pending additions" — the latter must remove those additions outright
-				//       (retracting a suggestion), not no-op.
-				const covered = in_range.filter(r => from <= r.from && r.to <= to);
-				if (drop_additions && covered.length > 0) {
-					const removal_from = Math.min(from, covered[0].from);
-					const removal_to = Math.max(to, covered[covered.length - 1].to);
-					return {
-						from: removal_from,
-						to: removal_to,
-						insert: inserted,
-						start: removal_from,
-						end: removal_from + inserted.length,
-					};
-				}
-				if (type === SuggestionType.SUBSTITUTION)
-					type = SuggestionType.ADDITION;
-				else if (type === SuggestionType.DELETION)
-					return { from, to: from, insert: "", start: from, end: from };
-			}
+const drop_additions = type === SuggestionType.DELETION ||
+	type === SuggestionType.SUBSTITUTION;
+let deleted = from === to ?
+	"" :
+	ranges.unwrap_in_range(text, from, to, in_range, drop_additions).output;
+if (!deleted) {
+	// EXPL: Distinguish "selection contains nothing" from "selection covers only
+	//       pending additions" — the latter must remove those additions outright
+	//       (retracting a suggestion), not no-op.
+	const covered = in_range.filter(r => from <= r.from && r.to <= to);
+	if (drop_additions && covered.length > 0) {
+		const removal_from = Math.min(from, covered[0].from);
+		const removal_to = Math.max(to, covered[covered.length - 1].to);
+		return {
+			from: removal_from,
+			to: removal_to,
+			insert: inserted,
+			start: removal_from,
+			end: removal_from + inserted.length,
+		};
+	}
+	if (type === SuggestionType.SUBSTITUTION)
+		type = SuggestionType.ADDITION;
+	else if (type === SuggestionType.DELETION)
+		return { from, to: from, insert: "", start: from, end: from };
+}
 ```
+
 Note case 2 has `inserted === ""` so the removal returns empty insert; a substitution over only-additions with non-empty `inserted` degrades to inserting the replacement text plainly — assert that in a bonus test if time permits, otherwise leave to the round-trip invariants.
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -173,6 +235,7 @@ bun run build && bun run test 2>&1 | tail -3 && bun run lint > /dev/null && bun 
 git add src/editor/base/ranges/grouped_range.ts src/editor/base/edit-logic/mark.ts tests/mark_ranges.test.ts tests/__snapshots__/mark_ranges.test.ts.snap
 git commit -m "fix: deleting or substituting over pending additions retracts them instead of folding their text"
 ```
+
 Also update `docs/superpowers/plans/2026-07-11-phase-0-1-execution-notes.md`: mark bug 2 as FIXED with the commit SHA (edit the section header to "(FIXED in Phase 3A)" — keep the description for history). Include in the same commit.
 
 ---
@@ -180,6 +243,7 @@ Also update `docs/superpowers/plans/2026-07-11-phase-0-1-execution-notes.md`: ma
 ### Task 2: Author attribution on by default + first-run name prompt
 
 **Files:**
+
 - Modify: `src/constants.ts` (six defaults)
 - Create: `src/ui/modals/author-modal.ts`
 - Modify: `src/ui/modals/index.ts` (export it — match the file's existing export style)
@@ -187,6 +251,7 @@ Also update `docs/superpowers/plans/2026-07-11-phase-0-1-execution-notes.md`: ma
 - Test: `tests/metadata_defaults.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `generate_metadata(settings)` (metadata.ts), `Modal`/`Setting` from obsidian (mocked at `__mocks__/obsidian.ts` — if `Setting` or `Modal` methods used here are missing from the mock, add minimal inert stand-ins, additive only).
 - Produces: `AuthorNameModal(app, onSubmit: (author: string) => void)`; `CommentatorPlugin.first_install: boolean`.
 
@@ -209,7 +274,10 @@ describe("attribution defaults (Phase 3a)", () => {
 	});
 
 	test("generate_metadata produces author and timestamp under defaults", () => {
-		const metadata = generate_metadata({ ...DEFAULT_SETTINGS, author: "Test Author" });
+		const metadata = generate_metadata({
+			...DEFAULT_SETTINGS,
+			author: "Test Author",
+		});
 		expect(metadata).toBeDefined();
 		expect(metadata!.author).toBe("Test Author");
 		expect(typeof metadata!.time).toBe("number");
@@ -253,7 +321,8 @@ export class AuthorNameModal extends Modal {
 		let value = "";
 		this.titleEl.setText("Commentator: choose your author name");
 		this.contentEl.createEl("p", {
-			text: "Suggestions and comments you make will be attributed to this name. " +
+			text:
+				"Suggestions and comments you make will be attributed to this name. " +
 				"You can change it any time under Settings → Commentator → Metadata.",
 		});
 		new Setting(this.contentEl)
@@ -274,33 +343,39 @@ export class AuthorNameModal extends Modal {
 	}
 }
 ```
+
 Export it from `src/ui/modals/index.ts` following that file's existing pattern.
 
 - [ ] **Step 5: Wire first-install detection**
 
 In `src/main.ts`:
+
 1. Add a field near the other plugin fields: `first_install: boolean = false;`
 2. In `loadSettings()`, capture the raw load before merging (adapt to the method's actual current shape):
+
 ```typescript
-	async loadSettings() {
-		const saved = await this.loadData();
-		this.first_install = saved == null;
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
-		…
+async loadSettings() {
+	const saved = await this.loadData();
+	this.first_install = saved == null;
+	this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+	…
 ```
+
 3. In `onload()` (after settings are loaded), add:
+
 ```typescript
-		this.app.workspace.onLayoutReady(() => {
-			if (this.first_install && !this.settings.author) {
-				new AuthorNameModal(this.app, async (author) => {
-					if (author) {
-						this.settings.author = author;
-						await this.setSettings();
-					}
-				}).open();
+this.app.workspace.onLayoutReady(() => {
+	if (this.first_install && !this.settings.author) {
+		new AuthorNameModal(this.app, async (author) => {
+			if (author) {
+				this.settings.author = author;
+				await this.setSettings();
 			}
-		});
+		}).open();
+	}
+});
 ```
+
 (Import `AuthorNameModal` from the modals barrel. Confirm the settings-persist method name in main.ts — `setSettings` is used by migrateSettings; if the canonical method differs, use that.)
 
 - [ ] **Step 6: Verify and commit**
@@ -308,12 +383,14 @@ In `src/main.ts`:
 ```bash
 bun run test -- tests/metadata_defaults.test.ts && bun run build && bun run test 2>&1 | tail -3 && bun run lint > /dev/null && bun node_modules/dprint/bin.cjs check
 ```
+
 Watch the FULL suite closely: flipping `enable_metadata` default changes what `DEFAULT_SETTINGS`-based tests parse. `tests/cursor_movement.test.ts` uses `DEFAULT_SETTINGS` with plain docs (no metadata syntax) — should be unaffected; if any test regresses, fix the TEST by pinning its settings explicitly via `createRangeState`'s override (document each in the report), never by un-flipping the defaults.
 
 ```bash
 git add src/constants.ts src/ui/modals/author-modal.ts src/ui/modals/index.ts src/main.ts tests/metadata_defaults.test.ts
 git commit -m "feat: enable author and timestamp attribution by default with first-run name prompt"
 ```
+
 Manual smoke note for the report: fresh vault → prompt appears once; existing vault (data.json present) → no prompt, saved settings untouched.
 
 ---
@@ -321,15 +398,18 @@ Manual smoke note for the report: fresh vault → prompt appears once; existing 
 ### Task 3: Comments anchored to selections
 
 **Files:**
+
 - Modify: `src/editor/base/edit-logic/add-comment.ts`
 - Modify: `README.md` (check off "Add comments to selection" under Comment Mode)
 - Test: `tests/add_comment.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `create_range(settings, type, inserted, deleted?)` (range-create.ts:55); `rangeParser` field; the adjacency rule (a COMMENT right-adjacent to any range becomes its reply — range-parser.ts ~49).
 - Produces: unchanged export `addCommentToView(editor, range, scroll?)` — new behavior only when `range` is undefined AND the selection is non-empty.
 
 **Behavior contract:**
+
 - Non-empty selection, no overlap with existing markup → replace selection with `{==<selection>==}{>><<}` (metadata included per settings), cursor inside the new comment; gutter focus annotation fired for the new thread.
 - Non-empty selection that intersects any existing range → CriticMarkup cannot nest; fall back to the existing at-cursor behavior (comment inserted at `selection.main.head`). (Spec refinement, recorded: the spec suggested snapping; nesting makes wrapping unsafe, and cursor-fallback preserves the no-data-mangling priority.)
 - Empty selection or explicit `range` argument → exactly today's behavior.
@@ -387,6 +467,7 @@ describe("addCommentToView with a selection", () => {
 	});
 });
 ```
+
 Note: `createRangeState` may need its `extra` extensions param for `EditorView` use — mirror how tests/cursor_movement.test.ts constructs views. Ensure `pluginSettingsField` is present in the state (addCommentToView reads it). If `activeWindow.setTimeout` (used at the end of addCommentToView) is undefined under jest, add `global.activeWindow = window` style setup in tests/setup.ts (additive) or verify the obsidian mock provides it.
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -399,38 +480,40 @@ Expected: test 1 FAILS — current behavior inserts `{>><<}` at the head without
 In `src/editor/base/edit-logic/add-comment.ts`, at the top of `addCommentToView` after `settings` is read, insert:
 
 ```typescript
-	const selection = editor.state.selection.main;
+const selection = editor.state.selection.main;
 
-	// EXPL: GDocs-style anchored comment — wrap a clean selection in a highlight range;
-	//       the adjacent comment attaches to it as a thread via the parser's adjacency rule.
-	//       CriticMarkup cannot nest, so any selection touching existing markup falls back
-	//       to the plain at-cursor comment below.
-	if (!range && !selection.empty) {
-		const ranges = editor.state.field(rangeParser).ranges;
-		if (ranges.ranges_in_interval(selection.from, selection.to).length === 0) {
-			const anchor_text = editor.state.sliceDoc(selection.from, selection.to);
-			const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
-				create_range(settings, SuggestionType.COMMENT, "");
+// EXPL: GDocs-style anchored comment — wrap a clean selection in a highlight range;
+//       the adjacent comment attaches to it as a thread via the parser's adjacency rule.
+//       CriticMarkup cannot nest, so any selection touching existing markup falls back
+//       to the plain at-cursor comment below.
+if (!range && !selection.empty) {
+	const ranges = editor.state.field(rangeParser).ranges;
+	if (ranges.ranges_in_interval(selection.from, selection.to).length === 0) {
+		const anchor_text = editor.state.sliceDoc(selection.from, selection.to);
+		const insert =
+			create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
+			create_range(settings, SuggestionType.COMMENT, "");
+		editor.dispatch(editor.state.update({
+			changes: { from: selection.from, to: selection.to, insert },
+			selection: EditorSelection.cursor(selection.from + insert.length - 3),
+			scrollIntoView: scroll,
+		}));
+		activeWindow.setTimeout(() => {
 			editor.dispatch(editor.state.update({
-				changes: { from: selection.from, to: selection.to, insert },
-				selection: EditorSelection.cursor(selection.from + insert.length - 3),
-				scrollIntoView: scroll,
+				annotations: [
+					annotationGutterFocusAnnotation.of({
+						from: selection.from,
+						to: selection.from,
+						index: 1,
+					}),
+				],
 			}));
-			activeWindow.setTimeout(() => {
-				editor.dispatch(editor.state.update({
-					annotations: [
-						annotationGutterFocusAnnotation.of({
-							from: selection.from,
-							to: selection.from,
-							index: 1,
-						}),
-					],
-				}));
-			});
-			return;
-		}
+		});
+		return;
 	}
+}
 ```
+
 (`rangeParser` needs importing from `../edit-util`; everything else is already imported. `insert.length - 3` places the cursor inside `{>>░<<}`. The `index: 1` focuses the comment — position 1 in the thread `[highlight, comment]`; if manual testing in Phase 3B shows the gutter focuses the wrong element, adjust the index there, not here.)
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -446,6 +529,7 @@ bun run build && bun run test 2>&1 | tail -3 && bun run lint > /dev/null && bun 
 git add src/editor/base/edit-logic/add-comment.ts tests/add_comment.test.ts README.md
 git commit -m "feat: anchor comments to text selections via highlight wrapping"
 ```
+
 Manual smoke note for the report: in a vault — select text → "Add comment" command → highlight + comment thread appear, gutter focuses the comment input; hover over the highlight shows the thread.
 
 ---
@@ -458,6 +542,7 @@ Manual smoke note for the report: in a vault — select text → "Add comment" c
 export PATH="$HOME/.bun/bin:$PATH"
 rm -rf node_modules && bun install && bun run build && bun run test 2>&1 | tail -3 && bun run lint > /dev/null && echo LINT-OK && bun node_modules/dprint/bin.cjs check && echo DPRINT-OK
 ```
+
 Expected: all green from scratch.
 
 - [ ] **Step 2: Update execution notes and commit**
