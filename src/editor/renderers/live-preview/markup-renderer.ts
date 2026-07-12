@@ -3,7 +3,14 @@ import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 import { editorEditorField, editorLivePreviewField } from "obsidian";
 
 import { EditMode, type PluginSettings, PreviewMode } from "../../../types";
-import { CriticMarkupRange, rangeParser, SubstitutionRange, SuggestionType, thread_resolved } from "../../base";
+import {
+	CriticMarkupRange,
+	rangeParser,
+	SubstitutionRange,
+	SuggestionType,
+	thread_resolvable,
+	thread_resolved,
+} from "../../base";
 import { editModeValueState, fullReloadEffect, previewModeState } from "../../settings";
 import { CommentIconWidget } from "./comment-widget";
 
@@ -124,8 +131,7 @@ export function constructDecorations(
 			// EXPL: A resolved HIGHLIGHT thread renders as plain text: brackets and metadata stay
 			//       hidden below, but the type styling is replaced by a hook class for themes.
 			//       A resolved COMMENT thread renders as nothing at all (handled just below).
-			const resolved = (range.type === SuggestionType.HIGHLIGHT || range.type === SuggestionType.COMMENT) &&
-				thread_resolved(range);
+			const resolved = thread_resolvable(range) && thread_resolved(range);
 
 			// EXPL: A resolved COMMENT thread renders as nothing — comment text is not document
 			//       text (unlike a resolved highlight's anchor), so its entire span (brackets,

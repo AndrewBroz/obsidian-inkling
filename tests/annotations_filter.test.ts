@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS } from "../src/constants";
-import { rangeParser } from "../src/editor/base";
+import { rangeParser, SuggestionType } from "../src/editor/base";
 import type { CriticMarkupRange } from "../src/editor/base/ranges";
 import {
 	AuthorFilter,
@@ -98,5 +98,27 @@ describe("filterRanges / ResolvedFilter", () => {
 
 		expect(filterByResolved(plugin, plain_items, ResolvedFilter.RESOLVED)).toHaveLength(0);
 		expect(filterByResolved(plugin, plain_items, ResolvedFilter.UNRESOLVED)).toHaveLength(2);
+	});
+
+	test("done-flagged standalone comment appears in resolved filter (resolvable)", () => {
+		// EXPL: Regression test for the thread_resolvable fix. This test verifies that
+		// done-flagged COMMENT ranges (which are resolvable) still appear correctly in the
+		// RESOLVED filter. The fix adds thread_resolvable gating to prevent legacy
+		// done-flagged SUGGESTION ranges from appearing in RESOLVED, while preserving
+		// correct behavior for resolvable threads.
+		const doc = `x{>>{"done":true}@@comment<<}y`;
+		const state = createRangeState(doc, { enable_metadata: true });
+		const ranges = state.field(rangeParser).ranges.ranges;
+		const items = [["d.md", { data: ranges, mtime: 0 }]] as any;
+		const plugin = fakePlugin();
+
+		// A done-flagged COMMENT should appear in RESOLVED (correct behavior preserved)
+		const resolved = filterByResolved(plugin, items, ResolvedFilter.RESOLVED);
+		expect(resolved).toHaveLength(1);
+		expect(resolved[0].range.type).toBe(SuggestionType.COMMENT);
+
+		// And not appear in UNRESOLVED
+		const unresolved = filterByResolved(plugin, items, ResolvedFilter.UNRESOLVED);
+		expect(unresolved).toHaveLength(0);
 	});
 });

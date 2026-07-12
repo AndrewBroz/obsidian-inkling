@@ -5,6 +5,7 @@ import {
 	type CommentRange,
 	type CriticMarkupRange,
 	SuggestionType,
+	thread_resolvable,
 	thread_resolved,
 } from "../../../editor/base";
 import type CommentatorPlugin from "../../../main";
@@ -104,9 +105,14 @@ export function filterRanges(
 
 	// EXPL: Filter by resolved status. Independent of enable_metadata: when metadata parsing is
 	// off, no range ever carries `done`, so everything is simply unresolved.
+	// NOTE: Legacy done-flagged suggestion ranges (old versions only) must not be treated as
+	// resolved — resolve/reopen is a comment-thread concept, suggestions have their own
+	// lifecycle (accept/reject). Use thread_resolvable to gate.
 	if (resolved_filter !== ResolvedFilter.ALL) {
 		filtered_ranges = filtered_ranges.filter(
-			(item) => thread_resolved(item.range) === (resolved_filter === ResolvedFilter.RESOLVED),
+			(item) =>
+				(thread_resolvable(item.range) && thread_resolved(item.range)) ===
+					(resolved_filter === ResolvedFilter.RESOLVED),
 		);
 	}
 
