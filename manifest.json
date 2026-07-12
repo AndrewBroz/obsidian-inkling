@@ -1,7 +1,7 @@
 {
 	"id": "inkling",
 	"name": "Inkling",
-	"version": "0.4.0",
+	"version": "0.5.0",
 	"minAppVersion": "1.7.5",
 	"description": "Suggest edits, add comments, and annotate your notes using CriticMarkup syntax. A hard fork of Fevol's Commentator.",
 	"author": "kometenstaub, Fevol, and AndrewBroz",
