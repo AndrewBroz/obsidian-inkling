@@ -568,6 +568,10 @@ export function createGutterWithConfig<C extends GutterConfig>(
 	activeGutters: Facet<Required<C>>,
 	unfixGutters: Facet<boolean, boolean>,
 ): { extension: Extension; config: Required<C> } {
+	// EXPL: TS2352 — TypeScript cannot statically verify a generic spread against Required<C>,
+	//       so the compiler itself requires the detour through `unknown`. Runtime safety holds:
+	//       `defaults` covers every base field and C extends GutterConfig. Do not "simplify"
+	//       this back to a single cast; it will not compile.
 	const merged = { ...defaults, ...config } as unknown as Required<C>;
 	return {
 		extension: [createGutterExtension(viewplugin, {}, unfixGutters), activeGutters.of(merged)],

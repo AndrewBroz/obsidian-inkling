@@ -88,6 +88,9 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
 - Minor deferrals: why-comment for the `as unknown as Required<C>` double-cast in gutters/base.ts
   (verified TS2352 compiler necessity); manual smoke check that bulk-stale accept shows ONE
   summary Notice.
+- Vendoring deviation: the plan estimated 33 files under src/ui/components; the submodule's
+  actual tracked tree was 26 (the estimate counted untracked working-tree artifacts). All
+  tracked content was vendored byte-identically (verified in review).
 
 ## Test-infrastructure conventions established (use in later phases)
 

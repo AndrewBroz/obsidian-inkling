@@ -34,10 +34,8 @@ export default tseslint.config(
 		rules: {
 			// Carried over from .eslintrc.cjs
 			"no-unused-vars": "off",
-			// Downgraded from "error" to "warn" (options preserved): PRE-EXISTING violations
-			// found when svelte linting was first enabled (Phase 2), see block below.
-			"@typescript-eslint/no-unused-vars": ["warn", { args: "none" }],
-			"@typescript-eslint/no-explicit-any": ["warn", { ignoreRestArgs: true }],
+			"@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
+			"@typescript-eslint/no-explicit-any": ["error", { ignoreRestArgs: true }],
 			"@typescript-eslint/ban-ts-comment": "off",
 			"no-prototype-builtins": "off",
 			"@typescript-eslint/no-empty-function": "off",
@@ -46,6 +44,7 @@ export default tseslint.config(
 
 			// PRE-EXISTING violations found when svelte linting was first enabled (Phase 2).
 			// Downgraded to warnings so the gate stays green; burn down separately.
+			// Priority: svelte/no-at-html-tags (XSS-adjacent, AnnotationThread.svelte x2) and no-undef (Row x2, Interval x1 — real missing refs).
 			"no-useless-assignment": "warn",
 			"prefer-const": "warn",
 			"no-cond-assign": "warn",
@@ -56,6 +55,30 @@ export default tseslint.config(
 			"svelte/no-useless-mustaches": "warn",
 			"svelte/no-unused-svelte-ignore": "warn",
 			"@typescript-eslint/no-require-imports": "warn",
+		},
+	},
+	{
+		// PRE-EXISTING no-unused-vars / no-explicit-any debt (Phase 2 lint migration).
+		// Ratchet: fix a file, remove it from this list. Do not add files.
+		files: [
+			"src/editor/base/edit-logic/mark.ts",
+			"src/editor/base/edit-util/range-operations.ts",
+			"src/editor/base/ranges/base_range.ts",
+			"src/main.ts",
+			"src/types/extensions.d.ts",
+			"src/ui/pages/annotations-view/AnnotationThread.svelte",
+			"src/ui/pages/annotations-view/AnnotationThreadQuickActions.svelte",
+			"src/ui/pages/annotations-view/AnnotationsView.svelte",
+			"src/ui/pages/annotations-view/filter-ranges.ts",
+			"src/ui/pages/settings/tabs/AdvancedSettings.svelte",
+			"src/ui/pages/settings/tabs/EditorSettings.svelte",
+			"src/ui/pages/settings/tabs/StyleSettings.svelte",
+			"src/ui/pages/settings/tabs/SuggestionSettings.svelte",
+			"src/ui/view.svelte.ts",
+		],
+		rules: {
+			"@typescript-eslint/no-unused-vars": ["warn", { args: "none" }],
+			"@typescript-eslint/no-explicit-any": ["warn", { ignoreRestArgs: true }],
 		},
 	},
 	{
