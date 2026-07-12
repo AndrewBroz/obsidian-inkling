@@ -5,6 +5,7 @@ import {
 	MarkdownView,
 	Notice,
 	Plugin,
+	TFile,
 } from "obsidian";
 
 import { EditorState, type Extension, Prec } from "@codemirror/state";
@@ -52,6 +53,7 @@ import {
 	providePluginSettingsExtension,
 	rangeCorrecter,
 } from "./editor/uix/extensions";
+import { resolveFrontmatterMode } from "./editor/uix/frontmatter-mode";
 import { editModeHeaderButton, type HeaderButton, previewModeHeaderButton } from "./editor/view-header";
 
 import { AuthorNameModal } from "./ui/modals";
@@ -71,6 +73,8 @@ import {
 	annotationGutterIncludedTypes,
 	annotationGutterIncludedTypesState,
 	editMode,
+	editModeEnforced,
+	editModeEnforcedState,
 	editModeValue,
 	editModeValueState,
 	fullReloadEffect,
@@ -180,6 +184,9 @@ export default class CommentatorPlugin extends Plugin {
 		this.editorExtensions.push(previewMode.of(previewModeState.of(this.settings.default_preview_mode)));
 		this.editorExtensions.push(editModeValue.of(editModeValueState.of(this.settings.default_edit_mode)));
 		this.editorExtensions.push(
+			editModeEnforced.of(editModeEnforcedState.of(false)),
+		);
+		this.editorExtensions.push(
 			annotationGutterIncludedTypes.of(
 				annotationGutterIncludedTypesState.of(this.settings.annotation_gutter_included_types),
 			),
@@ -288,6 +295,14 @@ export default class CommentatorPlugin extends Plugin {
 		this.previewModeStatusBarButton = previewModeStatusBarButton(this, this.settings.status_bar_preview_button);
 		this.editModeStatusBarButton = suggestionModeStatusBarButton(this, this.settings.status_bar_edit_button);
 		this.metadataStatusBarButton = metadataStatusBarButton(this, this.settings.status_bar_metadata_button);
+
+		this.registerEvent(this.app.workspace.on("file-open", (file) => {
+			if (file) this.applyFrontmatterMode(file);
+		}));
+		this.registerEvent(this.app.metadataCache.on("changed", (file) => {
+			if (file === this.app.workspace.getActiveFile())
+				this.applyFrontmatterMode(file);
+		}));
 
 		if (this.settings.post_processor) {
 			// TODO: Run postprocessor before any other MD postprocessors
@@ -511,17 +526,49 @@ export default class CommentatorPlugin extends Plugin {
 		);
 	}
 
-	setEditMode(view: MarkdownFileInfo | null, mode: number) {
+	setEditMode(view: MarkdownFileInfo | null, mode: number, enforced: boolean = false) {
 		if (view && view.editor) {
+			// EXPL: The status-bar and header buttons cycle modes through this method directly,
+			//       bypassing any command-level check — this guard is what actually locks them
+			//       while the note's frontmatter enforces a mode.
+			if (!enforced && view.editor.cm.state.facet(editModeEnforcedState)) {
+				new Notice(
+					"Commentator: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
+					4000,
+				);
+				return;
+			}
+
 			view.editor.cm.dispatch(view.editor.cm.state.update({
 				effects: [
 					editMode.reconfigure(getEditMode(mode, this.settings)),
 					editModeValue.reconfigure(editModeValueState.of(mode)),
+					editModeEnforced.reconfigure(editModeEnforcedState.of(enforced)),
 				],
 			}));
 
 			this.editModeStatusBarButton.updateButton(mode);
 			this.editModeHeaderModeButton.updateButton(view as MarkdownView, mode);
+		}
+	}
+
+	applyFrontmatterMode(file: TFile) {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view || view.file !== file || !view.editor)
+			return;
+
+		const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const enforced_mode = resolveFrontmatterMode(frontmatter, this.settings.author ?? "");
+		const currently_enforced = view.editor.cm.state.facet(editModeEnforcedState);
+
+		if (enforced_mode !== null)
+			this.setEditMode(view, enforced_mode, true);
+		else if (currently_enforced) {
+			// EXPL: lift enforcement first so the setEditMode guard lets the restore through
+			view.editor.cm.dispatch(view.editor.cm.state.update({
+				effects: [editModeEnforced.reconfigure(editModeEnforcedState.of(false))],
+			}));
+			this.setEditMode(view, this.settings.default_edit_mode, false);
 		}
 	}
 

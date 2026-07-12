@@ -35,4 +35,9 @@ export const editModeValueState = Facet.define<EditMode, EditMode>({ combine: va
 export const editModeValue = new Compartment();
 export const editMode = new Compartment();
 
+export const editModeEnforcedState = Facet.define<boolean, boolean>({
+	combine: values => values[0],
+});
+export const editModeEnforced = new Compartment();
+
 export const fullReloadEffect = StateEffect.define<boolean>();

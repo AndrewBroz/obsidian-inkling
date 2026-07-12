@@ -1,4 +1,4 @@
-import { type Editor, type MarkdownView, Platform } from "obsidian";
+import { type Editor, type MarkdownView, Notice, Platform } from "obsidian";
 
 import { type SelectionRange } from "@codemirror/state";
 import type CommentatorPlugin from "../../main";
@@ -19,6 +19,7 @@ import { addCommentToView, generateCriticMarkupPatchFromDiff } from "../base";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
 import {
 	editMode,
+	editModeEnforcedState,
 	editModeValue,
 	editModeValueState,
 	previewMode,
@@ -168,6 +169,13 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		icon: "file-edit",
 		editor_context: true,
 		regular_callback: (editor: Editor, view: MarkdownView) => {
+			if (editor.cm.state.facet(editModeEnforcedState)) {
+				new Notice(
+					"Commentator: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
+					4000,
+				);
+				return;
+			}
 			const current_value = editor.cm.state.facet(editModeValueState);
 			const resulting_mode = current_value === EditMode.SUGGEST ? EditMode.CORRECTED : EditMode.SUGGEST;
 			editor.cm.dispatch(editor.cm.state.update({
@@ -185,6 +193,13 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		icon: "message-square",
 		editor_context: true,
 		regular_callback: (editor: Editor, view: MarkdownView) => {
+			if (editor.cm.state.facet(editModeEnforcedState)) {
+				new Notice(
+					"Commentator: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
+					4000,
+				);
+				return;
+			}
 			const current_value = editor.cm.state.facet(editModeValueState);
 			const resulting_mode = current_value === EditMode.COMMENT ? EditMode.CORRECTED : EditMode.COMMENT;
 			editor.cm.dispatch(editor.cm.state.update({

@@ -69,7 +69,7 @@ Other commands: `bun run test` (jest suite), `bun run lint` (ESLint), `bun run f
 - [x] Toggling suggestion mode on/off in editor
 - [x] Toggling comment mode on/off in editor
 - [ ] Integration of toggles for suggestion mode, preview and comment mode with other community plugins
-- [ ] Specify suggestion/comment-only mode in frontmatter (based on authorship)
+- [x] Specify suggestion/comment-only mode in frontmatter (based on authorship)
 
 ### Rendering
 
@@ -97,3 +97,14 @@ Other commands: `bun run test` (jest suite), `bun run lint` (ESLint), `bun run f
 
 - [x] Add comments to selection
 - [x] Smooth cursor movement through markup
+
+### Frontmatter
+
+Enforce an editing mode for a note via frontmatter (overrides the per-editor toggle):
+
+```yaml
+---
+commentator: suggest   # or: comment, off
+commentator-authors: [Alice]   # optional: these authors are exempt from enforcement
+---
+```
