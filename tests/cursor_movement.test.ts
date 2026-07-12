@@ -1,7 +1,9 @@
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { suggestionMode } from "../src/editor/uix/extensions";
+import { editorEditorField } from "obsidian";
+
+import { pluginSettingsField, suggestionMode } from "../src/editor/uix/extensions";
 
 import {
 	applyToText,
@@ -133,7 +135,7 @@ for (let test_case of test_cases) {
 		const view = new EditorView({
 			state: EditorState.create({
 				doc: test_case,
-				extensions: [rangeParser, suggestionMode(DEFAULT_SETTINGS)],
+				extensions: [rangeParser, pluginSettingsField, editorEditorField, suggestionMode(DEFAULT_SETTINGS)],
 			}),
 		});
 
@@ -144,7 +146,7 @@ for (let test_case of test_cases) {
 		const actual_view = new EditorView({
 			state: EditorState.create({
 				doc: unwrapped_string,
-				extensions: [rangeParser, suggestionMode(DEFAULT_SETTINGS)],
+				extensions: [rangeParser, pluginSettingsField, editorEditorField, suggestionMode(DEFAULT_SETTINGS)],
 			}),
 		});
 
