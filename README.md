@@ -95,5 +95,5 @@ Other commands: `bun run test` (jest suite), `bun run lint` (ESLint), `bun run f
 
 ### Comment Mode
 
-- [ ] Add comments to selection
+- [x] Add comments to selection
 - [x] Smooth cursor movement through markup

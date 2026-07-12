@@ -10,6 +10,11 @@ global.app = <Partial<App>> {
 	},
 };
 
+// Obsidian defines `activeWindow` as a global alias for the currently focused
+// window (defaults to `window`). Editor code (e.g. addCommentToView) relies on
+// it for scheduling; jsdom doesn't provide it, so mirror Obsidian's default.
+(global as any).activeWindow = window;
+
 // `pluginSettingsField` (used by rangeParser) is only populated once the real
 // plugin calls `providePluginSettingsExtension(plugin)` from its onload().
 // Outside the running app nothing does that, so populate it here with the
