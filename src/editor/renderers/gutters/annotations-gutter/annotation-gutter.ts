@@ -484,14 +484,22 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 	setFoldButtonState() {
 		if (this.fold_button_el) {
+			// EXPL: Class-based (not `setAttribute("style", "rotate: …")`) for two reasons:
+			//       1. `display: flex` on `.cmtr-anno-gutter-button a` (annotation-gutter.scss) is
+			//          what actually makes the `rotate` transform apply at all — see the scss
+			//          comment for why the inline-style version was a silent no-op — and a toggled
+			//          class composes with that rule's transition instead of fighting it.
+			//       2. `setAttribute("style", …)` replaces the *entire* style attribute, which was
+			//          also clobbering the `display: none`/`""` set on this element in
+			//          `createFoldButton` for empty gutters.
+			const icon = this.fold_button_el.children[0] as HTMLElement;
+			icon.classList.toggle("cmtr-anno-gutter-button-folded", this.folded);
 			if (this.folded) {
-				this.fold_button_el.children[0].setAttribute("style", "rotate: -180deg;");
-				this.fold_button_el.children[0].ariaLabel = "Unfold gutter";
+				icon.ariaLabel = "Unfold gutter";
 				if (this.resize_handle_el)
 					this.resize_handle_el.style.display = "none";
 			} else {
-				this.fold_button_el.children[0].setAttribute("style", "rotate: 0deg;");
-				this.fold_button_el.children[0].ariaLabel = "Fold gutter";
+				icon.ariaLabel = "Fold gutter";
 				if (this.resize_handle_el)
 					this.resize_handle_el.style.display = "";
 			}

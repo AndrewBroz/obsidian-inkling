@@ -236,7 +236,19 @@
   top: 0;
 }
 
+// EXPL: `display: flex` is load-bearing, not cosmetic: this `<a>` only carries Obsidian's
+//       `view-action` class, which has no base rule setting `display` (only the plural
+//       `.view-actions` *container* class is `display: flex`; `.clickable-icon` also sets it, but
+//       this element never gets that class). Left at the UA default `display: inline`, the
+//       `rotate` transition below is a CSS Transforms spec no-op — `rotate`/`transform` do not
+//       apply to non-replaced inline-level boxes — so the fold icon silently never visually
+//       flips despite `cmtr-anno-gutter-button-folded` (and the old inline `style="rotate: …"`)
+//       being set correctly on this element (confirmed via browser repro: identical inline
+//       elements with `rotate: -180deg` render unrotated, `display: flex` ones rotate as expected).
 .cmtr-anno-gutter-button a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-faint);
   transition:
     color 200ms ease-in-out 0ms,
@@ -245,4 +257,13 @@
 
 .cmtr-anno-gutter-button a:hover {
   color: var(--text-normal);
+}
+
+// EXPL: Toggled (rather than kept as an inline style) so a stale/replaced inline `style`
+//       attribute elsewhere can never silently drop the flip, and so it composes with the
+//       `rotate` transition above via a normal CSS rule instead of `setAttribute("style", …)`
+//       clobbering the whole attribute (which previously also wiped out the `display: none`
+//       set on empty gutters in `createFoldButton`).
+.cmtr-anno-gutter-button a.cmtr-anno-gutter-button-folded {
+  rotate: -180deg;
 }
