@@ -125,14 +125,13 @@ export abstract class CriticMarkupRange {
 	delete_metadata(key: string): EditorChange[] {
 		if (key in shortHandMapping) key = shortHandMapping[key as keyof typeof shortHandMapping];
 
-		if (key in this.fields) {
-			delete this.fields[key as keyof typeof this.fields];
-			if (Object.keys(this.fields).length === 0)
-				this.remove_metadata();
-			else
-				this.set_metadata(this.fields);
-		}
-		return [];
+		if (!(key in this.fields))
+			return [];
+
+		delete this.fields[key as keyof typeof this.fields];
+		if (Object.keys(this.fields).length === 0)
+			return this.remove_metadata();
+		return this.set_metadata(this.fields);
 	}
 
 	add_metadata(key: string, value: unknown): EditorChange[] {
