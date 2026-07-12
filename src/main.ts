@@ -312,6 +312,7 @@ export default class CommentatorPlugin extends Plugin {
 					await this.setSettings();
 				}
 			} catch (e) {
+				console.error("Commentator: settings migration failed", e);
 				new Notice("Commentator: Migration to new settings failed, using the default settings provided by the plugin", 0);
 			}
 		}

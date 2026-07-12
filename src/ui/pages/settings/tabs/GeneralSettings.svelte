@@ -153,7 +153,6 @@
       text="Rebuild"
       onClick={async () => {
         await plugin.database.reinitializeDatabase();
-        console.log("Database rebuilt");
       }}
     />
   {/snippet}

@@ -103,28 +103,6 @@ export const syncMarkdownViewCustomStatePatch = (
                 return output;
             };
         },
-
-        // NOTE: Alternative that is only called when file is changed, but is not synchronous
-        // loadFile: (oldMethod) => {
-        // 	return async function (this: MarkdownView, ...args) {
-        // 		if (plugin.annotation_gutter_config !== undefined) {
-        // 			plugin.annotation_gutter_config.width = this.editMode.annotationGutterWidth;
-        // 			plugin.annotation_gutter_config.foldState = this.editMode.annotationGutterFolded;
-        // 		}
-        // 		const output = oldMethod && await oldMethod.apply(this, args);
-        // 		// EXPL: Ensures that correct config is always correctly communicated to the gutter,
-        // 		//		 even if shared config above is overridden
-        // 		// NOTE: If view is visible and config value different, the gutter _will_ animate to new state
-        // 		//       Realistically, this is only an issue when loading a specific workspace when app is loaded
-        // 		this.editMode.cm.dispatch({
-        // 			annotations: [
-        // 				annotationGutterWidthAnnotation.of(this.editMode.annotationGutterWidth),
-        // 				annotationGutterFoldAnnotation.of(this.editMode.annotationGutterFolded),
-        // 			]
-        // 		});
-        // 		return output;
-        // 	}
-        // },
     });
 }
 
