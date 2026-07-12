@@ -110,6 +110,13 @@ describe("marking over pending additions consumes them (reject-all safety)", () 
 			expect(accept_all(output)).toBe(accept_expected);
 		});
 	}
+
+	test("substitution covering only a pending addition wraps the replacement as an addition", () => {
+		const output = mark("ab{++cd++}ef", 5, 7, "q", SuggestionType.SUBSTITUTION);
+		expect(output).toBe("ab{++q++}ef");
+		expect(reject_all(output)).toBe(reject_all("ab{++cd++}ef"));
+		expect(accept_all(output)).toBe("abqef");
+	});
 });
 
 // EXPL: Characterization tests — they pin down CURRENT behavior of the branches

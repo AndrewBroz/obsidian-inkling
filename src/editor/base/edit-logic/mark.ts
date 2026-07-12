@@ -377,12 +377,19 @@ function mark_range(
 					//       it must survive, so the removal is bounded by the covered span alone.
 					const removal_from = covered[0].from;
 					const removal_to = covered[covered.length - 1].to;
+					let insert = inserted;
+					let start = removal_from;
+					if (inserted) {
+						const constructed = construct_range(inserted, "", SuggestionType.ADDITION, metadata_fields);
+						insert = constructed.insert;
+						start = removal_from + constructed.start_offset;
+					}
 					return {
 						from: removal_from,
 						to: removal_to,
-						insert: inserted,
-						start: removal_from,
-						end: removal_from + inserted.length,
+						insert,
+						start,
+						end: start + inserted.length,
 					};
 				}
 				if (type === SuggestionType.SUBSTITUTION)
