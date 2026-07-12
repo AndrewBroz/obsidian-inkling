@@ -121,7 +121,7 @@ export interface PluginSettings {
 
 	/**
 	 * Show the annotation gutter in the editor
- 	 */
+	 */
 	annotation_gutter: boolean;
 	/**
 	 * Determine which annotations are included by default

@@ -1,17 +1,17 @@
-import { editorEditorField } from "obsidian";
-import type {VimEditor} from "obsidian-typings";
 import { EditorSelection, EditorState, type Extension, SelectionRange, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { editorEditorField } from "obsidian";
+import type { VimEditor } from "obsidian-typings";
 import { type PluginSettings } from "../../../../types";
 
 import {
 	cursor_move_range,
 	cursorMoved,
-    deriveUserEvent,
+	deriveUserEvent,
 	generate_metadata,
 	getEditorRanges,
 	getUserEvents,
-    isUserEvent,
+	isUserEvent,
 	mark_ranges,
 	MarkAction,
 	type MarkType,
@@ -94,7 +94,7 @@ export const suggestionMode = (settings: PluginSettings): Extension =>
 function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction {
 	const editor = tr.startState.field(editorEditorField) as EditorView & { cm: VimEditor };
 	const userEvents = getUserEvents(tr);
-	const vim_mode = editor.cm  !== undefined;
+	const vim_mode = editor.cm !== undefined;
 
 	// TODO: Resolve used vim cursor movements since they do not receive user event annotations
 	if (vim_mode && !tr.docChanged && tr.selection) {
@@ -105,9 +105,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					"select.backward",
 			);
 		}
-		if (vim_action_resolver[editor.cm.state.vim.lastMotion?.name as keyof typeof vim_action_resolver]?.group) {
+		if (vim_action_resolver[editor.cm.state.vim.lastMotion?.name as keyof typeof vim_action_resolver]?.group)
 			userEvents.push("select.group");
-		}
 	}
 
 	// CASE 1: Handle edit operations
@@ -196,8 +195,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		if (!changes.length)
 			return tr;
 
-        const forwardedEvent = deriveUserEvent(tr);
-        return tr.startState.update({
+		const forwardedEvent = deriveUserEvent(tr);
+		return tr.startState.update({
 			changes,
 			selection: EditorSelection.create(selections),
 			annotations: forwardedEvent ? [Transaction.userEvent.of(forwardedEvent)] : undefined,

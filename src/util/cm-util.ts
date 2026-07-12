@@ -1,4 +1,4 @@
-import {type Annotation, Compartment, type Extension, Facet, RangeSet, RangeValue } from "@codemirror/state";
+import { type Annotation, Compartment, type Extension, Facet, RangeSet, RangeValue } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { App, MarkdownView } from "obsidian";
 
@@ -56,9 +56,8 @@ export function iterateAllCMInstances(app: App, callback: (cm: EditorView) => vo
 	app.workspace.iterateAllLeaves((leaf) => {
 		// TODO: Check if source check is needed
 		// @ts-expect-error
-		if (leaf.view instanceof MarkdownView && leaf.view.currentMode.type === "source") {
+		if (leaf.view instanceof MarkdownView && leaf.view.currentMode.type === "source")
 			callback(leaf.view.editor.cm);
-		}
 	});
 }
 
@@ -75,5 +74,4 @@ export function sendAnnotationToAllCMInstances<T>(
 			});
 		}
 	}
-
 }

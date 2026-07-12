@@ -27,6 +27,7 @@
 **Files:** none modified (environment only)
 
 **Interfaces:**
+
 - Produces: a checkout where `bun install`, `bun run build`, and submodules all work — every later task depends on this.
 
 - [ ] **Step 1: Install bun**
@@ -35,6 +36,7 @@
 brew install oven-sh/bun/bun
 bun --version
 ```
+
 Expected: a 1.x version prints.
 
 - [ ] **Step 2: Clean npm artifacts and install**
@@ -45,6 +47,7 @@ rm -rf node_modules
 git submodule update --init --recursive
 bun install
 ```
+
 Expected: install completes; postinstall prints `Removed .../index.d.cts` lines for @codemirror/state and view.
 
 - [ ] **Step 3: Baseline build**
@@ -52,6 +55,7 @@ Expected: install completes; postinstall prints `Removed .../index.d.cts` lines 
 ```bash
 bun run build
 ```
+
 Expected: `tsc -noEmit` passes and esbuild produces `main.js` with no errors. If tsc fails here, STOP — the environment is not reproducing the upstream-blessed setup; diagnose before proceeding (check that the postinstall `.d.cts` removal ran).
 
 - [ ] **Step 4: No commit** (nothing changed in the repo)
@@ -61,9 +65,11 @@ Expected: `tsc -noEmit` passes and esbuild produces `main.js` with no errors. If
 ### Task 2: Un-break the jest test suite
 
 **Files:**
+
 - Rename: `jest.config.js` → `jest.config.cjs`
 
 **Interfaces:**
+
 - Produces: working `bun run test`; all later TDD tasks rely on it.
 
 - [ ] **Step 1: Verify current failure**
@@ -71,6 +77,7 @@ Expected: `tsc -noEmit` passes and esbuild produces `main.js` with no errors. If
 ```bash
 bun run test 2>&1 | head -5
 ```
+
 Expected: `ReferenceError: module is not defined in ES module scope`.
 
 - [ ] **Step 2: Rename the config**
@@ -78,6 +85,7 @@ Expected: `ReferenceError: module is not defined in ES module scope`.
 ```bash
 git mv jest.config.js jest.config.cjs
 ```
+
 (jest auto-discovers `jest.config.cjs`; no content change needed.)
 
 - [ ] **Step 3: Run the suite**
@@ -85,6 +93,7 @@ git mv jest.config.js jest.config.cjs
 ```bash
 bun run test 2>&1 | tail -20
 ```
+
 Expected: the `tests/cursor_movement.test.ts` suite executes. Expected PASS. If individual cursor tests fail, do NOT fix them in this task — record the failing case names in the commit message body as pre-existing failures and continue (they are input for Phase 1 work).
 
 - [ ] **Step 4: Commit**
@@ -99,22 +108,28 @@ git commit -m "fix: rename jest config to .cjs so tests run under type:module"
 ### Task 3: Package/manifest config fixes
 
 **Files:**
+
 - Modify: `package.json:8` (dev script), `package.json` dependencies
 - Modify: `manifest-beta.json`
 
 **Interfaces:**
+
 - Produces: `@codemirror/search` declared (consumed by `src/ui/pages/annotations-view/filter-ranges.ts:5`).
 
 - [ ] **Step 1: Fix the stale dev script**
 
 In `package.json`, replace:
+
 ```json
 "dev": "bun run esbuild.config.mjs && obsidian plugin:reload id=commentator",
 ```
+
 with:
+
 ```json
 "dev": "bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=commentator",
 ```
+
 (`esbuild.config.mjs` does not exist; this mirrors `build:dev:hr` minus the tsc pass for fast iteration.)
 
 - [ ] **Step 2: Declare the missing dependency**
@@ -122,23 +137,26 @@ with:
 ```bash
 bun add @codemirror/search@^6.5.0
 ```
+
 Expected: added to `dependencies`, `bun.lock` updated. Note: the `overrides` pin on @codemirror/state stays authoritative; no override entry is needed for search.
 
 - [ ] **Step 3: Sync manifest-beta.json**
 
 Replace the full contents of `manifest-beta.json` with:
+
 ```json
 {
-    "id": "commentator",
-    "name": "Commentator",
-    "version": "0.2.6",
-    "minAppVersion": "1.7.5",
-    "description": "Suggest edits, add comments, and annotate your notes using CriticMarkup syntax.",
-    "author": "kometenstaub and Fevol",
-    "authorUrl": "https://github.com/fevol",
-    "isDesktopOnly": false
+	"id": "commentator",
+	"name": "Commentator",
+	"version": "0.2.6",
+	"minAppVersion": "1.7.5",
+	"description": "Suggest edits, add comments, and annotate your notes using CriticMarkup syntax.",
+	"author": "kometenstaub and Fevol",
+	"authorUrl": "https://github.com/fevol",
+	"isDesktopOnly": false
 }
 ```
+
 (Identical to `manifest.json` — the beta manifest was carrying a stale minAppVersion 1.5.0 and old description.)
 
 - [ ] **Step 4: Verify and commit**
@@ -148,6 +166,7 @@ bun run build && bun run test 2>&1 | tail -3
 git add package.json bun.lock manifest-beta.json
 git commit -m "fix: repair dev script, declare @codemirror/search, sync beta manifest"
 ```
+
 Expected: build + tests green.
 
 ---
@@ -155,6 +174,7 @@ Expected: build + tests green.
 ### Task 4: Rewrite the release workflow
 
 **Files:**
+
 - Rewrite: `.github/workflows/releases.yml`
 
 - [ ] **Step 1: Replace the workflow**
@@ -216,6 +236,7 @@ Changes vs old file: removes the dead `cd ./src/editor/base/parser` build step (
 ```bash
 node -e "console.log('yaml ok')" && npx --yes yaml-lint .github/workflows/releases.yml 2>/dev/null || python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/releases.yml')); print('yaml ok')"
 ```
+
 Expected: `yaml ok`.
 
 - [ ] **Step 3: Commit**
@@ -230,10 +251,12 @@ git commit -m "ci: repair release workflow (dead parser step, archived actions, 
 ### Task 5: Fix falsy-zero interval bug in accept/reject suggestions
 
 **Files:**
+
 - Modify: `src/editor/base/edit-logic/alter-suggestion.ts:11,21`
 - Test: `tests/alter_suggestion.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `acceptSuggestions(state, from?, to?, remove_attached_comments?)` / `rejectSuggestions(...)` — signatures unchanged.
 - Produces: corrected semantics — `from`/`to` of `0` now means "interval", not "whole document". Callers (`src/editor/uix/commands.ts`, `src/editor/uix/context-menu.ts`) need no changes.
 
@@ -245,7 +268,10 @@ Create `tests/alter_suggestion.test.ts`:
 import { EditorState } from "@codemirror/state";
 
 import { rangeParser } from "../src/editor/base";
-import { acceptSuggestions, rejectSuggestions } from "../src/editor/base/edit-logic/alter-suggestion";
+import {
+	acceptSuggestions,
+	rejectSuggestions,
+} from "../src/editor/base/edit-logic/alter-suggestion";
 
 describe("accept/reject suggestion interval handling", () => {
 	const doc = "hello {++world++}";
@@ -277,17 +303,25 @@ describe("accept/reject suggestion interval handling", () => {
 ```bash
 bun run test -- tests/alter_suggestion.test.ts
 ```
+
 Expected: FAIL — "cursor selection at position 0" gets length 1 (all ranges) instead of 0.
 
 - [ ] **Step 3: Fix both functions**
 
 In `src/editor/base/edit-logic/alter-suggestion.ts`, in **both** `acceptSuggestions` (line 11) and `rejectSuggestions` (line 21), replace:
+
 ```typescript
-	return ((from || to) ? range_field.ranges_in_interval(from ?? 0, to ?? Infinity) : range_field.ranges)
+return ((from || to) ?
+	range_field.ranges_in_interval(from ?? 0, to ?? Infinity) :
+	range_field.ranges);
 ```
+
 with:
+
 ```typescript
-	return ((from !== undefined || to !== undefined) ? range_field.ranges_in_interval(from ?? 0, to ?? Infinity) : range_field.ranges)
+return ((from !== undefined || to !== undefined) ?
+	range_field.ranges_in_interval(from ?? 0, to ?? Infinity) :
+	range_field.ranges);
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -295,6 +329,7 @@ with:
 ```bash
 bun run test -- tests/alter_suggestion.test.ts
 ```
+
 Expected: PASS (4/4).
 
 - [ ] **Step 5: Full verify and commit**
@@ -310,10 +345,12 @@ git commit -m "fix: selection at position 0 no longer accepts/rejects every sugg
 ### Task 6: Staleness guard for vault-wide range edits
 
 **Files:**
+
 - Modify: `src/editor/uix/workspace.ts:8-35` (`applyRangeEditsToVault`)
 - Test: `tests/workspace_guard.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `plugin.database.getItem(path)` → `DatabaseItem<T> | null` where `DatabaseItem<T> = { data: T; mtime: number }` (from `src/database/database.ts:11,318`).
 - Produces: `isEntryStale(file_mtime: number, db_mtime: number | undefined): boolean` exported from `src/editor/uix/workspace.ts`.
 
@@ -345,6 +382,7 @@ describe("isEntryStale", () => {
 ```bash
 bun run test -- tests/workspace_guard.test.ts
 ```
+
 Expected: FAIL with `isEntryStale` is not exported / not a function.
 Note: `workspace.ts` imports `obsidian`; jest resolves that to the root `__mocks__/obsidian.ts` automatically (same mechanism the cursor tests rely on). If the import chain errors on a missing export from the mock, add a minimal stub export to `__mocks__/obsidian.ts` (e.g. `export class Notice { constructor(..._args: unknown[]) {} }`) — additive only.
 
@@ -358,7 +396,10 @@ In `src/editor/uix/workspace.ts`, add above `applyRangeEditsToVault`:
  *       If the file changed after it was indexed, those offsets may no longer match
  *       the file contents, and applying them would corrupt the file.
  */
-export function isEntryStale(file_mtime: number, db_mtime: number | undefined): boolean {
+export function isEntryStale(
+	file_mtime: number,
+	db_mtime: number | undefined,
+): boolean {
 	return db_mtime === undefined || file_mtime > db_mtime;
 }
 ```
@@ -366,24 +407,27 @@ export function isEntryStale(file_mtime: number, db_mtime: number | undefined): 
 Then inside the `applyRangeEditsToVault` loop, directly after the `if (!file || !(file instanceof TFile)) { continue; }` block, insert:
 
 ```typescript
-		if (isEntryStale(file.stat.mtime, plugin.database.getItem(path)?.mtime)) {
-			new Notice(
-				`Commentator: Skipped "${path}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
-				5000,
-			);
-			continue;
-		}
+if (isEntryStale(file.stat.mtime, plugin.database.getItem(path)?.mtime)) {
+	new Notice(
+		`Commentator: Skipped "${path}" — the file changed after its annotations were indexed. Wait a moment (or rebuild the database) and try again.`,
+		5000,
+	);
+	continue;
+}
 ```
 
 Finally, replace the unconditional history push at the end of the function:
+
 ```typescript
-	plugin.file_history.push({changes: file_history, mtime: Date.now()});
+plugin.file_history.push({ changes: file_history, mtime: Date.now() });
 ```
+
 with:
+
 ```typescript
-	// EXPL: Only record history for files that were actually modified
-	if (Object.keys(file_history).length > 0)
-		plugin.file_history.push({ changes: file_history, mtime: Date.now() });
+// EXPL: Only record history for files that were actually modified
+if (Object.keys(file_history).length > 0)
+	plugin.file_history.push({ changes: file_history, mtime: Date.now() });
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -391,6 +435,7 @@ with:
 ```bash
 bun run test -- tests/workspace_guard.test.ts
 ```
+
 Expected: PASS (3/3).
 
 - [ ] **Step 5: Full verify and commit**
@@ -410,14 +455,16 @@ Record in the execution notes: verify in a test vault that Annotations View acce
 ### Task 7: Fix rangeCorrecter metadata destruction + cursor drift
 
 **Files:**
+
 - Modify: `src/editor/uix/extensions/range-correcter.ts`
 - Test: `tests/range_correcter.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `CriticMarkupRange.range_start` (`= metadata + 2` when metadata exists, else `from + 3` — `src/editor/base/ranges/base_range.ts:85-87`); `range.unwrap()` returns content **without** metadata (constructor strips it, `base_range.ts:40`).
 - Produces: unchanged export `rangeCorrecter`.
 
-**Bug being fixed (the file's own FIXME, line 10):** for a range carrying `{"author":...}@@` metadata, the filter replaces doc region `from+3 .. to-3` (which *includes* the metadata) with `unwrap()` text (which *excludes* it) — silently deleting the metadata. Additionally `removed_characters` overcounts newline collapses (each `\n\s*\n` → `\n` keeps one char) and the cursor is shifted even when it exited *before* the range.
+**Bug being fixed (the file's own FIXME, line 10):** for a range carrying `{"author":...}@@` metadata, the filter replaces doc region `from+3 .. to-3` (which _includes_ the metadata) with `unwrap()` text (which _excludes_ it) — silently deleting the metadata. Additionally `removed_characters` overcounts newline collapses (each `\n\s*\n` → `\n` keeps one char) and the cursor is shifted even when it exited _before_ the range.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -431,7 +478,8 @@ import { rangeCorrecter } from "../src/editor/uix/extensions/range-correcter";
 
 // EXPL: This is the exact document from the FIXME at range-correcter.ts:10
 const METADATA = `{"author":"Fevol","time":1708879304}`;
-const doc = `In ad{~~${METADATA}@@dition to document files, metadata is used for:\n\n- videos~>audio~~}\n- audio files`;
+const doc =
+	`In ad{~~${METADATA}@@dition to document files, metadata is used for:\n\n- videos~>audio~~}\n- audio files`;
 
 function exitRange(from_pos: number, to_pos: number) {
 	const state = EditorState.create({
@@ -490,14 +538,19 @@ describe("rangeCorrecter still corrects ranges without metadata", () => {
 ```bash
 bun run test -- tests/range_correcter.test.ts
 ```
-Expected: FAIL — metadata assertion fails (metadata deleted) and/or cursor assertions fail. If the *whole suite* fails because the parser does not produce a range for the metadata document, STOP and investigate the parse (print `state.field(rangeParser).ranges.ranges`) before changing the filter — the fix's `from` position depends on `range_start` being metadata-aware.
+
+Expected: FAIL — metadata assertion fails (metadata deleted) and/or cursor assertions fail. If the _whole suite_ fails because the parser does not produce a range for the metadata document, STOP and investigate the parse (print `state.field(rangeParser).ranges.ranges`) before changing the filter — the fix's `from` position depends on `range_start` being metadata-aware.
 
 - [ ] **Step 3: Fix the filter**
 
 In `src/editor/uix/extensions/range-correcter.ts`, replace the body of the `if (changed)` block and the newline accounting. The full new file contents:
 
 ```typescript
-import { type ChangeSpec, EditorSelection, EditorState } from "@codemirror/state";
+import {
+	type ChangeSpec,
+	EditorSelection,
+	EditorState,
+} from "@codemirror/state";
 
 import { rangeParser, SuggestionType } from "../../base";
 
@@ -507,7 +560,8 @@ import { rangeParser, SuggestionType } from "../../base";
  */
 export const rangeCorrecter = EditorState.transactionFilter.of(tr => {
 	if (tr.isUserEvent("select")) {
-		const previous_selection = tr.startState.selection.main, current_selection = tr.selection!.main;
+		const previous_selection = tr.startState.selection.main,
+			current_selection = tr.selection!.main;
 
 		if (current_selection.anchor === current_selection.head) {
 			const ranges = tr.startState.field(rangeParser).ranges;
@@ -518,7 +572,8 @@ export const rangeCorrecter = EditorState.transactionFilter.of(tr => {
 			// Execute only if the cursor is moved outside a particular range
 			if (
 				start_range && start_range !== end_range &&
-				(start_range.type === SuggestionType.SUBSTITUTION || start_range.type === SuggestionType.HIGHLIGHT)
+				(start_range.type === SuggestionType.SUBSTITUTION ||
+					start_range.type === SuggestionType.HIGHLIGHT)
 			) {
 				let new_text = start_range.unwrap();
 				let changed = false;
@@ -536,7 +591,10 @@ export const rangeCorrecter = EditorState.transactionFilter.of(tr => {
 					changed = true;
 					new_text = new_text.replace(/\n\s*\n/g, "\n");
 					// EXPL: Each match is replaced by a single "\n", so one character per match survives
-					removed_characters += invalid_endlines.reduce((acc, cur) => acc + cur.length - 1, 0);
+					removed_characters += invalid_endlines.reduce(
+						(acc, cur) => acc + cur.length - 1,
+						0,
+					);
 				}
 
 				if (changed) {
@@ -571,6 +629,7 @@ export const rangeCorrecter = EditorState.transactionFilter.of(tr => {
 ```bash
 bun run test -- tests/range_correcter.test.ts
 ```
+
 Expected: PASS (4/4).
 
 - [ ] **Step 5: Full verify and commit**
@@ -586,10 +645,12 @@ git commit -m "fix: rangeCorrecter no longer destroys range metadata or over-shi
 ### Task 8: Fix no-op delete_metadata
 
 **Files:**
+
 - Modify: `src/editor/base/ranges/base_range.ts:125-136`
 - Test: `tests/range_metadata.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `remove_metadata(): EditorChange[]` and `set_metadata(fields): EditorChange[]` (both already correct, `base_range.ts:116-159`).
 - Produces: `delete_metadata(key: string): EditorChange[]` that actually returns the document edits. Currently uncalled anywhere — this makes it safe for Phase 3 metadata work.
 
@@ -614,14 +675,22 @@ describe("delete_metadata", () => {
 
 		const changes = range.delete_metadata("author");
 		// EXPL: metadata block spans from after "{~~" to after "@@"
-		expect(changes).toEqual([{ from: range.from + 3, to: range.metadata! + 2, insert: "" }]);
+		expect(changes).toEqual([{
+			from: range.from + 3,
+			to: range.metadata! + 2,
+			insert: "",
+		}]);
 	});
 
 	test("deleting one of several keys rewrites the remaining metadata", () => {
 		const range = parseFirstRange(`x{~~{"author":"A","time":1}@@a~>b~~}y`);
 
 		const changes = range.delete_metadata("time");
-		expect(changes).toEqual([{ from: range.from + 3, to: range.metadata!, insert: `{"author":"A"}` }]);
+		expect(changes).toEqual([{
+			from: range.from + 3,
+			to: range.metadata!,
+			insert: `{"author":"A"}`,
+		}]);
 	});
 
 	test("deleting an absent key is a no-op", () => {
@@ -636,6 +705,7 @@ describe("delete_metadata", () => {
 ```bash
 bun run test -- tests/range_metadata.test.ts
 ```
+
 Expected: FAIL — first two tests receive `[]` (the computed edits are discarded).
 If instead the tests fail because `range.fields.author` is undefined, the parser is not populating metadata for this syntax — STOP and check the parse output before touching `delete_metadata`.
 
@@ -662,6 +732,7 @@ In `src/editor/base/ranges/base_range.ts`, replace `delete_metadata` (lines 125-
 ```bash
 bun run test -- tests/range_metadata.test.ts
 ```
+
 Expected: PASS (3/3).
 
 - [ ] **Step 5: Full verify and commit**
@@ -677,12 +748,14 @@ git commit -m "fix: delete_metadata returns its document edits instead of discar
 ### Task 9: Replace gutter-config array reach-through with explicit return
 
 **Files:**
+
 - Modify: `src/editor/renderers/gutters/base.ts:555-562` (`createGutter`)
 - Modify: `src/editor/renderers/gutters/annotations-gutter/annotation-gutter.ts:230-232` (`annotation_gutter`)
 - Modify: `src/editor/renderers/gutters/annotations-gutter/index.ts:17-28` (`annotationGutter`)
 - Modify: `src/main.ts:112-117`
 
 **Interfaces:**
+
 - Consumes: `createGutter(viewplugin, config, activeGutters, unfixGutters)` currently returns `[extension, activeGutters.of({...defaults, ...config})]`; `main.ts:115` reaches into `(annotation_gutter as unknown as any)[1][1].value` to grab that merged config object. The object identity matters: `main.ts:174-176` mutates it so the gutter reads updated width/fold state before init.
 - Produces:
   - `createGutterWithConfig(viewplugin, config, activeGutters, unfixGutters): { extension: Extension; config: Required<GutterConfig> }` in `base.ts`;
@@ -695,6 +768,7 @@ git commit -m "fix: delete_metadata returns its document edits instead of discar
 ```bash
 grep -rn "annotationGutter(" src/ --include="*.ts" | grep -v "annotations-gutter/"
 ```
+
 Expected: only `src/main.ts:113`. If other call sites appear, update them the same way as main.ts below.
 
 - [ ] **Step 2: Add config-returning factory in base.ts**
@@ -711,7 +785,8 @@ export function createGutter(
 	activeGutters: Facet<Required<GutterConfig>>,
 	unfixGutters: Facet<boolean, boolean>,
 ) {
-	return createGutterWithConfig(viewplugin, config, activeGutters, unfixGutters).extension;
+	return createGutterWithConfig(viewplugin, config, activeGutters, unfixGutters)
+		.extension;
 }
 
 /**
@@ -727,28 +802,47 @@ export function createGutterWithConfig(
 ): { extension: Extension; config: Required<GutterConfig> } {
 	const merged = { ...defaults, ...config } as Required<GutterConfig>;
 	return {
-		extension: [createGutterExtension(viewplugin, {}, unfixGutters), activeGutters.of(merged)],
+		extension: [
+			createGutterExtension(viewplugin, {}, unfixGutters),
+			activeGutters.of(merged),
+		],
 		config: merged,
 	};
 }
 ```
+
 Note: `createGutter` previously returned `Extension[]`; it now returns `Extension` (the nested array is itself a valid Extension). Verify `diff-gutter.ts:90` still type-checks — CodeMirror treats `Extension | Extension[]` interchangeably.
 
 - [ ] **Step 3: Thread through annotation_gutter**
 
 In `src/editor/renderers/gutters/annotations-gutter/annotation-gutter.ts`, replace (lines 230-232):
+
 ```typescript
 export function annotation_gutter(config: AnnotationGutterConfig): Extension {
-	return createGutter(annotationGutterView, config, activeGutters, unfixGutters);
+	return createGutter(
+		annotationGutterView,
+		config,
+		activeGutters,
+		unfixGutters,
+	);
 }
 ```
+
 with:
+
 ```typescript
-export function annotation_gutter(config: AnnotationGutterConfig): { extension: Extension; config: Required<AnnotationGutterConfig> } {
-	return createGutterWithConfig(annotationGutterView, config, activeGutters, unfixGutters) as
-		{ extension: Extension; config: Required<AnnotationGutterConfig> };
+export function annotation_gutter(
+	config: AnnotationGutterConfig,
+): { extension: Extension; config: Required<AnnotationGutterConfig> } {
+	return createGutterWithConfig(
+		annotationGutterView,
+		config,
+		activeGutters,
+		unfixGutters,
+	) as { extension: Extension; config: Required<AnnotationGutterConfig> };
 }
 ```
+
 and add `createGutterWithConfig` to the existing import from `../base` (replacing the `createGutter` import if nothing else in the file uses it).
 
 - [ ] **Step 4: Thread through annotationGutter**
@@ -760,7 +854,10 @@ In `src/editor/renderers/gutters/annotations-gutter/index.ts`, replace the `anno
 // 		 between Markers and Gutters (which is required for calling the moveGutter function)
 export const annotationGutter = (plugin: CommentatorPlugin) => {
 	const { extension, config } = annotation_gutter({
-		class: "cmtr-anno-gutter " + (plugin.app.vault.getConfig("cssTheme") === "Minimal" ? " is-minimal" : ""),
+		class: "cmtr-anno-gutter " +
+			(plugin.app.vault.getConfig("cssTheme") === "Minimal" ?
+				" is-minimal" :
+				""),
 		markers: v => v.state.field(annotationGutterMarkers),
 		foldState: plugin.settings.annotation_gutter_default_fold_state,
 		width: plugin.settings.annotation_gutter_width,
@@ -775,21 +872,29 @@ export const annotationGutter = (plugin: CommentatorPlugin) => {
 - [ ] **Step 5: Fix the main.ts call site**
 
 In `src/main.ts`, replace (lines 112-117):
+
 ```typescript
-		if (this.settings.annotation_gutter) {
-			const annotation_gutter = annotationGutter(this);
-			// FIXME: Bad. Bad. Bad. This is drivel of the highest degree.
-			this.annotation_gutter_config = (annotation_gutter as unknown as any)[1][1].value;
-			this.editorExtensions.push(annotationGutterCompartment.of(Prec.low(annotation_gutter)));
-		}
+if (this.settings.annotation_gutter) {
+	const annotation_gutter = annotationGutter(this);
+	// FIXME: Bad. Bad. Bad. This is drivel of the highest degree.
+	this.annotation_gutter_config =
+		(annotation_gutter as unknown as any)[1][1].value;
+	this.editorExtensions.push(
+		annotationGutterCompartment.of(Prec.low(annotation_gutter)),
+	);
+}
 ```
+
 with:
+
 ```typescript
-		if (this.settings.annotation_gutter) {
-			const { extension, config } = annotationGutter(this);
-			this.annotation_gutter_config = config;
-			this.editorExtensions.push(annotationGutterCompartment.of(Prec.low(extension)));
-		}
+if (this.settings.annotation_gutter) {
+	const { extension, config } = annotationGutter(this);
+	this.annotation_gutter_config = config;
+	this.editorExtensions.push(
+		annotationGutterCompartment.of(Prec.low(extension)),
+	);
+}
 ```
 
 - [ ] **Step 6: Full verify and commit**
@@ -809,6 +914,7 @@ Record in execution notes: in a test vault, resize + fold the annotation gutter,
 ### Task 10: Diagnosability cleanups
 
 **Files:**
+
 - Modify: `src/main.ts:315-317`
 - Modify: `src/ui/pages/settings/tabs/GeneralSettings.svelte:156`
 - Modify: `src/patches.ts:107-127`
@@ -816,24 +922,28 @@ Record in execution notes: in a test vault, resize + fold the annotation gutter,
 - [ ] **Step 1: Log the swallowed migration error**
 
 In `src/main.ts`, replace:
+
 ```typescript
-			} catch (e) {
-				new Notice("Commentator: Migration to new settings failed, using the default settings provided by the plugin", 0);
-			}
+} catch (e) {
+	new Notice("Commentator: Migration to new settings failed, using the default settings provided by the plugin", 0);
+}
 ```
+
 with:
+
 ```typescript
-			} catch (e) {
-				console.error("Commentator: settings migration failed", e);
-				new Notice("Commentator: Migration to new settings failed, using the default settings provided by the plugin", 0);
-			}
+} catch (e) {
+	console.error("Commentator: settings migration failed", e);
+	new Notice("Commentator: Migration to new settings failed, using the default settings provided by the plugin", 0);
+}
 ```
 
 - [ ] **Step 2: Remove the unconditional console.log**
 
 In `src/ui/pages/settings/tabs/GeneralSettings.svelte`, in the Rebuild button `onClick`, delete the line:
+
 ```typescript
-        console.log("Database rebuilt");
+console.log("Database rebuilt");
 ```
 
 - [ ] **Step 3: Delete the dead commented-out block**
@@ -853,10 +963,12 @@ git commit -m "chore: log migration failures, drop debug log and dead code"
 ### Task 11: Regression-test harness for mark_ranges
 
 **Files:**
+
 - Test: `tests/mark_ranges.test.ts` (create)
 - Test snapshot: `tests/__snapshots__/mark_ranges.test.ts.snap` (generated)
 
 **Interfaces:**
+
 - Consumes: `mark_ranges(ranges: CriticMarkupRanges, text: Text, from: number, to: number, inserted: string, type: MarkType, metadata_fields?: MetadataFields, force?): EditorSuggestion[]` (`src/editor/base/edit-logic/mark.ts:441`); `EditorSuggestion = { from, to, insert, start, end }` (`src/editor/base/edit-handler/types.ts`).
 - Produces: the tripwire suite that Phases 2 and 3 must keep green. **No production code changes in this task** — bugs found here get `// BUG:` comments in the test and a note in execution notes, not fixes.
 
@@ -869,13 +981,32 @@ import { EditorState } from "@codemirror/state";
 
 import { rangeParser, SuggestionType } from "../src/editor/base";
 import type { EditorSuggestion } from "../src/editor/base/edit-handler";
-import { mark_ranges, MarkAction, type MarkType } from "../src/editor/base/edit-logic/mark";
+import {
+	mark_ranges,
+	MarkAction,
+	type MarkType,
+} from "../src/editor/base/edit-logic/mark";
 import type { MetadataFields } from "../src/editor/base/ranges";
 
-function mark(doc: string, from: number, to: number, inserted: string, type: MarkType, metadata_fields?: MetadataFields): string {
+function mark(
+	doc: string,
+	from: number,
+	to: number,
+	inserted: string,
+	type: MarkType,
+	metadata_fields?: MetadataFields,
+): string {
 	const state = EditorState.create({ doc, extensions: [rangeParser] });
 	const ranges = state.field(rangeParser).ranges;
-	const edits: EditorSuggestion[] = mark_ranges(ranges, state.doc, from, to, inserted, type, metadata_fields);
+	const edits: EditorSuggestion[] = mark_ranges(
+		ranges,
+		state.doc,
+		from,
+		to,
+		inserted,
+		type,
+		metadata_fields,
+	);
 
 	// EXPL: edits must never overlap — overlapping edits would corrupt the document
 	const ordered = [...edits].sort((a, b) => a.from - b.from);
@@ -890,19 +1021,28 @@ function mark(doc: string, from: number, to: number, inserted: string, type: Mar
 
 describe("mark_ranges in plain text", () => {
 	test("insertion wraps in addition markup", () => {
-		expect(mark("hello world", 5, 5, " big", SuggestionType.ADDITION)).toBe("hello{++ big++} world");
+		expect(mark("hello world", 5, 5, " big", SuggestionType.ADDITION)).toBe(
+			"hello{++ big++} world",
+		);
 	});
 
 	test("deletion wraps in deletion markup", () => {
-		expect(mark("hello world", 5, 11, "", SuggestionType.DELETION)).toBe("hello{-- world--}");
+		expect(mark("hello world", 5, 11, "", SuggestionType.DELETION)).toBe(
+			"hello{-- world--}",
+		);
 	});
 
 	test("replacement wraps in substitution markup", () => {
-		expect(mark("hello world", 6, 11, "there", SuggestionType.SUBSTITUTION)).toBe("hello {~~world~>there~~}");
+		expect(mark("hello world", 6, 11, "there", SuggestionType.SUBSTITUTION))
+			.toBe("hello {~~world~>there~~}");
 	});
 
 	test("insertion with metadata prepends the metadata block", () => {
-		expect(mark("hello world", 5, 5, " big", SuggestionType.ADDITION, { author: "A" }))
+		expect(
+			mark("hello world", 5, 5, " big", SuggestionType.ADDITION, {
+				author: "A",
+			}),
+		)
 			.toBe(`hello{++{"author":"A"}@@ big++} world`);
 	});
 });
@@ -912,16 +1052,86 @@ describe("mark_ranges in plain text", () => {
 //       change to this logic trips a snapshot diff and gets reviewed deliberately.
 describe("mark_ranges characterization (snapshot-pinned)", () => {
 	const cases: [string, string, number, number, string, MarkType][] = [
-		["insert inside existing addition", "he{++llo++}", 7, 7, "y", SuggestionType.ADDITION],
-		["insert at right edge of addition", "he{++llo++}x", 11, 11, "y", SuggestionType.ADDITION],
-		["delete spanning plain text and addition", "ab{++cd++}ef", 0, 12, "", SuggestionType.DELETION],
-		["delete inside existing deletion", "ab{--cd--}ef", 5, 6, "", SuggestionType.DELETION],
-		["substitution across existing substitution", "x{~~y~>z~~}u", 0, 12, "new", SuggestionType.SUBSTITUTION],
-		["substitution spanning two adjacent ranges", "uv{++w++}{++y++}z", 0, 17, "q", SuggestionType.SUBSTITUTION],
-		["deletion across highlight range", "ab{==cd==}ef", 0, 12, "", SuggestionType.DELETION],
-		["clear action on marked text", "hello{++ big++} world", 0, 21, "", MarkAction.CLEAR],
-		["insert between two additions", "uv{++w++}{++y++}z", 9, 9, "x", SuggestionType.ADDITION],
-		["delete exactly an addition's contents", "ab{++cd++}ef", 5, 7, "", SuggestionType.DELETION],
+		[
+			"insert inside existing addition",
+			"he{++llo++}",
+			7,
+			7,
+			"y",
+			SuggestionType.ADDITION,
+		],
+		[
+			"insert at right edge of addition",
+			"he{++llo++}x",
+			11,
+			11,
+			"y",
+			SuggestionType.ADDITION,
+		],
+		[
+			"delete spanning plain text and addition",
+			"ab{++cd++}ef",
+			0,
+			12,
+			"",
+			SuggestionType.DELETION,
+		],
+		[
+			"delete inside existing deletion",
+			"ab{--cd--}ef",
+			5,
+			6,
+			"",
+			SuggestionType.DELETION,
+		],
+		[
+			"substitution across existing substitution",
+			"x{~~y~>z~~}u",
+			0,
+			12,
+			"new",
+			SuggestionType.SUBSTITUTION,
+		],
+		[
+			"substitution spanning two adjacent ranges",
+			"uv{++w++}{++y++}z",
+			0,
+			17,
+			"q",
+			SuggestionType.SUBSTITUTION,
+		],
+		[
+			"deletion across highlight range",
+			"ab{==cd==}ef",
+			0,
+			12,
+			"",
+			SuggestionType.DELETION,
+		],
+		[
+			"clear action on marked text",
+			"hello{++ big++} world",
+			0,
+			21,
+			"",
+			MarkAction.CLEAR,
+		],
+		[
+			"insert between two additions",
+			"uv{++w++}{++y++}z",
+			9,
+			9,
+			"x",
+			SuggestionType.ADDITION,
+		],
+		[
+			"delete exactly an addition's contents",
+			"ab{++cd++}ef",
+			5,
+			7,
+			"",
+			SuggestionType.DELETION,
+		],
 	];
 
 	for (const [name, doc, from, to, inserted, type] of cases) {
@@ -931,7 +1141,11 @@ describe("mark_ranges characterization (snapshot-pinned)", () => {
 	}
 
 	test("insert into range with different author is kept outside that range", () => {
-		expect(mark(`a{++{"author":"B"}@@bc++}d`, 21, 21, "x", SuggestionType.ADDITION, { author: "A" }))
+		expect(
+			mark(`a{++{"author":"B"}@@bc++}d`, 21, 21, "x", SuggestionType.ADDITION, {
+				author: "A",
+			}),
+		)
 			.toMatchSnapshot();
 	});
 });
@@ -942,7 +1156,8 @@ describe("mark_ranges characterization (snapshot-pinned)", () => {
 ```bash
 bun run test -- tests/mark_ranges.test.ts -t "plain text"
 ```
-Expected: PASS (4/4). If any explicit expectation fails, the *actual* output must be inspected by hand: if the actual output is valid CriticMarkup that loses no user text, update the expectation with a comment explaining the semantics; if it loses text or produces unbalanced markup, mark the test `test.failing` (jest 29 supports it) with a `// BUG:` comment describing the corruption, and record it in execution notes. Do not fix mark.ts in this task.
+
+Expected: PASS (4/4). If any explicit expectation fails, the _actual_ output must be inspected by hand: if the actual output is valid CriticMarkup that loses no user text, update the expectation with a comment explaining the semantics; if it loses text or produces unbalanced markup, mark the test `test.failing` (jest 29 supports it) with a `// BUG:` comment describing the corruption, and record it in execution notes. Do not fix mark.ts in this task.
 
 - [ ] **Step 3: Generate and audit the snapshots**
 
@@ -950,6 +1165,7 @@ Expected: PASS (4/4). If any explicit expectation fails, the *actual* output mus
 bun run test -- tests/mark_ranges.test.ts
 cat tests/__snapshots__/mark_ranges.test.ts.snap
 ```
+
 Read every snapshot entry and verify by hand: (1) brackets balanced, (2) every character of the original doc either survives or sits inside `{--…--}`/`{~~…~>` markup, (3) inserted text appears exactly once. Annotate any violation with a `// BUG:` comment above its test case and record it in execution notes.
 
 - [ ] **Step 4: Full verify and commit**
@@ -969,6 +1185,7 @@ git commit -m "test: add regression harness for mark_ranges (explicit + characte
 ```bash
 rm -rf node_modules && bun install && bun run build && bun run test 2>&1 | tail -5
 ```
+
 Expected: everything green from scratch (proves Task 1-3 environment fixes are complete and reproducible).
 
 - [ ] **Step 2: Reconcile plan vs. execution notes**

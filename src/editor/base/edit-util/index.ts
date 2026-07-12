@@ -1,8 +1,8 @@
+export * from "./range-create";
+export * from "./range-grouping";
 export * from "./range-operations";
 export * from "./range-parser";
 export * from "./range-state";
-export * from "./range-grouping";
-export * from "./range-create";
 
 export * from "./character-logic";
 export * from "./selection-logic";

@@ -2,12 +2,12 @@ import { EditorView, WidgetType } from "@codemirror/view";
 
 import { App, Component, editorInfoField, MarkdownRenderer, Menu, Notice, setIcon } from "obsidian";
 
-import { addCommentToView, CM_All_Brackets, create_range, CommentRange, CriticMarkupRange } from "../../base";
-import { annotationGutterFocusAnnotation } from "../gutters";
+import { addCommentToView, CM_All_Brackets, CommentRange, create_range, CriticMarkupRange } from "../../base";
 import { pluginSettingsField } from "../../uix";
+import { annotationGutterFocusAnnotation } from "../gutters";
 
-import { PreviewEditor } from "../../../ui/preview-editor";
 import { EmbeddableMarkdownEditor } from "../../../ui/embeddable-editor";
+import { PreviewEditor } from "../../../ui/preview-editor";
 import { createMetadataInfoElement } from "../../../ui/snippets";
 
 export function renderCommentWidget(app: App, range: CommentRange, text?: string, unwrap = false) {
@@ -68,50 +68,50 @@ export class CommentIconWidget extends WidgetType {
 
 	renderRange(app: App, range: CriticMarkupRange, cls: string[] = []) {
 		const rangeContainer = createDiv({ cls });
-		if (range.metadata) {
-			rangeContainer.appendChild(createMetadataInfoElement(range, "cmtr-comment-tooltip-metadata"))
-		}
-
+		if (range.metadata)
+			rangeContainer.appendChild(createMetadataInfoElement(range, "cmtr-comment-tooltip-metadata"));
 
 		const editorContainer = rangeContainer.appendChild(createDiv());
-		const editorComponent = this.component.addChild(new PreviewEditor(app, editorContainer, {
-			value: range.unwrap(),
-			editor_cls: ["markdown-source-view", "mod-cm6", "cmtr-comment-tooltip-editor"],
-			preview_cls: ["cmtr-comment-tooltip-preview"],
+		const editorComponent = this.component.addChild(
+			new PreviewEditor(app, editorContainer, {
+				value: range.unwrap(),
+				editor_cls: ["markdown-source-view", "mod-cm6", "cmtr-comment-tooltip-editor"],
+				preview_cls: ["cmtr-comment-tooltip-preview"],
 
-			click_container: rangeContainer,
+				click_container: rangeContainer,
 
-			filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
+				filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
 
-			onSubmit: (editor) => {
-				this.view.dispatch(this.view.state.update({
-					changes: {
-						from: range.from,
-						to: range.to,
-						insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
-					},
-				}));
-			},
+				onSubmit: (editor) => {
+					this.view.dispatch(this.view.state.update({
+						changes: {
+							from: range.from,
+							to: range.to,
+							insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
+						},
+					}));
+				},
 
-			onBlur: (editor) => {
-				// Save comment on blur (same as onSubmit)
-				this.view.dispatch(this.view.state.update({
-					changes: {
-						from: range.from,
-						to: range.to,
-						insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
-					},
-				}));
-			},
+				onBlur: (editor) => {
+					// Save comment on blur (same as onSubmit)
+					this.view.dispatch(this.view.state.update({
+						changes: {
+							from: range.from,
+							to: range.to,
+							insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
+						},
+					}));
+				},
 
-			isEditable: (editor) => {
-				if (range.fields.author && range.fields.author !== app.plugins.plugins.commentator.settings.author) {
-					new Notice("[Commentator] You cannot edit comments from other authors.");
-					return false;
-				}
-				return true;
-			}
-		}));
+				isEditable: (editor) => {
+					if (range.fields.author && range.fields.author !== app.plugins.plugins.commentator.settings.author) {
+						new Notice("[Commentator] You cannot edit comments from other authors.");
+						return false;
+					}
+					return true;
+				},
+			}),
+		);
 
 		rangeContainer.addEventListener("contextmenu", (e) => {
 			e.preventDefault();
@@ -119,8 +119,12 @@ export class CommentIconWidget extends WidgetType {
 
 			const menu = new Menu();
 			this.context_menu = menu;
-			menu.dom.addEventListener("click", () => { this.setFocused(true); });
-			menu.onHide(() => { this.context_menu = null; });
+			menu.dom.addEventListener("click", () => {
+				this.setFocused(true);
+			});
+			menu.onHide(() => {
+				this.context_menu = null;
+			});
 
 			if (range.replies.length > 0) {
 				menu.addItem((item) => {
@@ -145,42 +149,46 @@ export class CommentIconWidget extends WidgetType {
 					.setSection("comment-handling")
 					.setIcon("reply")
 					.onClick(() => {
-						const replyContainer = this.tooltip!.appendChild(createDiv({ cls: "cmtr-comment-tooltip-range cmtr-comment-tooltip-reply" }));
-						const replyComponent = this.component.addChild(new EmbeddableMarkdownEditor(app, replyContainer, {
-							value: "",
-							cls: ["markdown-source-view", "mod-cm6", "cmtr-comment-tooltip-editor"],
-							filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
+						const replyContainer = this.tooltip!.appendChild(
+							createDiv({ cls: "cmtr-comment-tooltip-range cmtr-comment-tooltip-reply" }),
+						);
+						const replyComponent = this.component.addChild(
+							new EmbeddableMarkdownEditor(app, replyContainer, {
+								value: "",
+								cls: ["markdown-source-view", "mod-cm6", "cmtr-comment-tooltip-editor"],
+								filteredExtensions: [app.plugins.plugins["commentator"].editorExtensions],
 
-							onSubmit: (editor) => {
-								this.view.dispatch(this.view.state.update({
-									changes: {
-										from: range.full_range_back,
-										to: range.full_range_back,
-										insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
-									},
-								}));
-								this.unrenderTooltip();
-							},
-							onEscape: () => {
-								replyComponent.unload();
-								replyContainer.remove();
-							},
-							onBlur: (editor) => {
-								// Save reply on blur if there's content
-								const content = editor.get();
-								if (content.trim()) {
+								onSubmit: (editor) => {
 									this.view.dispatch(this.view.state.update({
 										changes: {
 											from: range.full_range_back,
 											to: range.full_range_back,
-											insert: create_range(this.view.state.field(pluginSettingsField), range.type, content),
+											insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
 										},
 									}));
-								}
-								replyComponent.unload();
-								replyContainer.remove();
-							}
-						}));
+									this.unrenderTooltip();
+								},
+								onEscape: () => {
+									replyComponent.unload();
+									replyContainer.remove();
+								},
+								onBlur: (editor) => {
+									// Save reply on blur if there's content
+									const content = editor.get();
+									if (content.trim()) {
+										this.view.dispatch(this.view.state.update({
+											changes: {
+												from: range.full_range_back,
+												to: range.full_range_back,
+												insert: create_range(this.view.state.field(pluginSettingsField), range.type, content),
+											},
+										}));
+									}
+									replyComponent.unload();
+									replyContainer.remove();
+								},
+							}),
+						);
 					});
 			});
 
@@ -203,7 +211,6 @@ export class CommentIconWidget extends WidgetType {
 						editorComponent.unload();
 					});
 			});
-
 
 			menu.showAtMouseEvent(e);
 		});
@@ -228,15 +235,18 @@ export class CommentIconWidget extends WidgetType {
 				}
 			});
 			this.tooltip.addEventListener("mouseleave", (e) => {
-				if (!this.focused && !this.context_menu && !this.tooltip!.contains(e.relatedTarget as HTMLElement)) {
+				if (!this.focused && !this.context_menu && !this.tooltip!.contains(e.relatedTarget as HTMLElement))
 					this.unrenderTooltip();
-				}
 			});
 
 			// EXPL: Render the comment range and all replies
-			this.tooltip.appendChild(this.renderRange(app, this.range, ["cmtr-comment-tooltip-range cmtr-comment-tooltip-base"]));
+			this.tooltip.appendChild(
+				this.renderRange(app, this.range, ["cmtr-comment-tooltip-range cmtr-comment-tooltip-base"]),
+			);
 			for (const reply of this.range.replies) {
-				this.tooltip.appendChild(this.renderRange(app, reply, ["cmtr-comment-tooltip-range", "cmtr-comment-tooltip-reply"]));
+				this.tooltip.appendChild(
+					this.renderRange(app, reply, ["cmtr-comment-tooltip-range", "cmtr-comment-tooltip-reply"]),
+				);
 			}
 			this.component.load();
 			this.view.dom.doc.body.appendChild(this.tooltip);
@@ -248,11 +258,11 @@ export class CommentIconWidget extends WidgetType {
 			const preferredXPosition = Math.clamp(
 				icon_rect.x - tooltip_rect.x - tooltip_rect.width / 2 + 12,
 				app.vault.getConfig("readableLineLength") ? 0 : content_rect.x,
-				content_rect.x + content_rect.width - tooltip_rect.width - 12
+				content_rect.x + content_rect.width - tooltip_rect.width - 12,
 			);
 			const preferredYPosition = icon_rect.y + (
 				icon_rect.height + tooltip_rect.height > this.view.scrollDOM.clientHeight ?
-					- tooltip_rect.height :
+					-tooltip_rect.height :
 					icon_rect.height
 			) + 4;
 
@@ -265,7 +275,9 @@ export class CommentIconWidget extends WidgetType {
 		// TODO: Check if this is (much) worse than directly invoking the focus annotation function from the gutter plugin instance
 		//      The other options can piggy-back on already existing transactions, and just annotating them
 		//      However, this one doesn't have one (except if clicking on the widget _is_ a transaction)
-		this.view.dispatch({ annotations: [ annotationGutterFocusAnnotation.of({ from: this.range.from, to: this.range.to }) ] });
+		this.view.dispatch({
+			annotations: [annotationGutterFocusAnnotation.of({ from: this.range.from, to: this.range.to })],
+		});
 	}
 
 	unrenderTooltip() {
@@ -337,13 +349,15 @@ export class CommentIconWidget extends WidgetType {
 			};
 
 			this.icon.onmouseleave = (e) => {
-				if (!this.focused && !this.context_menu && this.tooltip && !(
-					this.tooltip.contains(e.relatedTarget as HTMLElement) ||
-					// TODO: Find a better way to expand the icon's "hover area", padding/::before doesn't work
-					//       Currently, unrendering can be avoided by sneaking to the right when leaving the icon
-					// NOTE: Creates a small area below the icon to not trigger the tooltip unrendering
-					this.icon!.getBoundingClientRect().bottom - e.clientY < 6
-				)) {
+				if (
+					!this.focused && !this.context_menu && this.tooltip && !(
+						this.tooltip.contains(e.relatedTarget as HTMLElement) ||
+						// TODO: Find a better way to expand the icon's "hover area", padding/::before doesn't work
+						//       Currently, unrendering can be avoided by sneaking to the right when leaving the icon
+						// NOTE: Creates a small area below the icon to not trigger the tooltip unrendering
+						this.icon!.getBoundingClientRect().bottom - e.clientY < 6
+					)
+				) {
 					this.unrenderTooltip();
 					this.focused = false;
 				}
@@ -353,8 +367,8 @@ export class CommentIconWidget extends WidgetType {
 		return this.icon;
 	}
 
-	destroy(dom: HTMLElement){
+	destroy(dom: HTMLElement) {
 		this.unrenderTooltip();
-	 	super.destroy(dom);
+		super.destroy(dom);
 	}
 }

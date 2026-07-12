@@ -169,8 +169,7 @@ export function advance_cursor_head(
 				movement_options,
 				bracket_options,
 			);
-			next_cursor_head =
-				findBlockingChar(new_head, move_forwards, state, cat_ignore_ws(previous_cat), previous_cat)[0];
+			next_cursor_head = findBlockingChar(new_head, move_forwards, state, cat_ignore_ws(previous_cat), previous_cat)[0];
 			if (next_cursor_head === new_head)
 				break;
 			previous_reg_char = cursor_advance_through_syntax(

@@ -1,11 +1,11 @@
 module.exports = {
-	testEnvironment: 'jsdom',
+	testEnvironment: "jsdom",
 	testMatch: ["**/tests/**/*.test.ts"],
 
 	collectCoverage: false,
 
 	transform: {
-		'^.+\\.ts$': ['ts-jest', {
+		"^.+\\.ts$": ["ts-jest", {
 			// Type-checking is the responsibility of `bun run build`
 			// (tsc -noEmit). ts-jest's full-program type-check resolves
 			// @codemirror/state types differently than the main build in
@@ -18,14 +18,14 @@ module.exports = {
 			isolatedModules: true,
 			tsconfig: {
 				verbatimModuleSyntax: false,
-			}
-		}]
+			},
+		}],
 	},
 
 	setupFiles: ["<rootDir>/tests/setup.ts"],
 
 	moduleDirectories: ["node_modules", "src", "tests"],
-	moduleFileExtensions: ['js', 'ts'],
+	moduleFileExtensions: ["js", "ts"],
 	moduleNameMapper: {
 		// The real module extends a class resolved at import time from the
 		// live Obsidian app (resolveEditorPrototype(app)), which is

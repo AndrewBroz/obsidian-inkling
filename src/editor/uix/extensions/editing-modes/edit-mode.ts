@@ -1,14 +1,14 @@
-import { editorInfoField } from "obsidian";
 import { EditorSelection, EditorState, type Extension, SelectionRange, Transaction } from "@codemirror/state";
+import { editorInfoField } from "obsidian";
 import { type PluginSettings } from "../../../../types";
 
 import {
 	cursor_move_range,
 	cursorMoved,
-    deriveUserEvent,
+	deriveUserEvent,
 	getEditorRanges,
 	getUserEvents,
-    isUserEvent,
+	isUserEvent,
 	mark_ranges,
 	MarkAction,
 	rangeParser,
@@ -39,9 +39,8 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 	if (tr.docChanged) {
 		const changed_ranges = getEditorRanges(tr.startState.selection, tr.changes, tr.startState.doc);
 
-		if (!(tr.isUserEvent("input") || tr.isUserEvent("paste") || tr.isUserEvent("delete"))) {
+		if (!(tr.isUserEvent("input") || tr.isUserEvent("paste") || tr.isUserEvent("delete")))
 			return tr;
-		}
 
 		const ranges = tr.startState.field(rangeParser).ranges;
 		const changes = [];
@@ -51,9 +50,8 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
 		let offset = 0;
 		for (let editor_change of changed_ranges) {
-			if (tr.isUserEvent("delete")) {
+			if (tr.isUserEvent("delete"))
 				editor_change = cursor_move_range(editor_change, ranges, backwards_delete, group_delete, tr.startState);
-			}
 
 			// NOTE: This change exists to make sure that most regular operations will still function as expected
 			//       Duplicate ranges (caused by bolding) will get filtered away automatically,
@@ -137,8 +135,8 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 		if (!changes.length)
 			return tr;
 
-        const forwardedEvent = deriveUserEvent(tr);
-        return tr.startState.update({
+		const forwardedEvent = deriveUserEvent(tr);
+		return tr.startState.update({
 			changes,
 			selection: EditorSelection.create(selections),
 			annotations: forwardedEvent ? [Transaction.userEvent.of(forwardedEvent)] : undefined,

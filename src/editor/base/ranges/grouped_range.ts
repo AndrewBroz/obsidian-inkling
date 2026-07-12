@@ -81,9 +81,8 @@ export class CriticMarkupRanges {
 				unique_ranges.add(found_range);
 				if (found_range.base_range) {
 					unique_ranges.add(found_range.base_range);
-					for (const reply of found_range.base_range.replies) {
+					for (const reply of found_range.base_range.replies)
 						unique_ranges.add(reply);
-					}
 				}
 			}
 		}

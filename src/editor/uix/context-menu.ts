@@ -1,12 +1,12 @@
-import type { EventRef, MarkdownView } from "obsidian";
 import type { SelectionRange } from "@codemirror/state";
+import type { EventRef, MarkdownView } from "obsidian";
 import type CommentatorPlugin from "../../main";
 
 import { acceptSuggestions, addCommentToView, isCursor, rangeParser, rejectSuggestions } from "../base";
 
-import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../settings";
-import { annotationGutterFoldAnnotation } from "../renderers/gutters";
 import { AnnotationInclusionType } from "../../constants";
+import { annotationGutterFoldAnnotation } from "../renderers/gutters";
+import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../settings";
 
 import { stickyContextMenuPatch } from "../../patches";
 
@@ -110,33 +110,37 @@ export const cmenuViewportCommands: (plugin: CommentatorPlugin) => EventRef = (p
 					.setSection("commentator")
 					.onClick(() => {
 						editor_cm.dispatch(editor_cm.state.update({
-							annotations: [ annotationGutterFoldAnnotation.of(null) ]
+							annotations: [annotationGutterFoldAnnotation.of(null)],
 						}));
 					});
 			});
 
 			menu.addItem((item) => {
 				const submenu = item.setTitle("Included annotations")
-										.setIcon("eye")
-										.setSection("commentator")
-										.setSubmenu();
+					.setIcon("eye")
+					.setSection("commentator")
+					.setSubmenu();
 
-				for (const { title, icon, value } of [
-					{ title: "Additions", icon: "plus-circle", value: AnnotationInclusionType.ADDITION },
-					{ title: "Deletions", icon: "minus-square", value: AnnotationInclusionType.DELETION },
-					{ title: "Substitutions", icon: "replace", value: AnnotationInclusionType.SUBSTITUTION },
-					{ title: "Highlights", icon: "highlighter", value: AnnotationInclusionType.HIGHLIGHT },
-					{ title: "Comments", icon: "message-square", value: AnnotationInclusionType.COMMENT },
-				]) {
+				for (
+					const { title, icon, value } of [
+						{ title: "Additions", icon: "plus-circle", value: AnnotationInclusionType.ADDITION },
+						{ title: "Deletions", icon: "minus-square", value: AnnotationInclusionType.DELETION },
+						{ title: "Substitutions", icon: "replace", value: AnnotationInclusionType.SUBSTITUTION },
+						{ title: "Highlights", icon: "highlighter", value: AnnotationInclusionType.HIGHLIGHT },
+						{ title: "Comments", icon: "message-square", value: AnnotationInclusionType.COMMENT },
+					]
+				) {
 					submenu.addItem((item) => {
 						item.setTitle(title)
 							.setIcon(icon)
 							.setChecked((current_settings & value) !== 0)
 							.onClick(() => {
 								current_settings ^= value;
-                                item.setChecked((current_settings & value) !== 0);
+								item.setChecked((current_settings & value) !== 0);
 								editor_cm.dispatch(editor_cm.state.update({
-									effects: [annotationGutterIncludedTypes.reconfigure(annotationGutterIncludedTypesState.of(current_settings))],
+									effects: [
+										annotationGutterIncludedTypes.reconfigure(annotationGutterIncludedTypesState.of(current_settings)),
+									],
 								}));
 							});
 					});

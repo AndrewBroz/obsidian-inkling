@@ -74,7 +74,8 @@
   // Display in the top right corner
   position: fixed;
   right: 0;
-  transform: translateY(calc(-1 * (var(--scroll-offset) + 12px))) translateX(-16px);
+  transform: translateY(calc(-1 * (var(--scroll-offset) + 12px)))
+    translateX(-16px);
 
   z-index: 2;
   display: flex;

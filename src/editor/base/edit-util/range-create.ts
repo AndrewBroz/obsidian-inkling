@@ -1,6 +1,6 @@
+import type { PluginSettings } from "../../../types";
 import { CM_All_Brackets, type MetadataFields, SuggestionType } from "../ranges";
 import { generate_metadata } from "./metadata";
-import type {PluginSettings} from "../../../types";
 
 export function construct_suggestion(
 	inserted: string,

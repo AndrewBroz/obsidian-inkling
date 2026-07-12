@@ -14,19 +14,17 @@ export class CommentRange extends CriticMarkupRange {
 	}
 
 	accept(removeComments: boolean = true): string {
-		if (removeComments) {
+		if (removeComments)
 			return "";
-		} else {
+		else
 			return this.unwrap();
-		}
 	}
 
 	reject(removeComments: boolean = true): string {
-		if (removeComments) {
+		if (removeComments)
 			return "";
-		} else {
+		else
 			return this.unwrap();
-		}
 	}
 
 	clear_references() {

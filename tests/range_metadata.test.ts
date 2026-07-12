@@ -1,8 +1,8 @@
 import { EditorState } from "@codemirror/state";
 
+import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
-import { DEFAULT_SETTINGS } from "../src/constants";
 
 // EXPL: DEFAULT_SETTINGS.enable_metadata is false; enabling it is required for the parser
 // to recognize and construct metadata fields in ranges. Without it, metadata blocks are ignored.

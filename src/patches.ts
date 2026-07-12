@@ -1,57 +1,55 @@
-import {MarkdownView, Menu, MenuItem, type Plugin} from "obsidian";
-import {around} from "monkey-around";
+import { around } from "monkey-around";
+import { MarkdownView, Menu, MenuItem, type Plugin } from "obsidian";
 
 /**
  * Keep the context menu open after clicking on a menu item.
  * @param onSubmenu - Only keep the menu open if the item is a submenu.
  */
 export const stickyContextMenuPatch = (onSubmenu = false) => {
-    const menu_patch = around(Menu.prototype, {
-        onEnter: (oldMethod) => {
-            return function(this: Menu, e: KeyboardEvent) {
-                const selectedItem = this.items[this.selected];
-                return selectedItem && selectedItem instanceof MenuItem && (selectedItem.handleEvent(e)) || true;
-            };
-        },
-        onMenuClick: (oldMethod) => {
-            return function(this: Menu, e: MouseEvent) {
-                if (!onSubmenu || this.currentSubmenu && this.currentSubmenu.dom.contains(e.target as HTMLElement)) {
-                    e.stopImmediatePropagation();
-                } else {
-                    return oldMethod && oldMethod.apply(this, [e]);
-                }
-            };
-        },
-        hide: (oldMethod) => {
-            return function(this: Menu) {
-                // EXPL: If the main menu is hidden (the top-level context menu), disable both patches again
-                if (!this.parentMenu) {
-                    combined_patch();
-                }
-                return oldMethod && oldMethod.apply(this);
-            };
-        },
-    });
-    const menu_item_patch = around(MenuItem.prototype, {
-        setChecked: (oldMethod) => {
-            return function(this: MenuItem, ...args) {
-                // FIXME: After calling .setChecked(false) once, the icon will not show up again when calling .setChecked(true)
-                // 		  the code below bypasses this issue by completely removing the icon element
-                if (this.checkIconEl) {
-                    this.checkIconEl.remove();
-                    this.checkIconEl = undefined;
-                }
-                return oldMethod && oldMethod.apply(this, args);
-            };
-        }
-    });
+	const menu_patch = around(Menu.prototype, {
+		onEnter: (oldMethod) => {
+			return function(this: Menu, e: KeyboardEvent) {
+				const selectedItem = this.items[this.selected];
+				return selectedItem && selectedItem instanceof MenuItem && (selectedItem.handleEvent(e)) || true;
+			};
+		},
+		onMenuClick: (oldMethod) => {
+			return function(this: Menu, e: MouseEvent) {
+				if (!onSubmenu || this.currentSubmenu && this.currentSubmenu.dom.contains(e.target as HTMLElement))
+					e.stopImmediatePropagation();
+				else
+					return oldMethod && oldMethod.apply(this, [e]);
+			};
+		},
+		hide: (oldMethod) => {
+			return function(this: Menu) {
+				// EXPL: If the main menu is hidden (the top-level context menu), disable both patches again
+				if (!this.parentMenu)
+					combined_patch();
+				return oldMethod && oldMethod.apply(this);
+			};
+		},
+	});
+	const menu_item_patch = around(MenuItem.prototype, {
+		setChecked: (oldMethod) => {
+			return function(this: MenuItem, ...args) {
+				// FIXME: After calling .setChecked(false) once, the icon will not show up again when calling .setChecked(true)
+				// 		  the code below bypasses this issue by completely removing the icon element
+				if (this.checkIconEl) {
+					this.checkIconEl.remove();
+					this.checkIconEl = undefined;
+				}
+				return oldMethod && oldMethod.apply(this, args);
+			};
+		},
+	});
 
-    let combined_patch = () => {
-        menu_patch();
-        menu_item_patch();
-    }
-    return combined_patch;
-}
+	let combined_patch = () => {
+		menu_patch();
+		menu_item_patch();
+	};
+	return combined_patch;
+};
 
 /**
  * This patch extends the MarkdownView to synchronize config values added by your plugin to the persistent state.
@@ -63,48 +61,44 @@ export const stickyContextMenuPatch = (onSubmenu = false) => {
  * @remarks Any state values set by this patch will be automatically removed once this patch is uninstalled.
  */
 export const syncMarkdownViewCustomStatePatch = (
-    setState: (view: MarkdownView, state: Record<string, unknown>) => void | Promise<void>,
-    getState: (view: MarkdownView, state: Record<string, unknown>) => void,
-    beforeEditorReload: (view: MarkdownView) => void,
-    afterEditorReload: (view: MarkdownView) => void = () => {}
+	setState: (view: MarkdownView, state: Record<string, unknown>) => void | Promise<void>,
+	getState: (view: MarkdownView, state: Record<string, unknown>) => void,
+	beforeEditorReload: (view: MarkdownView) => void,
+	afterEditorReload: (view: MarkdownView) => void = () => {},
 ) => {
-    return around(MarkdownView.prototype, {
-        setState: (oldMethod) => {
-            return async function (this: MarkdownView, ...args){
-                if (args[0]) {
-                    await setState(this, args[0]);
-                }
-                return oldMethod && oldMethod.apply(this, args);
-            }
-        },
+	return around(MarkdownView.prototype, {
+		setState: (oldMethod) => {
+			return async function(this: MarkdownView, ...args) {
+				if (args[0])
+					await setState(this, args[0]);
+				return oldMethod && oldMethod.apply(this, args);
+			};
+		},
 
-        getState: (oldMethod) => {
-            return function (this: MarkdownView) {
-                const state = oldMethod && oldMethod.apply(this);
-                if (state) {
-                    getState(this, state);
-                }
-                return state;
-            }
-        },
+		getState: (oldMethod) => {
+			return function(this: MarkdownView) {
+				const state = oldMethod && oldMethod.apply(this);
+				if (state)
+					getState(this, state);
+				return state;
+			};
+		},
 
-        // EXPL: Called on every file change, particularly hot path code
-        //		 If clear is enabled, the extensions will be reloaded (guaranteed to be synchronous)
-        setData: (oldMethod) => {
-            return async function (this: MarkdownView, ...args) {
-                // NOTE: Checking via args[1] (`clear`) will only execute syncState if the file is changed
-                if (args[1]) {
-                    beforeEditorReload(this);
-                }
-                const output = oldMethod && oldMethod.apply(this, args);
-                if (args[1]) {
-                    afterEditorReload(this);
-                }
-                return output;
-            };
-        },
-    });
-}
+		// EXPL: Called on every file change, particularly hot path code
+		// 		 If clear is enabled, the extensions will be reloaded (guaranteed to be synchronous)
+		setData: (oldMethod) => {
+			return async function(this: MarkdownView, ...args) {
+				// NOTE: Checking via args[1] (`clear`) will only execute syncState if the file is changed
+				if (args[1])
+					beforeEditorReload(this);
+				const output = oldMethod && oldMethod.apply(this, args);
+				if (args[1])
+					afterEditorReload(this);
+				return output;
+			};
+		},
+	});
+};
 
 /**
  * This patch hooks into the Plugins class, and executes functionality before the plugin is uninstalled via the UI.
@@ -115,20 +109,18 @@ export const syncMarkdownViewCustomStatePatch = (
  *          no guarantees can be made that the functionality will be executed.
  */
 export const beforePluginUninstallPatch = (plugin: Plugin, id: string, cb: () => void | Promise<void>) => {
-    return around(plugin.app.plugins, {
-        uninstallPlugin: (oldMethod) => {
-            return async (...args) => {
-                try {
-                    // NOTE: This is a safe check, if something changes in the future, this will just be ignored
-                    if (args[0] === id) {
-                        await cb();
-                    }
-                } catch (e) {
-                    console.error("Error while executing beforePluginUninstallPatch callback:", e);
-                }
-                oldMethod && await oldMethod.apply(plugin.app.plugins, args);
-            };
-        },
-    });
-}
-
+	return around(plugin.app.plugins, {
+		uninstallPlugin: (oldMethod) => {
+			return async (...args) => {
+				try {
+					// NOTE: This is a safe check, if something changes in the future, this will just be ignored
+					if (args[0] === id)
+						await cb();
+				} catch (e) {
+					console.error("Error while executing beforePluginUninstallPatch callback:", e);
+				}
+				oldMethod && await oldMethod.apply(plugin.app.plugins, args);
+			};
+		},
+	});
+};

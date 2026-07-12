@@ -23,13 +23,12 @@
   display: none;
 }
 
-.cmtr-focused { }
-
+.cmtr-focused {
+}
 
 // ================================================
 //        CriticMarkup Main Suggestion Styles
 // ================================================
-
 
 .cmtr-addition {
   color: var(--addition-color);
@@ -92,7 +91,7 @@
   transition: background-color 200ms ease-in-out 0ms;
 
   .cmtr-focused {
-      background-color: var(--substitution-color-alt);
+    background-color: var(--substitution-color-alt);
   }
 
   &:hover {
@@ -114,11 +113,9 @@
   border-bottom: 2px solid var(--comment-border-color);
 }
 
-
 // ================================================
 //       Editor Comment Icon Widget Rendering
 // ================================================
-
 
 .cmtr-comment-icon:hover {
   cursor: pointer;
@@ -135,11 +132,7 @@
 }
 
 .cmtr-comment-icon-focused > svg {
-  fill: color-mix(
-    in srgb-linear,
-    var(--comment-border-color),
-    white 30%
-  );
+  fill: color-mix(in srgb-linear, var(--comment-border-color), white 30%);
 }
 
 .popover.hover-popover.cmtr-comment-tooltip {
@@ -156,7 +149,8 @@
   font-size: 1em;
 }
 
-.cmtr-comment-tooltip-preview > *, .cmtr-comment-tooltip-editor > * {
+.cmtr-comment-tooltip-preview > *,
+.cmtr-comment-tooltip-editor > * {
   margin-block-start: 0.25em;
   margin-block-end: 0.25em;
 }
@@ -191,7 +185,6 @@
   width: 0;
   overflow-y: hidden;
 }
-
 
 // ================================================
 //             Markdown-specific Fixes

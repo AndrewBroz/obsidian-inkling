@@ -20,7 +20,7 @@ export interface MetadataFields {
 	[prop: string]: any;
 }
 
-export type CriticMarkupRangeEntry = { path: string, range: CriticMarkupRange };
+export type CriticMarkupRangeEntry = { path: string; range: CriticMarkupRange };
 
 export abstract class CriticMarkupRange {
 	fields: MetadataFields = {};

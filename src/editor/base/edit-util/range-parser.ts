@@ -1,19 +1,22 @@
 import { type SyntaxNode, type Tree } from "@lezer/common";
 
 import {
-	CriticMarkupRange, SuggestionType,
-	AdditionRange, DeletionRange, SubstitutionRange, CommentRange, HighlightRange,
+	AdditionRange,
+	CommentRange,
+	CriticMarkupRange,
+	DeletionRange,
+	HighlightRange,
+	SubstitutionRange,
+	SuggestionType,
 } from "../ranges";
 
 import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import type { PluginSettings } from "../../../types";
 
-
 function constructRangeFromSyntaxNode(settings: PluginSettings, range: SyntaxNode, text: string) {
-	const metadata =
-		(settings.enable_metadata && range.firstChild?.type.name.startsWith("MDSep")) ?
-			range.firstChild!.from :
-			undefined;
+	const metadata = (settings.enable_metadata && range.firstChild?.type.name.startsWith("MDSep")) ?
+		range.firstChild!.from :
+		undefined;
 	let middle = undefined;
 	if (range.type.name === "Substitution") {
 		const child = metadata ? range.firstChild?.nextSibling : range.firstChild;
@@ -57,7 +60,6 @@ export function cursorGenerateRanges(tree: Tree, text: string, settings: PluginS
 
 	return ranges;
 }
-
 
 export function getRangesInText(text: string, settings: PluginSettings) {
 	const tree = criticmarkupLanguage.parser.parse(text);

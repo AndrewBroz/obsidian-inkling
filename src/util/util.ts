@@ -64,9 +64,8 @@ export function splitIntoEvenChunks<T>(array: T[], chunk_count: number): T[][] {
 
 export function pathWithoutExtension(path: string) {
 	const ext_pos = path.lastIndexOf(".");
-	if (ext_pos === -1 || ext_pos === path.length - 1 || ext_pos === 0) {
+	if (ext_pos === -1 || ext_pos === path.length - 1 || ext_pos === 0)
 		return path;
-	} else {
+	else
 		return path.slice(0, ext_pos);
-	}
 }

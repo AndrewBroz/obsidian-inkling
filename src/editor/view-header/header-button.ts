@@ -84,10 +84,12 @@ export class HeaderButton {
 
 			const value = this.getvalue(view);
 			// FIXME: In rare cases (probably when the CM editor takes a while to instantiate)
-			//		The buttons will be added _after_ the editor has loaded
+			// 		The buttons will be added _after_ the editor has loaded
 			// 		This could be addresses by finding a later `layout-change` event or delaying the function
 			if (value === undefined) {
-				console.error("[COMMENTATOR] An attempt was made to attach the headerbutton before the CM editor instance was fully loaded")
+				console.error(
+					"[COMMENTATOR] An attempt was made to attach the headerbutton before the CM editor instance was fully loaded",
+				);
 				return;
 			}
 

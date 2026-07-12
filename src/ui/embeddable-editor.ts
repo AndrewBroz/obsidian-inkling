@@ -12,7 +12,7 @@
  */
 
 import { App, type Constructor, Scope, TFile, WorkspaceLeaf } from "obsidian";
-import type { MarkdownScrollableEditView, WidgetEditorView } from "obsidian-typings"
+import type { MarkdownScrollableEditView, WidgetEditorView } from "obsidian-typings";
 
 import { EditorSelection, type Extension, Prec } from "@codemirror/state";
 import { EditorView, keymap, placeholder, ViewUpdate } from "@codemirror/view";
@@ -64,9 +64,8 @@ export const defaultMarkdownEditorProps: MarkdownEditorProps = {
 	filteredExtensions: [],
 
 	onEnter: (editor, mod, shift) => {
-		if (mod) {
+		if (mod)
 			editor.options.onSubmit(editor);
-		}
 		return mod;
 	},
 	onEscape: (editor) => {
@@ -130,9 +129,8 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 					(oldMethod: (leaf: WorkspaceLeaf, params?: { focus?: boolean }) => void) =>
 					(leaf: WorkspaceLeaf, params: { focus?: boolean }) => {
 						// EXPL: If the editor is currently focused, prevent the workspace setting the focus to a workspaceLeaf instead
-						if (!this.activeCM.hasFocus) {
+						if (!this.activeCM.hasFocus)
 							oldMethod.call(this.app.workspace, leaf, params);
-						}
 					},
 			}),
 		);
@@ -142,9 +140,8 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 		// 		 (Hence why the ._loaded check is necessary)
 		if (this.options.onBlur !== defaultMarkdownEditorProps.onBlur) {
 			this.editor?.cm.contentDOM.addEventListener("blur", () => {
-				if (this._loaded) {
+				if (this._loaded)
 					this.options.onBlur(this);
-				}
 			});
 		}
 
@@ -157,9 +154,8 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 
 		this.editorEl.classList.remove("markdown-source-view");
 
-		if (options.cls) {
+		if (options.cls)
 			this.editorEl.classList.add(...([] as string[]).concat(options.cls));
-		}
 		if (options.cursorLocation) {
 			this.editor?.cm.dispatch({
 				selection: EditorSelection.range(options.cursorLocation.anchor, options.cursorLocation.head),
@@ -169,9 +165,8 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 
 	onUpdate(update: ViewUpdate, changed: boolean) {
 		super.onUpdate(update, changed);
-		if (changed) {
+		if (changed)
 			this.options.onChange(update);
-		}
 	}
 
 	/**
@@ -181,9 +176,8 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 	 */
 	buildLocalExtensions(): Extension[] {
 		const extensions = super.buildLocalExtensions();
-		if (this.options.placeholder) {
+		if (this.options.placeholder)
 			extensions.push(placeholder(this.options.placeholder));
-		}
 
 		// EXPL: Editor extension for handling specific user inputs can be added here
 		extensions.push(EditorView.domEventHandlers({
@@ -213,7 +207,7 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 		])));
 
 		// NOTE: Any additional extensions that should be applied to the editor can be added here
-		//		 Keep in mind that editorExtensions provided by your or other plugins are not applied, so you will need to re-add them manually
+		// 		 Keep in mind that editorExtensions provided by your or other plugins are not applied, so you will need to re-add them manually
 
 		return extensions;
 	}
@@ -234,13 +228,11 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 	 * Ensure that the editor is properly destroyed when the view is closed
 	 */
 	destroy(): void {
-		if (this._loaded) {
+		if (this._loaded)
 			this.unload();
-		}
 		this.app.keymap.popScope(this.scope);
-		if (this.app.workspace.activeEditor === this.owner) {
+		if (this.app.workspace.activeEditor === this.owner)
 			this.app.workspace.activeEditor = null;
-		}
 		this.containerEl.empty();
 		super.destroy();
 	}
@@ -258,8 +250,7 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 	 */
 	onload() {
 		super.onload();
-		if (this.options.focus) {
+		if (this.options.focus)
 			this.editor?.focus();
-		}
 	}
 }

@@ -5,15 +5,23 @@ import { Component, editorEditorField, editorInfoField, MarkdownRenderer, Menu, 
 
 import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 
-import { acceptSuggestions, addCommentToView, create_range, CriticMarkupRange, rangeParser, rejectSuggestions, SuggestionType } from "../../../base";
+import {
+	acceptSuggestions,
+	addCommentToView,
+	create_range,
+	CriticMarkupRange,
+	rangeParser,
+	rejectSuggestions,
+	SuggestionType,
+} from "../../../base";
 
 import { AnnotationInclusionType } from "../../../../constants";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../../../settings";
 import { annotationGutterFocusThreadAnnotation, annotationGutterFoldAnnotation } from "./annotation-gutter";
 
 import { stickyContextMenuPatch } from "../../../../patches";
-import { pluginSettingsField } from "../../../uix";
 import { createMetadataInfoElement } from "../../../../ui/snippets";
+import { pluginSettingsField } from "../../../uix";
 
 class AnnotationNode extends Component {
 	text: string;
@@ -58,7 +66,7 @@ class AnnotationNode extends Component {
 	renderSource(e?: MouseEvent) {
 		if (this.range.type !== SuggestionType.COMMENT) {
 			// TODO: Should editing non-comments within the annotation gutter be allowed?
-			new Notice("[Commentator] You can only edit comments.")
+			new Notice("[Commentator] You can only edit comments.");
 		} else {
 			e?.stopPropagation();
 			if (this.currentMode === "source") return;
@@ -123,9 +131,11 @@ class AnnotationNode extends Component {
 					case SuggestionType.COMMENT:
 						break;
 				}
-				const contents = createDiv({cls: "cmtr-anno-gutter-annotation-content"});
+				const contents = createDiv({ cls: "cmtr-anno-gutter-annotation-content" });
 				MarkdownRenderer.render(app, this.text || "&nbsp;", contents, "", this).then(() => {
-					(contents.children[0] ?? contents).prepend(createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: description }));
+					(contents.children[0] ?? contents).prepend(
+						createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: description }),
+					);
 					this.annotation_view.append(...contents.childNodes as unknown as Node[]);
 					contents.remove();
 				});
@@ -133,22 +143,24 @@ class AnnotationNode extends Component {
 				const text_slices = this.range.unwrap_parts();
 				const contents_from = createDiv(), contents_to = createDiv();
 				MarkdownRenderer.render(app, text_slices[0] || "&nbsp;", contents_from, "", this).then(() => {
-					(contents_from.children[0] ?? contents_from).prepend(createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: "Changed: " }));
+					(contents_from.children[0] ?? contents_from).prepend(
+						createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: "Changed: " }),
+					);
 					this.annotation_view.append(...contents_from.childNodes as unknown as Node[]);
 					MarkdownRenderer.render(app, text_slices[1] || "&nbsp;", contents_to, "", this).then(() => {
-						(contents_to.children[0] ?? contents_to).prepend(createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: "To: " }));
+						(contents_to.children[0] ?? contents_to).prepend(
+							createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: "To: " }),
+						);
 						this.annotation_view.append(...contents_to.childNodes as unknown as Node[]);
 						contents_from.remove();
 						contents_to.remove();
 					});
-				})
+				});
 			}
 
 			this.annotation_view.addClass("cmtr-anno-gutter-annotation-" + this.range.type);
 			this.currentMode = "preview";
-		}
-
-		// EXPL: The annotation gets updated with new text
+		} // EXPL: The annotation gets updated with new text
 		else {
 			const settings = this.marker.view.state.field(pluginSettingsField);
 			this.text = this.new_text;
@@ -177,7 +189,9 @@ class AnnotationNode extends Component {
 					.setIcon("check")
 					.setSection("close-annotation")
 					.onClick(() => {
-						this.marker.view.dispatch({ changes: acceptSuggestions(this.marker.view.state, this.range.from, this.range.to) });
+						this.marker.view.dispatch({
+							changes: acceptSuggestions(this.marker.view.state, this.range.from, this.range.to),
+						});
 					});
 			});
 			menu.addItem((item) => {
@@ -185,7 +199,9 @@ class AnnotationNode extends Component {
 					.setIcon("cross")
 					.setSection("close-annotation")
 					.onClick(() => {
-						this.marker.view.dispatch({ changes: rejectSuggestions(this.marker.view.state, this.range.from, this.range.to) });
+						this.marker.view.dispatch({
+							changes: rejectSuggestions(this.marker.view.state, this.range.from, this.range.to),
+						});
 					});
 			});
 		}
@@ -272,15 +288,13 @@ class AnnotationNode extends Component {
 			});
 		}
 
-
-
 		menu.addItem((item) => {
 			item.setTitle("Fold gutter")
 				.setSection("gutter-controls")
 				.setIcon("arrow-right-from-line")
 				.onClick(() => {
 					this.marker.view.dispatch({
-						annotations: [ annotationGutterFoldAnnotation.of(null) ]
+						annotations: [annotationGutterFoldAnnotation.of(null)],
 					});
 				});
 		});
@@ -292,13 +306,15 @@ class AnnotationNode extends Component {
 
 			let current_settings = this.marker.view.state.facet(annotationGutterIncludedTypesState);
 
-			for (const { title, icon, value } of [
-				{ title: "Additions", icon: "plus-circle", value: AnnotationInclusionType.ADDITION },
-				{ title: "Deletions", icon: "minus-square", value: AnnotationInclusionType.DELETION },
-				{ title: "Substitutions", icon: "replace", value: AnnotationInclusionType.SUBSTITUTION },
-				{ title: "Highlights", icon: "highlighter", value: AnnotationInclusionType.HIGHLIGHT },
-				{ title: "Comments", icon: "message-square", value: AnnotationInclusionType.COMMENT },
-			]) {
+			for (
+				const { title, icon, value } of [
+					{ title: "Additions", icon: "plus-circle", value: AnnotationInclusionType.ADDITION },
+					{ title: "Deletions", icon: "minus-square", value: AnnotationInclusionType.DELETION },
+					{ title: "Substitutions", icon: "replace", value: AnnotationInclusionType.SUBSTITUTION },
+					{ title: "Highlights", icon: "highlighter", value: AnnotationInclusionType.HIGHLIGHT },
+					{ title: "Comments", icon: "message-square", value: AnnotationInclusionType.COMMENT },
+				]
+			) {
 				submenu.addItem((item) => {
 					item.setTitle(title)
 						.setIcon(icon)
@@ -307,7 +323,9 @@ class AnnotationNode extends Component {
 							current_settings ^= value;
 							item.setChecked((current_settings & value) !== 0);
 							this.marker.view.dispatch(this.marker.view.state.update({
-								effects: [annotationGutterIncludedTypes.reconfigure(annotationGutterIncludedTypesState.of(current_settings))],
+								effects: [
+									annotationGutterIncludedTypes.reconfigure(annotationGutterIncludedTypesState.of(current_settings)),
+								],
 							}));
 						});
 				});
@@ -323,12 +341,18 @@ export class AnnotationMarker extends GutterMarker {
 	component: Component = new Component();
 	preventUnload: boolean = false;
 
-	constructor(public annotation: CriticMarkupRange, public annotations: CriticMarkupRange[], public view: EditorView, public itr = 0) {
+	constructor(
+		public annotation: CriticMarkupRange,
+		public annotations: CriticMarkupRange[],
+		public view: EditorView,
+		public itr = 0,
+	) {
 		super();
 	}
 
 	eq(other: AnnotationMarker) {
-		return this.itr === other.itr && this.annotations === other.annotations && this.annotations[0].equals(other.annotations[0]);
+		return this.itr === other.itr && this.annotations === other.annotations &&
+			this.annotations[0].equals(other.annotations[0]);
 	}
 
 	onCommentThreadClick() {
@@ -352,9 +376,8 @@ export class AnnotationMarker extends GutterMarker {
 		this.annotation_thread = createDiv({ cls: "cmtr-anno-gutter-thread" });
 		this.annotation_thread.addEventListener("click", this.onCommentThreadClick.bind(this));
 
-		for (const range of this.annotations) {
+		for (const range of this.annotations)
 			this.component.addChild(new AnnotationNode(range, this));
-		}
 		this.component.load();
 
 		return this.annotation_thread;
@@ -365,28 +388,26 @@ export class AnnotationMarker extends GutterMarker {
 	}
 
 	focus_annotation(index: number = -1, scroll: boolean = false) {
-		if (index === -1) {
+		if (index === -1)
 			this.annotation_thread.classList.toggle("cmtr-anno-gutter-thread-highlight", true);
-		} else if (index >= 0 && index < this.annotation_thread.children.length) {
+		else if (index >= 0 && index < this.annotation_thread.children.length)
 			this.annotation_thread.children.item(index)!.dispatchEvent(new MouseEvent("dblclick"));
-		} else {
+		else
 			console.error("[Commentator] Invalid index for focusing annotation:", index);
-		}
 
 		if (scroll) {
 			activeWindow.setTimeout(() => {
 				const top = this.view.lineBlockAt(this.annotations[0].from).top - 100;
-				this.view.scrollDOM.scrollTo({top, behavior: "smooth"});
+				this.view.scrollDOM.scrollTo({ top, behavior: "smooth" });
 			}, 200);
 		}
 	}
 
 	unfocus_annotation(index: number = -1) {
-		if (index === -1) {
+		if (index === -1)
 			this.annotation_thread.classList.toggle("cmtr-anno-gutter-thread-highlight", false);
-		} else {
+		else
 			this.annotation_thread.children.item(index)!.classList.toggle("cmtr-anno-gutter-thread-highlight", false);
-		}
 	}
 
 	destroy(dom: HTMLElement) {
@@ -409,9 +430,8 @@ function createMarkers(state: EditorState, changed_ranges: CriticMarkupRange[], 
 	for (const range of changed_ranges) {
 		let full_thread = range.full_thread;
 
-		if (!includeComments) {
+		if (!includeComments)
 			full_thread = full_thread.slice(0, 1);
-		}
 
 		switch (range.type) {
 			case SuggestionType.ADDITION:
@@ -458,8 +478,8 @@ export const annotationGutterMarkers = StateField.define<RangeSet<AnnotationMark
 			createMarkers(
 				state,
 				ranges,
-				state.facet(annotationGutterIncludedTypesState)
-			)
+				state.facet(annotationGutterIncludedTypesState),
+			),
 		);
 	},
 
@@ -468,13 +488,11 @@ export const annotationGutterMarkers = StateField.define<RangeSet<AnnotationMark
 
 		// NOTE: While it is *slightly* inefficient to recreate all markers (since the existing markers could be re-used),
 		//       the included types are barely ever changed, so the impact is negligible
-		if (tr.startState.facet(annotationGutterIncludedTypesState) !== includedTypes) {
+		if (tr.startState.facet(annotationGutterIncludedTypesState) !== includedTypes)
 			return this.create(tr.state);
-		}
 
-		if (!tr.docChanged) {
+		if (!tr.docChanged)
 			return oldSet;
-		}
 
 		itr += 1;
 

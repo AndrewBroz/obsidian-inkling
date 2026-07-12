@@ -1,163 +1,162 @@
-import {DocInput} from "@codemirror/language";
-import {EditorState, StateField} from "@codemirror/state";
-import {type ChangedRange, type Tree, TreeFragment} from "@lezer/common";
-import {type Interval, Node} from "@flatten-js/interval-tree";
+import { DocInput } from "@codemirror/language";
+import { EditorState, StateField } from "@codemirror/state";
+import { type Interval, Node } from "@flatten-js/interval-tree";
+import { type ChangedRange, type Tree, TreeFragment } from "@lezer/common";
 
 import { CommentRange, CriticMarkupRange, CriticMarkupRanges, SuggestionType } from "../ranges";
 
-import {cursorGenerateRanges} from "./range-parser";
-import {criticmarkupLanguage} from "@fevol/lang-criticmarkup";
-import {pluginSettingsField} from "../../uix";
-import {fullReloadEffect} from "../../settings";
-
+import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
+import { fullReloadEffect } from "../../settings";
+import { pluginSettingsField } from "../../uix";
+import { cursorGenerateRanges } from "./range-parser";
 
 interface ParserData {
-    tree: Tree;
-    fragments: readonly TreeFragment[];
-    ranges: CriticMarkupRanges;
-    inserted_ranges: CriticMarkupRange[];
-    deleted_ranges: CriticMarkupRange[];
+	tree: Tree;
+	fragments: readonly TreeFragment[];
+	ranges: CriticMarkupRanges;
+	inserted_ranges: CriticMarkupRange[];
+	deleted_ranges: CriticMarkupRange[];
 }
 
 export const rangeParser: StateField<ParserData> = StateField.define({
-    create(state) {
-        const text = state.doc.toString();
-        const tree = criticmarkupLanguage.parser.parse(text);
-        const settings = state.field(pluginSettingsField);
-        const ranges = new CriticMarkupRanges(cursorGenerateRanges(tree, text, settings));
-        return {
-            tree,
-            fragments: TreeFragment.addTree(tree),
-            ranges: ranges,
-            inserted_ranges: ranges.ranges,
-            deleted_ranges: [],
-        };
-    },
+	create(state) {
+		const text = state.doc.toString();
+		const tree = criticmarkupLanguage.parser.parse(text);
+		const settings = state.field(pluginSettingsField);
+		const ranges = new CriticMarkupRanges(cursorGenerateRanges(tree, text, settings));
+		return {
+			tree,
+			fragments: TreeFragment.addTree(tree),
+			ranges: ranges,
+			inserted_ranges: ranges.ranges,
+			deleted_ranges: [],
+		};
+	},
 
-    update(value: ParserData, tr) {
-        const settings = tr.state.field(pluginSettingsField);
-        if (tr.effects.some(effect => effect.is(fullReloadEffect)))
-            return this.create(tr.state) as ParserData;
+	update(value: ParserData, tr) {
+		const settings = tr.state.field(pluginSettingsField);
+		if (tr.effects.some(effect => effect.is(fullReloadEffect)))
+			return this.create(tr.state) as ParserData;
 
-        if (!tr.docChanged) {
-            value.inserted_ranges = [];
-            value.deleted_ranges = [];
-            return value;
-        }
+		if (!tr.docChanged) {
+			value.inserted_ranges = [];
+			value.deleted_ranges = [];
+			return value;
+		}
 
-        // The below times are based on stress-test (250.000 words, 56.167 ranges)
-        // get-changes: 0.01 - 0.05 ms
-        const changed_ranges: ChangedRange[] = [];
-        tr.changes.iterChangedRanges((from, to, fromB, toB) =>
-            changed_ranges.push({ fromA: from, toA: to, fromB: fromB, toB: toB })
-        );
+		// The below times are based on stress-test (250.000 words, 56.167 ranges)
+		// get-changes: 0.01 - 0.05 ms
+		const changed_ranges: ChangedRange[] = [];
+		tr.changes.iterChangedRanges((from, to, fromB, toB) =>
+			changed_ranges.push({ fromA: from, toA: to, fromB: fromB, toB: toB })
+		);
 
-        // fragment-update: 0.01 - 0.08 ms
-        let fragments = TreeFragment.applyChanges(value.fragments, changed_ranges);
-        // stringify-doc: 0.98 - 8.99 ms
-        const text = tr.state.doc.toString();
-        // parse-doc: 0.68 - 1.24 ms
-        const tree = criticmarkupLanguage.parser.parse(new DocInput(tr.state.doc), fragments);
-        // apply-fragments: <0.01 ms
-        fragments = TreeFragment.addTree(tree, fragments);
+		// fragment-update: 0.01 - 0.08 ms
+		let fragments = TreeFragment.applyChanges(value.fragments, changed_ranges);
+		// stringify-doc: 0.98 - 8.99 ms
+		const text = tr.state.doc.toString();
+		// parse-doc: 0.68 - 1.24 ms
+		const tree = criticmarkupLanguage.parser.parse(new DocInput(tr.state.doc), fragments);
+		// apply-fragments: <0.01 ms
+		fragments = TreeFragment.addTree(tree, fragments);
 
-        // regenerate-ranges: 0.20 - 0.55 ms
-        const inserted_set = new Map<number, CriticMarkupRange>();
-        const offsets: [number, number][] = [];
-        const dangling_comments = new Map<number, CommentRange>();
-        const deleted_ranges: Set<CriticMarkupRange> = new Set();
-        for (const changed_range of changed_ranges) {
-            value.ranges.tree
-                .search([changed_range.fromA, changed_range.toA], (range: CriticMarkupRange, key: Interval) => {
-                    value.ranges.tree.remove(key, range);
-                    deleted_ranges.add(range);
-                    for (const reply of range.base_range.thread)
-                        dangling_comments.set(reply.from, reply);
-                    return true;
-                });
+		// regenerate-ranges: 0.20 - 0.55 ms
+		const inserted_set = new Map<number, CriticMarkupRange>();
+		const offsets: [number, number][] = [];
+		const dangling_comments = new Map<number, CommentRange>();
+		const deleted_ranges: Set<CriticMarkupRange> = new Set();
+		for (const changed_range of changed_ranges) {
+			value.ranges.tree
+				.search([changed_range.fromA, changed_range.toA], (range: CriticMarkupRange, key: Interval) => {
+					value.ranges.tree.remove(key, range);
+					deleted_ranges.add(range);
+					for (const reply of range.base_range.thread)
+						dangling_comments.set(reply.from, reply);
+					return true;
+				});
 
-            for (const range of cursorGenerateRanges(tree, text, settings, changed_range.fromB, changed_range.toB))
-                inserted_set.set(range.from, range);
-            offsets.push([
-                changed_range.toA,
-                changed_range.toB - changed_range.fromB - (changed_range.toA - changed_range.fromA),
-            ]);
-        }
-        for (const deleted_range of deleted_ranges) {
-            if (deleted_range.type === SuggestionType.COMMENT)
-                dangling_comments.delete(deleted_range.from);
-        }
+			for (const range of cursorGenerateRanges(tree, text, settings, changed_range.fromB, changed_range.toB))
+				inserted_set.set(range.from, range);
+			offsets.push([
+				changed_range.toA,
+				changed_range.toB - changed_range.fromB - (changed_range.toA - changed_range.fromA),
+			]);
+		}
+		for (const deleted_range of deleted_ranges) {
+			if (deleted_range.type === SuggestionType.COMMENT)
+				dangling_comments.delete(deleted_range.from);
+		}
 
-        let cumulative_offset = 0;
+		let cumulative_offset = 0;
 
-        // apply-offsets: 2.72-3.70 ms
-        const nil_node = value.ranges.tree.nil_node;
-        function visitNode(node: Node<CriticMarkupRange>) {
-            if (node != null && node != nil_node) {
-                visitNode(node.left);
-                while (offsets.length && node.item.key.low >= offsets[0][0])
-                    cumulative_offset += offsets.shift()![1];
-                node.item.value.apply_offset(cumulative_offset);
-                node.item.key.low = node.item.value.from;
-                node.item.key.high = node.item.value.to;
-                visitNode(node.right);
-                if (node.left != nil_node)
-                    node.max.low = node.left.max.low;
-                if (node.right != nil_node)
-                    node.max.high = node.right.max.high;
-            }
-        }
-        visitNode(value.ranges.tree.root!);
-        const inserted_ranges = Array.from(inserted_set.values());
+		// apply-offsets: 2.72-3.70 ms
+		const nil_node = value.ranges.tree.nil_node;
+		function visitNode(node: Node<CriticMarkupRange>) {
+			if (node != null && node != nil_node) {
+				visitNode(node.left);
+				while (offsets.length && node.item.key.low >= offsets[0][0])
+					cumulative_offset += offsets.shift()![1];
+				node.item.value.apply_offset(cumulative_offset);
+				node.item.key.low = node.item.value.from;
+				node.item.key.high = node.item.value.to;
+				visitNode(node.right);
+				if (node.left != nil_node)
+					node.max.low = node.left.max.low;
+				if (node.right != nil_node)
+					node.max.high = node.right.max.high;
+			}
+		}
+		visitNode(value.ranges.tree.root!);
+		const inserted_ranges = Array.from(inserted_set.values());
 
-        // insert-new-ranges: <0.01 - 0.05 ms
-        for (const range of inserted_ranges)
-            value.ranges.tree.insert([range.from, range.to], range);
+		// insert-new-ranges: <0.01 - 0.05 ms
+		for (const range of inserted_ranges)
+			value.ranges.tree.insert([range.from, range.to], range);
 
-        // comments-thread-reconstruction: <0.01 - 0.05 ms
-        for (const range of inserted_ranges) {
-            if (range.type === SuggestionType.COMMENT)
-                dangling_comments.set(range.from, range as CommentRange);
-        }
+		// comments-thread-reconstruction: <0.01 - 0.05 ms
+		for (const range of inserted_ranges) {
+			if (range.type === SuggestionType.COMMENT)
+				dangling_comments.set(range.from, range as CommentRange);
+		}
 
-        // FIXME: Rare cases of comment ranges in threads being duplicated due to editor changes
-        if (dangling_comments.size) {
-            const comment_threads: CommentRange[][] = [];
-            let last_range: CommentRange | undefined = undefined;
-            let current_thread: CommentRange[] = [];
-            for (const range of Array.from(dangling_comments.values()).sort((a, b) => a.from - b.from)) {
-                range.clear_references();
-                range.replies.length = 0;
+		// FIXME: Rare cases of comment ranges in threads being duplicated due to editor changes
+		if (dangling_comments.size) {
+			const comment_threads: CommentRange[][] = [];
+			let last_range: CommentRange | undefined = undefined;
+			let current_thread: CommentRange[] = [];
+			for (const range of Array.from(dangling_comments.values()).sort((a, b) => a.from - b.from)) {
+				range.clear_references();
+				range.replies.length = 0;
 
-                if (!last_range || last_range?.right_adjacent(range))
-                    current_thread.push(range);
-                else {
-                    comment_threads.push(current_thread);
-                    current_thread = [range];
-                }
-                last_range = range;
-            }
-            comment_threads.push(current_thread);
+				if (!last_range || last_range?.right_adjacent(range))
+					current_thread.push(range);
+				else {
+					comment_threads.push(current_thread);
+					current_thread = [range];
+				}
+				last_range = range;
+			}
+			comment_threads.push(current_thread);
 
-            for (const thread of comment_threads) {
-                const head = thread[0];
-                const adjacent_range = value.ranges.tree.search([head.from, head.from])[0] as CriticMarkupRange;
-                adjacent_range!.replies.length = 0;
-                for (const comment of thread.slice(adjacent_range === head ? 1 : 0))
-                    comment.add_reply(adjacent_range);
-            }
-        }
+			for (const thread of comment_threads) {
+				const head = thread[0];
+				const adjacent_range = value.ranges.tree.search([head.from, head.from])[0] as CriticMarkupRange;
+				adjacent_range!.replies.length = 0;
+				for (const comment of thread.slice(adjacent_range === head ? 1 : 0))
+					comment.add_reply(adjacent_range);
+			}
+		}
 
-        // finalize: 1.80 - 1.85 ms
-        value.ranges.ranges = value.ranges.tree.values;
+		// finalize: 1.80 - 1.85 ms
+		value.ranges.ranges = value.ranges.tree.values;
 
-        return { tree, ranges: value.ranges, fragments, inserted_ranges, deleted_ranges: [...deleted_ranges] };
-    },
+		return { tree, ranges: value.ranges, fragments, inserted_ranges, deleted_ranges: [...deleted_ranges] };
+	},
 });
 
 export function selectionContainsRanges(state: EditorState) {
-    const ranges = state.field(rangeParser).ranges;
-    return ranges.ranges.length ?
-        state.selection.ranges.some(range => ranges.contains_range(range.from, range.to)) :
-        false;
+	const ranges = state.field(rangeParser).ranges;
+	return ranges.ranges.length ?
+		state.selection.ranges.some(range => ranges.contains_range(range.from, range.to)) :
+		false;
 }

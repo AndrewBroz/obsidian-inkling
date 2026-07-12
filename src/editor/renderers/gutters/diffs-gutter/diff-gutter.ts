@@ -2,7 +2,7 @@
  * This is almost identical to the gutter defined in @codemirror/view/gutter,
  * with the exception of having the gutter be correctly hidden when there are no suggestions in the note
  */
-import {Annotation, type Extension, Facet } from "@codemirror/state";
+import { Annotation, type Extension, Facet } from "@codemirror/state";
 import { EditorView, ViewUpdate } from "@codemirror/view";
 import { rangeParser } from "../../../base";
 import {
@@ -29,13 +29,13 @@ class DiffGutterView extends GutterView {
 		// FIXME: this still causes a layout shift
 		if (!view.dom.parentElement!.classList.contains("markdown-source-view")) {
 			// Prevent gutter from appearing for a brief second (until setImmediate kicks in)
-			this.dom.style.display = 'none';
+			this.dom.style.display = "none";
 			// Codemirror doesn't allow state changes during updates, so reconfiguration needs to be delayed
 			setImmediate(() => {
 				view.dispatch(view.state.update({
 					effects: [
-						diffGutterCompartment.reconfigure([])
-					]
+						diffGutterCompartment.reconfigure([]),
+					],
 				}));
 			});
 		}
@@ -67,9 +67,8 @@ class DiffSingleGutterView extends SingleGutterView {
 
 		for (const transaction of update.transactions) {
 			const hide_on_empty = transaction.annotation(diffGutterHideEmptyAnnotation);
-			if (hide_on_empty !== undefined) {
+			if (hide_on_empty !== undefined)
 				this.hide_on_empty = hide_on_empty;
-			}
 		}
 
 		if (this.showing && this.hide_on_empty && update.state.field(rangeParser).ranges.empty()) {

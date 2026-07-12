@@ -1,10 +1,13 @@
 import {
-	type MarkdownFileInfo, type MarkdownPostProcessor,
-	MarkdownPreviewRenderer, MarkdownView,
-	Notice, Plugin,
+	type MarkdownFileInfo,
+	type MarkdownPostProcessor,
+	MarkdownPreviewRenderer,
+	MarkdownView,
+	Notice,
+	Plugin,
 } from "obsidian";
 
-import {EditorState, type Extension, Prec} from "@codemirror/state";
+import { EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { type PluginSettings } from "./types";
 
@@ -12,43 +15,72 @@ import { Database } from "./database";
 import { beforePluginUninstallPatch, syncMarkdownViewCustomStatePatch } from "./patches";
 
 import {
-	type CriticMarkupRange, type CriticMarkupRanges,
-	getRangesInText, text_copy,
-	RANGE_PROTOTYPE_MAPPER, rangeParser,
+	type CriticMarkupRange,
+	type CriticMarkupRanges,
+	getRangesInText,
+	RANGE_PROTOTYPE_MAPPER,
+	rangeParser,
+	text_copy,
 } from "./editor/base";
-import { cmenuGlobalCommands, cmenuViewportCommands, commands } from "./editor/uix";
-import { bracketMatcher, editorKeypressCatcher, getEditMode, rangeCorrecter, focusAnnotation, providePluginSettingsExtension } from "./editor/uix/extensions";
 import {
-	annotationGutter, annotationGutterCompartment,
-	annotationGutterFoldButtonAnnotation, annotationGutterResizeHandleAnnotation,
-	annotationGutterWidthAnnotation, annotationGutterHideEmptyAnnotation, annotationGutterView,
-	diffGutter, diffGutterCompartment,
+	annotationGutter,
+	annotationGutterCompartment,
+	annotationGutterFoldButtonAnnotation,
+	annotationGutterHideEmptyAnnotation,
+	annotationGutterResizeHandleAnnotation,
+	annotationGutterView,
+	annotationGutterWidthAnnotation,
+	diffGutter,
+	diffGutterCompartment,
 	diffGutterHideEmptyAnnotation,
 } from "./editor/renderers/gutters";
-import { livepreviewRenderer, focusRenderer, markupFocusState } from "./editor/renderers/live-preview";
+import { focusRenderer, livepreviewRenderer, markupFocusState } from "./editor/renderers/live-preview";
 import { postProcess, postProcessorRerender, postProcessorUpdate } from "./editor/renderers/post-process";
 import {
-	type MetadataStatusBarButton, type StatusBarButton,
-	metadataStatusBarButton, previewModeStatusBarButton, suggestionModeStatusBarButton,
+	type MetadataStatusBarButton,
+	metadataStatusBarButton,
+	previewModeStatusBarButton,
+	type StatusBarButton,
+	suggestionModeStatusBarButton,
 } from "./editor/status-bar";
-import { type HeaderButton, editModeHeaderButton, previewModeHeaderButton } from "./editor/view-header";
+import { cmenuGlobalCommands, cmenuViewportCommands, commands } from "./editor/uix";
+import {
+	bracketMatcher,
+	editorKeypressCatcher,
+	focusAnnotation,
+	getEditMode,
+	providePluginSettingsExtension,
+	rangeCorrecter,
+} from "./editor/uix/extensions";
+import { editModeHeaderButton, type HeaderButton, previewModeHeaderButton } from "./editor/view-header";
 
 import { CommentatorSettings } from "./ui/settings";
 import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/view.svelte";
 
-
 import {
-	DATABASE_VERSION, DEFAULT_SETTINGS, REQUIRES_DATABASE_REINDEX,
-	REQUIRES_EDITOR_RELOAD, REQUIRES_FULL_RELOAD,
+	DATABASE_VERSION,
+	DEFAULT_SETTINGS,
+	REQUIRES_DATABASE_REINDEX,
+	REQUIRES_EDITOR_RELOAD,
+	REQUIRES_FULL_RELOAD,
 } from "./constants";
 import {
-	annotationGutterIncludedTypes, annotationGutterIncludedTypesState,
-	editMode, editModeValue, editModeValueState,
+	annotationGutterIncludedTypes,
+	annotationGutterIncludedTypesState,
+	editMode,
+	editModeValue,
+	editModeValueState,
 	fullReloadEffect,
-	previewMode, previewModeState,
+	previewMode,
+	previewModeState,
 } from "./editor/settings";
 
-import { debugRangeset, iterateAllCMInstances, sendAnnotationToAllCMInstances, updateCompartment} from "./util/cm-util";
+import {
+	debugRangeset,
+	iterateAllCMInstances,
+	sendAnnotationToAllCMInstances,
+	updateCompartment,
+} from "./util/cm-util";
 import { objectDifference } from "./util/util";
 
 export default class CommentatorPlugin extends Plugin {
@@ -88,14 +120,14 @@ export default class CommentatorPlugin extends Plugin {
 		() => this.settings,
 	);
 	file_history: {
-		mtime: number,
-		changes: Record<string, string>,
+		mtime: number;
+		changes: Record<string, string>;
 	}[] = [];
 
 	postProcessor!: MarkdownPostProcessor;
 
 	// EXPL: Global configuration for annotation gutter, used as a bodge to communicate the initial width and fold state
-	//		 to annotation gutter(s), even if the codemirror instance has not been set up yet
+	// 		 to annotation gutter(s), even if the codemirror instance has not been set up yet
 	annotation_gutter_config?: { width: number; foldState: boolean } = undefined;
 
 	loadEditorExtensions() {
@@ -124,7 +156,7 @@ export default class CommentatorPlugin extends Plugin {
 		// TODO: Rerender gutter on Ctrl+Scroll
 		if (this.settings.diff_gutter) {
 			// NOTE: Prec.low moves the gutter to the right of the line numbers gutter
-			//		This is consistent with how IDE's display diffs
+			// 		This is consistent with how IDE's display diffs
 			this.editorExtensions.push(Prec.low(diffGutterCompartment.of(diffGutter)));
 		}
 
@@ -141,23 +173,27 @@ export default class CommentatorPlugin extends Plugin {
 		this.editorExtensions.push(previewMode.of(previewModeState.of(this.settings.default_preview_mode)));
 		this.editorExtensions.push(editModeValue.of(editModeValueState.of(this.settings.default_edit_mode)));
 		this.editorExtensions.push(
-			annotationGutterIncludedTypes.of(annotationGutterIncludedTypesState.of(this.settings.annotation_gutter_included_types))
+			annotationGutterIncludedTypes.of(
+				annotationGutterIncludedTypesState.of(this.settings.annotation_gutter_included_types),
+			),
 		);
 
 		this.register(
 			// TODO: Find another way to communicate 'new' values to the gutter on initialization without animation
 			syncMarkdownViewCustomStatePatch(
-				(view, state)	=> {
+				(view, state) => {
 					// EXPL: If editMode.(width) is undefined (e.g. new view), set initial value to be inherited/default
 					if (this.settings.annotation_gutter && view.editMode.annotationGutterWidth === undefined) {
-						view.editMode.annotationGutterWidth = state['annotationGutterWidth'] as number ?? this.settings.annotation_gutter_width;
-						view.editMode.annotationGutterFolded = state['annotationGutterFolded'] as boolean ?? this.settings.annotation_gutter_default_fold_state;
+						view.editMode.annotationGutterWidth = state["annotationGutterWidth"] as number ??
+							this.settings.annotation_gutter_width;
+						view.editMode.annotationGutterFolded = state["annotationGutterFolded"] as boolean ??
+							this.settings.annotation_gutter_default_fold_state;
 					}
 				},
 				(view, state) => {
 					if (this.settings.annotation_gutter) {
 						// EXPL: When folding or resizing the gutter, requestSaveLayout is called to store the values
-						//		 The following lines extract the new values from the gutters state
+						// 		 The following lines extract the new values from the gutters state
 						const gutter = view.editMode.cm.plugin(annotationGutterView)?.gutters[0];
 						if (gutter) {
 							view.editMode.annotationGutterWidth = gutter.width;
@@ -174,9 +210,9 @@ export default class CommentatorPlugin extends Plugin {
 						this.annotation_gutter_config.width = view.editMode.annotationGutterWidth;
 						this.annotation_gutter_config.foldState = view.editMode.annotationGutterFolded;
 					}
-				}
-
-		));
+				},
+			),
+		);
 	}
 
 	async updateEditorExtension() {
@@ -207,15 +243,13 @@ export default class CommentatorPlugin extends Plugin {
 				get ranges(): CriticMarkupRanges | undefined {
 					return window.COMMENTATOR_DEBUG.app.workspace.activeEditor?.editor?.cm.state.field(rangeParser).ranges;
 				},
-				debugRangeset
+				debugRangeset,
 			};
 		}
-
 
 		this.registerView(COMMENTATOR_ANNOTATIONS_VIEW, (leaf) => new CommentatorAnnotationsView(leaf, this));
 
 		await this.migrateSettings(await this.loadData());
-
 
 		this.defaultEditModeExtension = getEditMode(this.settings.default_edit_mode, this.settings);
 
@@ -234,7 +268,6 @@ export default class CommentatorPlugin extends Plugin {
 		this.editModeStatusBarButton = suggestionModeStatusBarButton(this, this.settings.status_bar_edit_button);
 		this.metadataStatusBarButton = metadataStatusBarButton(this, this.settings.status_bar_metadata_button);
 
-
 		if (this.settings.post_processor) {
 			// TODO: Run postprocessor before any other MD postprocessors
 			this.postProcessor = this.registerMarkdownPostProcessor(
@@ -247,9 +280,8 @@ export default class CommentatorPlugin extends Plugin {
 
 		this.registerEvent(cmenuGlobalCommands(this));
 		this.registerEvent(cmenuViewportCommands(this));
-		for (const command of commands(this)) {
+		for (const command of commands(this))
 			this.addCommand(command);
-		}
 
 		this.register(beforePluginUninstallPatch(this, "commentator", () => {
 			return this.database.dropDatabase();
@@ -281,7 +313,7 @@ export default class CommentatorPlugin extends Plugin {
 					}
 
 					// EXPL: Migrate settings from 0.2.x to 0.2.3, suggestion and comment gutter settings were renamed
-					if (old_version.localeCompare("0.2.3", undefined, {numeric: true}) < 0) {
+					if (old_version.localeCompare("0.2.3", undefined, { numeric: true }) < 0) {
 						if ((new_settings as unknown as any).suggestion_gutter_hide_empty) {
 							const settings_migrations = [
 								["suggestion_gutter", "diff_gutter"],
@@ -313,7 +345,10 @@ export default class CommentatorPlugin extends Plugin {
 				}
 			} catch (e) {
 				console.error("Commentator: settings migration failed", e);
-				new Notice("Commentator: Migration to new settings failed, using the default settings provided by the plugin", 0);
+				new Notice(
+					"Commentator: Migration to new settings failed, using the default settings provided by the plugin",
+					0,
+				);
 			}
 		}
 	}
@@ -361,7 +396,7 @@ export default class CommentatorPlugin extends Plugin {
 		this.metadataStatusBarButton.setRendering(this.changed_settings.status_bar_metadata_button);
 
 		// TODO: Is it guaranteed that only one configuration will always be changed?
-		//		If so, then this can be reduced to a switch statement
+		// 		If so, then this can be reduced to a switch statement
 		if (this.changed_settings.post_processor !== undefined) {
 			if (this.changed_settings.post_processor) {
 				this.postProcessor = this.registerMarkdownPostProcessor(
@@ -375,23 +410,34 @@ export default class CommentatorPlugin extends Plugin {
 		}
 
 		if (this.changed_settings.annotation_gutter_width !== undefined) {
-			sendAnnotationToAllCMInstances(this.app, annotationGutterWidthAnnotation.of(this.settings.annotation_gutter_width));
+			sendAnnotationToAllCMInstances(
+				this.app,
+				annotationGutterWidthAnnotation.of(this.settings.annotation_gutter_width),
+			);
 		}
 
 		if (this.changed_settings.annotation_gutter_hide_empty !== undefined) {
-			sendAnnotationToAllCMInstances(this.app, annotationGutterHideEmptyAnnotation.of(this.settings.annotation_gutter_hide_empty));
+			sendAnnotationToAllCMInstances(
+				this.app,
+				annotationGutterHideEmptyAnnotation.of(this.settings.annotation_gutter_hide_empty),
+			);
 		}
 
-		if (this.changed_settings.diff_gutter_hide_empty !== undefined) {
+		if (this.changed_settings.diff_gutter_hide_empty !== undefined)
 			sendAnnotationToAllCMInstances(this.app, diffGutterHideEmptyAnnotation.of(this.settings.diff_gutter_hide_empty));
-		}
 
 		if (this.changed_settings.annotation_gutter_fold_button !== undefined) {
-			sendAnnotationToAllCMInstances(this.app, annotationGutterFoldButtonAnnotation.of(this.settings.annotation_gutter_fold_button));
+			sendAnnotationToAllCMInstances(
+				this.app,
+				annotationGutterFoldButtonAnnotation.of(this.settings.annotation_gutter_fold_button),
+			);
 		}
 
 		if (this.changed_settings.annotation_gutter_resize_handle !== undefined) {
-			sendAnnotationToAllCMInstances(this.app, annotationGutterResizeHandleAnnotation.of(this.settings.annotation_gutter_resize_handle));
+			sendAnnotationToAllCMInstances(
+				this.app,
+				annotationGutterResizeHandleAnnotation.of(this.settings.annotation_gutter_resize_handle),
+			);
 		}
 
 		if (this.changed_settings.default_preview_mode !== undefined) {

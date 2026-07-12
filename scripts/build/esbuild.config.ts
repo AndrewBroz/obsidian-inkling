@@ -1,9 +1,9 @@
 import esbuild, { analyzeMetafile } from "esbuild";
 
-import { inlineWorkerPlugin } from "./inline-worker-plugin";
 import { sassPlugin } from "esbuild-sass-plugin";
 import esbuildSvelte from "esbuild-svelte";
 import sveltePreprocess from "svelte-preprocess";
+import { inlineWorkerPlugin } from "./inline-worker-plugin";
 
 import { banner } from "./banner";
 
@@ -55,7 +55,7 @@ const context = await esbuild.context({
 	format: "cjs",
 	target: "esnext",
 	logLevel: "info",
-	sourcemap: (debug) ? "inline" : false,
+	sourcemap: debug ? "inline" : false,
 	treeShaking: true,
 	minify: prod,
 	outdir: dir,
@@ -76,21 +76,21 @@ const context = await esbuild.context({
 					"a11y_no_noninteractive_element_interactions",
 					"a11y_no_noninteractive_tabindex",
 					"state_referenced_locally",
-				]
+				];
 
 				return !codesToIgnore.includes(warning.code);
 			},
 		}),
 		inlineWorkerPlugin({
-            platform: "browser",
-            legalComments: 'none',
-            external: [],
-            format: "cjs",
-            treeShaking: true,
-            minify: prod,
-            minifyWhitespace: true,
-            bundle: true,
-            sourcemap: false,
+			platform: "browser",
+			legalComments: "none",
+			external: [],
+			format: "cjs",
+			treeShaking: true,
+			minify: prod,
+			minifyWhitespace: true,
+			bundle: true,
+			sourcemap: false,
 		}),
 	],
 });

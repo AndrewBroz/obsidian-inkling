@@ -7,10 +7,11 @@
  *  4. Added annotation listeners for focusing GutterMarkers
  *  5. Gutter *can* be zero-width if there are no markers in the document
  */
-import {Annotation, type Extension, Facet} from "@codemirror/state";
+import { Annotation, type Extension, Facet } from "@codemirror/state";
 import { BlockInfo, EditorView, GutterMarker, ViewUpdate } from "@codemirror/view";
 
 import { debounce, editorInfoField, setIcon } from "obsidian";
+import { markupFocusEffect } from "../../live-preview";
 import {
 	createGutterViewPlugin,
 	createGutterWithConfig,
@@ -21,9 +22,8 @@ import {
 	SingleGutterView,
 	UpdateContext,
 } from "../base";
-import { annotationGutterMarkers, AnnotationMarker } from "./marker";
 import { annotationGutterCompartment } from "./index";
-import { markupFocusEffect } from "../../live-preview";
+import { annotationGutterMarkers, AnnotationMarker } from "./marker";
 
 // EXPL: Margin between the gutter and the content
 const ANNOTATION_GUTTER_MARGIN = 24;
@@ -34,9 +34,13 @@ const unfixGutters = Facet.define<boolean, boolean>({
 
 const activeGutters = Facet.define<Required<AnnotationGutterConfig>>();
 
-export const annotationGutterFocusAnnotation = Annotation.define<{ from: number, to: number, index?: number, scroll?: boolean }>();
+export const annotationGutterFocusAnnotation = Annotation.define<
+	{ from: number; to: number; index?: number; scroll?: boolean }
+>();
 export const annotationGutterFoldAnnotation = Annotation.define<boolean | null>();
-export const annotationGutterFocusThreadAnnotation = Annotation.define<{ marker: AnnotationMarker, index: number, scroll?: boolean, focus_markup?: boolean }>();
+export const annotationGutterFocusThreadAnnotation = Annotation.define<
+	{ marker: AnnotationMarker; index: number; scroll?: boolean; focus_markup?: boolean }
+>();
 export const annotationGutterWidthAnnotation = Annotation.define<number>();
 export const annotationGutterHideEmptyAnnotation = Annotation.define<boolean>();
 export const annotationGutterFoldButtonAnnotation = Annotation.define<boolean>();
@@ -53,13 +57,13 @@ export class AnnotationGutterView extends GutterView {
 		// EXPL: If the gutter is not inside a Markdown View, hide it and remove it from the gutter extension from the view
 		if (!view.dom.parentElement!.classList.contains("markdown-source-view")) {
 			// NOTE: Prevents gutter from appearing for a brief second (until setImmediate kicks in)
-			this.dom.style.display = 'none';
+			this.dom.style.display = "none";
 			// NOTE: Codemirror doesn't allow state changes during updates, so reconfiguration needs to be delayed
 			setImmediate(() => {
 				view.dispatch(view.state.update({
 					effects: [
-						annotationGutterCompartment.reconfigure([])
-					]
+						annotationGutterCompartment.reconfigure([]),
+					],
 				}));
 			});
 		}
@@ -116,10 +120,10 @@ export class AnnotationGutterView extends GutterView {
 						effects: [
 							markupFocusEffect.of({
 								from: marker.annotation.from,
-								to: marker.annotation.full_range_back
-							})
-						]
-					})
+								to: marker.annotation.full_range_back,
+							}),
+						],
+					}),
 				);
 			});
 		}
@@ -129,9 +133,8 @@ export class AnnotationGutterView extends GutterView {
 		// EXPL: Check all transactions, figure out if they have been annotated with a focus shift annotation
 		// TODO: Is there a better way to check the annotations of a ViewUpdate?
 		const annotation = update.transactions.flatMap(tr => tr.annotation(annotationGutterFocusAnnotation)).find(e => e);
-		if (annotation || update.startState.selection !== update.state.selection) {
+		if (annotation || update.startState.selection !== update.state.selection)
 			this.unfocusAnnotation();
-		}
 
 		if (annotation) {
 			const { from, to, index = -1, scroll = false } = annotation;
@@ -170,10 +173,11 @@ export class AnnotationGutterView extends GutterView {
 		const activeGutter = this.gutters[0];
 
 		// EXPL: Given the 'highlighted' marker, fetch the gutterElement it belongs to
-		const element = activeGutter.elements.find(element => element.markers.includes(marker)) as AnnotationGutterElement | undefined;
-		if (!element) {
+		const element = activeGutter.elements.find(element => element.markers.includes(marker)) as
+			| AnnotationGutterElement
+			| undefined;
+		if (!element)
 			return;
-		}
 		const markerIndex = element.markers.indexOf(marker);
 
 		// EXPL: Where the gutter element should be located (i.e. flush with the top of the block)
@@ -226,10 +230,13 @@ export interface AnnotationGutterConfig extends GutterConfig {
 	includeResizeHandle: boolean;
 }
 
-
-export function annotation_gutter(config: AnnotationGutterConfig): { extension: Extension; config: Required<AnnotationGutterConfig> } {
-	return createGutterWithConfig(annotationGutterView, config, activeGutters, unfixGutters) as
-		{ extension: Extension; config: Required<AnnotationGutterConfig> };
+export function annotation_gutter(
+	config: AnnotationGutterConfig,
+): { extension: Extension; config: Required<AnnotationGutterConfig> } {
+	return createGutterWithConfig(annotationGutterView, config, activeGutters, unfixGutters) as {
+		extension: Extension;
+		config: Required<AnnotationGutterConfig>;
+	};
 }
 
 class AnnotationUpdateContext extends UpdateContext {
@@ -290,7 +297,6 @@ class AnnotationUpdateContext extends UpdateContext {
 		 */
 		const height = this.gutter.elements[this.i]?.dom.clientHeight || UNKNOWN_HEIGHT;
 
-
 		// EXPL: Search for an existing GutterElement with the same markers
 		const element_idx = this.gutter.elements
 			.findIndex(e => sameMarkers(e.markers, markers));
@@ -312,9 +318,7 @@ class AnnotationUpdateContext extends UpdateContext {
 			this.i = element_idx + 1;
 			this.new_gutter_elements.push(element);
 			element.update(view, height, above, markers, block);
-		}
-
-		// EXPL: Otherwise, if the GutterElement does not exist, create a new one and it to the gutter later
+		} // EXPL: Otherwise, if the GutterElement does not exist, create a new one and it to the gutter later
 		else {
 			this.added_elements.push(new AnnotationGutterElement(view, height, above, markers, block));
 		}
@@ -330,9 +334,8 @@ class AnnotationUpdateContext extends UpdateContext {
 		}
 
 		// EXPL: Add all the remaining added GutterElements to the gutter
-		for (const added_element of this.added_elements) {
+		for (const added_element of this.added_elements)
 			this.gutter.dom.appendChild(added_element.dom);
-		}
 		this.gutter.elements = [...this.new_gutter_elements, ...this.added_elements];
 		this.new_gutter_elements = [];
 		this.added_elements = [];
@@ -352,7 +355,11 @@ class AnnotationSingleGutterView extends SingleGutterView {
 	resize_handle_el: HTMLElement | undefined = undefined;
 	declare elements: AnnotationGutterElement[];
 
-	constructor(public view: EditorView, public config: Required<AnnotationGutterConfig>, private gutterDom: HTMLElement) {
+	constructor(
+		public view: EditorView,
+		public config: Required<AnnotationGutterConfig>,
+		private gutterDom: HTMLElement,
+	) {
 		super(view, config);
 
 		this.folded = config.foldState;
@@ -362,30 +369,27 @@ class AnnotationSingleGutterView extends SingleGutterView {
 		// 	this.folded = true;
 		// }
 		// TODO: This is specifically done for popovers, there may be a better fix for this
-		if (this.view.dom.parentElement?.parentElement?.parentElement?.classList.contains("markdown-embed")) {
+		if (this.view.dom.parentElement?.parentElement?.parentElement?.classList.contains("markdown-embed"))
 			this.folded = true;
-		}
 
 		this.hide_on_empty = config.hideOnEmpty;
 		this.add_fold_button = config.includeFoldButton;
 		this.add_resize_handle = config.includeResizeHandle;
 
-		if ((this.hide_on_empty && view.state.field(annotationGutterMarkers).size === 0) || this.folded) {
+		if ((this.hide_on_empty && view.state.field(annotationGutterMarkers).size === 0) || this.folded)
 			this.dom.style.width = "0";
-		} else {
+		else
 			this.dom.style.width = this.width + "px";
-		}
 		this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.folded ? "0px" : this.width + "px");
 		this.gutterDom.style.marginInlineStart = this.folded ? "0" : ANNOTATION_GUTTER_MARGIN + "px";
-		this.gutter_position = this.view.scrollDOM.getBoundingClientRect().right - this.view.contentDOM.getBoundingClientRect().right + ANNOTATION_GUTTER_MARGIN;
+		this.gutter_position = this.view.scrollDOM.getBoundingClientRect().right -
+			this.view.contentDOM.getBoundingClientRect().right + ANNOTATION_GUTTER_MARGIN;
 
-		if (this.add_fold_button) {
+		if (this.add_fold_button)
 			this.createFoldButton();
-		}
 
-		if (this.add_resize_handle) {
+		if (this.add_resize_handle)
 			this.createResizeHandle();
-		}
 	}
 
 	createFoldButton() {
@@ -397,7 +401,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			this.folded = !this.folded;
 			this.view.state.field(editorInfoField).app.workspace.requestSaveLayout();
 			this.foldGutter();
-		}
+		};
 
 		this.setFoldButtonState();
 		this.fold_button_el = createDiv({ cls: ["cmtr-anno-gutter-button"] });
@@ -407,7 +411,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 	createResizeHandle() {
 		this.resize_handle_el = createEl("hr", { cls: ["cmtr-anno-gutter-resize-handle"] });
-		this.resize_handle_el.style.display = (this.view.state.field(annotationGutterMarkers).size && !this.folded) ? "" : "none";
+		this.resize_handle_el.style.display = (this.view.state.field(annotationGutterMarkers).size && !this.folded) ?
+			"" :
+			"none";
 		this.resize_handle_el.addEventListener("mousedown", (e) => {
 			let initialPosition = e.clientX;
 			let isReadableLineWidth = this.view.state.field(editorInfoField).app.vault.getConfig("readableLineLength");
@@ -423,11 +429,15 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				// TODO: Improve resizing logic when user has readable line length enabled
 				//       When resizing, .cm-line's width adjust even when not necessary, causing jarring content shifts
 				// EXPL: Freezes the width of .cm-line to prevent content shifting, reduces the amount of shifts a lot
-				//		 (Trust me, it is _much_ worse without this bodge)
+				// 		 (Trust me, it is _much_ worse without this bodge)
 				if (isReadableLineWidth) {
 					temporarySheet.deleteRule(temporarySheet.cssRules.length - 1);
-					temporarySheet.insertRule(`.cmtr-anno-gutter-resizing .cm-line { width: ${this.view.contentDOM.clientWidth}px !important; }`, temporarySheet.cssRules.length);
-					this.gutter_position = this.view.scrollDOM.getBoundingClientRect().right - this.view.contentDOM.getBoundingClientRect().right + ANNOTATION_GUTTER_MARGIN;
+					temporarySheet.insertRule(
+						`.cmtr-anno-gutter-resizing .cm-line { width: ${this.view.contentDOM.clientWidth}px !important; }`,
+						temporarySheet.cssRules.length,
+					);
+					this.gutter_position = this.view.scrollDOM.getBoundingClientRect().right -
+						this.view.contentDOM.getBoundingClientRect().right + ANNOTATION_GUTTER_MARGIN;
 				}
 			}, 25);
 
@@ -437,11 +447,11 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			let currentWidth = parseInt(this.dom.style.width.slice(0, -2));
 			const onMouseMove = (evt: MouseEvent) => {
 				const deltaX = evt.clientX - initialPosition;
-				initialPosition = evt.clientX
+				initialPosition = evt.clientX;
 				currentWidth -= deltaX;
 				setWidth(currentWidth);
 				return true;
-			}
+			};
 
 			const onMouseStop = () => {
 				this.view.dom.doc.removeEventListener("mousemove", onMouseMove);
@@ -449,10 +459,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				this.resize_handle_el!.classList.toggle("cmtr-anno-gutter-resize-handle-hover", false);
 				this.view.scrollDOM.classList.toggle("cmtr-anno-gutter-resizing", false);
 
-				if (isReadableLineWidth) {
+				if (isReadableLineWidth)
 					temporarySheet.deleteRule(temporarySheet.cssRules.length - 1);
-				}
-			}
+			};
 
 			this.view.dom.doc.addEventListener("mousemove", onMouseMove);
 			this.view.dom.doc.addEventListener("mouseup", onMouseStop);
@@ -468,15 +477,13 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			if (this.folded) {
 				this.fold_button_el.children[0].setAttribute("style", "rotate: -180deg;");
 				this.fold_button_el.children[0].ariaLabel = "Unfold gutter";
-				if (this.resize_handle_el) {
-					this.resize_handle_el.style.display = 'none';
-				}
+				if (this.resize_handle_el)
+					this.resize_handle_el.style.display = "none";
 			} else {
 				this.fold_button_el.children[0].setAttribute("style", "rotate: 0deg;");
 				this.fold_button_el.children[0].ariaLabel = "Fold gutter";
-				if (this.resize_handle_el) {
-					this.resize_handle_el.style.display = '';
-				}
+				if (this.resize_handle_el)
+					this.resize_handle_el.style.display = "";
 			}
 		}
 	}
@@ -505,30 +512,37 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 		if (this.view.state.field(editorInfoField).app.vault.getConfig("readableLineLength")) {
 			// EXPL: Computes the margin before and after the gutter has been folded
-			const readableLineWidth = parseInt(getComputedStyle(this.view.scrollDOM).getPropertyValue("--file-line-width").trim());
+			const readableLineWidth = parseInt(
+				getComputedStyle(this.view.scrollDOM).getPropertyValue("--file-line-width").trim(),
+			);
 			const marginWithoutGutter = Math.max(0, this.view.scrollDOM.innerWidth - readableLineWidth);
 			const marginWithGutter = Math.max(0, marginWithoutGutter - this.width);
 			const newMargin = (this.folded ? marginWithoutGutter : marginWithGutter) / 2;
 			const oldMargin = (this.folded ? marginWithGutter : marginWithoutGutter) / 2;
 
 			// EXPL: Freeze the contentDOM to prevent content shifting while the gutter is being folded
-			this.view.contentDOM.style.width = this.view.contentDOM.clientWidth + (this.folded ? ANNOTATION_GUTTER_MARGIN : 0) + "px !important";
+			this.view.contentDOM.style.width = this.view.contentDOM.clientWidth +
+				(this.folded ? ANNOTATION_GUTTER_MARGIN : 0) + "px !important";
 			// EXPL: Set the old margin to transition from
-			this.view.scrollDOM.children[0].setAttribute("style", `margin: 0 ${oldMargin}px; transition: margin 0.4s ease-in-out, max-width 0.4s ease-in-out;`);
-			if (!this.folded) {
+			this.view.scrollDOM.children[0].setAttribute(
+				"style",
+				`margin: 0 ${oldMargin}px; transition: margin 0.4s ease-in-out, max-width 0.4s ease-in-out;`,
+			);
+			if (!this.folded)
 				this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.width + "px");
-			}
 
 			setTimeout(() => {
 				// EXPL: Transition to the new margin
-				this.view.scrollDOM.children[0].setAttribute("style", `margin: 0 ${newMargin}px; transition: margin 0.4s ease-in-out, max-width 0.4s ease-in-out;`);
+				this.view.scrollDOM.children[0].setAttribute(
+					"style",
+					`margin: 0 ${newMargin}px; transition: margin 0.4s ease-in-out, max-width 0.4s ease-in-out;`,
+				);
 				// EXPL: Whenever the gutter is finished folding, clean up all freezes
 				this.dom.addEventListener("transitionend", () => {
 					this.view.contentDOM.removeAttribute("style");
 					this.view.scrollDOM.children[0].removeAttribute("style");
-					if (this.folded) {
+					if (this.folded)
 						this.view.dom.style.setProperty("--cmtr-anno-gutter-width", "0px");
-					}
 				}, { once: true });
 			});
 		}
@@ -563,18 +577,17 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			}
 			if (hide_empty !== undefined) {
 				this.hide_on_empty = hide_empty;
-				if (this.hide_on_empty && widgets.size === 0) {
+				if (this.hide_on_empty && widgets.size === 0)
 					this.dom.style.width = "0";
-				} else {
+				else
 					this.dom.style.width = this.width + "px";
-				}
 				this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.width + "px");
 			}
 			if (fold_button !== undefined) {
 				this.add_fold_button = fold_button;
-				if (this.add_fold_button && !this.fold_button_el) {
+				if (this.add_fold_button && !this.fold_button_el)
 					this.createFoldButton();
-				} else if (!this.add_fold_button && this.fold_button_el) {
+				else if (!this.add_fold_button && this.fold_button_el) {
 					this.fold_button_el.remove();
 					this.fold_button_el = undefined;
 				}
@@ -582,9 +595,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			}
 			if (resize_handle !== undefined) {
 				this.add_resize_handle = resize_handle;
-				if (this.add_resize_handle && !this.resize_handle_el) {
+				if (this.add_resize_handle && !this.resize_handle_el)
 					this.createResizeHandle();
-				} else if (!this.add_resize_handle && this.resize_handle_el) {
+				else if (!this.add_resize_handle && this.resize_handle_el) {
 					this.resize_handle_el.remove();
 					this.resize_handle_el = undefined;
 				}
@@ -593,25 +606,19 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 		if (widgets.size !== update.startState.field(annotationGutterMarkers).size) {
 			if (widgets.size === 0) {
-				if (this.fold_button_el) {
+				if (this.fold_button_el)
 					this.fold_button_el.style.display = "none";
-				}
-				if (this.resize_handle_el) {
+				if (this.resize_handle_el)
 					this.resize_handle_el.style.display = "none";
-				}
-				if (this.hide_on_empty) {
+				if (this.hide_on_empty)
 					this.dom.style.width = "0";
-				}
 			} else {
-				if (this.fold_button_el) {
+				if (this.fold_button_el)
 					this.fold_button_el.style.display = "";
-				}
-				if (this.resize_handle_el) {
+				if (this.resize_handle_el)
 					this.resize_handle_el.style.display = "";
-				}
-				if (!this.folded) {
+				if (!this.folded)
 					this.dom.style.width = this.width + "px";
-				}
 			}
 		}
 
@@ -634,8 +641,8 @@ class AnnotationGutterElement extends GutterElement {
 		above: number,
 		markers: readonly GutterMarker[],
 		// IMPORTANT: The `block` variable represents the _starting_ line this GutterElement may belong to
-		//		the annotations _may_ cover multiple lines, but the block will ONLY account for the first line
-		//		In practice, this means that block.to IS NOT the end of the marker
+		// 		the annotations _may_ cover multiple lines, but the block will ONLY account for the first line
+		// 		In practice, this means that block.to IS NOT the end of the marker
 		public block: BlockInfo | null = null,
 	) {
 		super(view, height, above, markers);

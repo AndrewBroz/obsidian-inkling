@@ -1,6 +1,6 @@
 import { EditorSelection } from "@codemirror/state";
+import type { BlockInfo } from "@codemirror/view";
 import { App, MarkdownView } from "obsidian";
-import type {BlockInfo} from "@codemirror/view";
 
 export function codeBlockPostProcessorUpdate(app: App, language: string) {
 	for (const leaf of app.workspace.getLeavesOfType("markdown")) {
@@ -12,7 +12,9 @@ export function codeBlockPostProcessorUpdate(app: App, language: string) {
 				);
 				const original_selection = view.editor.cm.state.selection;
 				view.editor.cm.dispatch({
-					selection: EditorSelection.create(widgets.map((block: BlockInfo) => EditorSelection.range(block.from, block.to))),
+					selection: EditorSelection.create(
+						widgets.map((block: BlockInfo) => EditorSelection.range(block.from, block.to)),
+					),
 					scrollIntoView: false,
 				});
 				view.editor.cm.dispatch({
@@ -30,7 +32,7 @@ export function postProcessorUpdate(app: App) {
 		if (leaf.view instanceof MarkdownView) {
 			for (
 				const section of leaf.view.previewMode.renderer.sections.filter(s => s.el.querySelector(".cmtr-preview"))
-				) {
+			) {
 				section.rendered = false;
 				section.html = "";
 			}
@@ -40,8 +42,8 @@ export function postProcessorUpdate(app: App) {
 }
 
 export function postProcessorRerender(app: App) {
-	for (const leaf of app.workspace.getLeavesOfType("markdown"))
-		if (leaf.view instanceof MarkdownView) {
+	for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+		if (leaf.view instanceof MarkdownView)
 			leaf.view.previewMode.rerender(true);
-		}
+	}
 }

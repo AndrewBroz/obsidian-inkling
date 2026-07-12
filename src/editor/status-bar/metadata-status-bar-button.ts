@@ -1,4 +1,4 @@
-import {Menu, type MenuItem, setIcon} from "obsidian";
+import { Menu, type MenuItem, setIcon } from "obsidian";
 import type CommentatorPlugin from "../../main";
 import { stickyContextMenuPatch } from "../../patches";
 
@@ -47,7 +47,7 @@ export class MetadataStatusBarButton {
 				item.setDisabled(!this.plugin.settings.add_metadata);
 				item.onClick(async () => {
 					await this.plugin.setSetting(setting, !this.plugin.settings[setting]);
-					item.setChecked(this.plugin.settings[setting] as boolean)
+					item.setChecked(this.plugin.settings[setting] as boolean);
 				});
 				item.dom.addClass("cmtr-submenu-nested");
 			});

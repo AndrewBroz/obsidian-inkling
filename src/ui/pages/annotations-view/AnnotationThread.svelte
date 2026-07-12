@@ -1,60 +1,86 @@
 <script lang="ts">
-    import type CommentatorPlugin from "../../../main";
-    import { type CriticMarkupRangeEntry, SUGGESTION_ICON_MAPPER, SuggestionType } from "../../../editor/base";
-    import { MarkdownRenderer, Icon } from "../../components";
-    import { onContextMenu } from "./context-menu";
-    import AnnotationThreadQuickActions from "./AnnotationThreadQuickActions.svelte";
-    import { createMetadataInfoElement } from "../../snippets";
+	import {
+	type CriticMarkupRangeEntry,
+	SUGGESTION_ICON_MAPPER,
+	SuggestionType,
+} from "../../../editor/base";
+import type CommentatorPlugin from "../../../main";
+import { Icon, MarkdownRenderer } from "../../components";
+import { createMetadataInfoElement } from "../../snippets";
+import AnnotationThreadQuickActions from "./AnnotationThreadQuickActions.svelte";
+import { onContextMenu } from "./context-menu";
 
-    interface Props {
-        plugin: CommentatorPlugin;
-        selected_ranges: CriticMarkupRangeEntry[];
-        row: CriticMarkupRangeEntry,
-        index: number;
-        onClick: (evt: MouseEvent, row: Row, index: number) => void;
-        onDblClick: (evt: MouseEvent, row: Row, index: number) => void;
-        menu_open: boolean;
-    }
+interface Props {
+	plugin: CommentatorPlugin;
+	selected_ranges: CriticMarkupRangeEntry[];
+	row: CriticMarkupRangeEntry;
+	index: number;
+	onClick: (evt: MouseEvent, row: Row, index: number) => void;
+	onDblClick: (evt: MouseEvent, row: Row, index: number) => void;
+	menu_open: boolean;
+}
 
-    let {
-        plugin,
-        selected_ranges,
-        row,
-        index,
-        onClick,
-		onDblClick,
-		menu_open = $bindable(false),
-    }: Props = $props();
+let {
+	plugin,
+	selected_ranges,
+	row,
+	index,
+	onClick,
+	onDblClick,
+	menu_open = $bindable(false),
+}: Props = $props();
 
-    let is_focused = $state(false);
-    let hovered_idx = $state<number | null>(null);
-    let menu_open_at_idx = $state(null);
+let is_focused = $state(false);
+let hovered_idx = $state<number | null>(null);
+let menu_open_at_idx = $state(null);
 
-	function setHoveredIndex(idx: number) {
-		if (!menu_open) {
-            hovered_idx = idx;
-            menu_open_at_idx = hovered_idx;
-		}
+function setHoveredIndex(idx: number) {
+	if (!menu_open) {
+		hovered_idx = idx;
+		menu_open_at_idx = hovered_idx;
 	}
+}
 
-    let is_selected = $derived(selected_ranges.some((range) => range.path === row.path && range.range.from === row.range.from));
-
+let is_selected = $derived(
+	selected_ranges.some((range) =>
+		range.path === row.path && range.range.from === row.range.from
+	),
+);
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
-		tabindex={index}
-		class="cmtr-view-range"
-		class:cmtr-view-range-completed={row.range.fields.done}
-		class:cmtr-view-range-selected={is_selected}
-		onmouseenter={() => { setHoveredIndex(0); }}
-		onmouseleave={() => { setHoveredIndex(null); }}
-		onclick={ (e) => { onClick(e, row, index); is_focused = true; } }
-		onblur={() => { is_focused = false; }}
-		ondblclick={(e) => { onDblClick(e, row, index); }}
-		oncontextmenu={(e) => { onContextMenu(plugin, e, selected_ranges.length ? selected_ranges : [{path: row.path, range: row.range.thread[hovered_idx] ?? row.range}]) }}
+	tabindex={index}
+	class="cmtr-view-range"
+	class:cmtr-view-range-completed={row.range.fields.done}
+	class:cmtr-view-range-selected={is_selected}
+	onmouseenter={() => {
+		setHoveredIndex(0);
+	}}
+	onmouseleave={() => {
+		setHoveredIndex(null);
+	}}
+	onclick={(e) => {
+		onClick(e, row, index);
+		is_focused = true;
+	}}
+	onblur={() => {
+		is_focused = false;
+	}}
+	ondblclick={(e) => {
+		onDblClick(e, row, index);
+	}}
+	oncontextmenu={(e) => {
+		onContextMenu(
+			plugin,
+			e,
+			selected_ranges.length ?
+				selected_ranges :
+				[{ path: row.path, range: row.range.thread[hovered_idx] ?? row.range }],
+		);
+	}}
 >
 	{#if (!menu_open && hovered_idx === 0) || (menu_open && menu_open_at_idx === 0)}
 		<AnnotationThreadQuickActions
@@ -75,13 +101,16 @@
 	</div>
 
 	{#key row.range.text}
-		<div class="cmtr-view-range-text"
-			 onmouseenter={() => { setHoveredIndex(0); }}
+		<div
+			class="cmtr-view-range-text"
+			onmouseenter={() => {
+				setHoveredIndex(0);
+			}}
 		>
 			{#if row.range.empty()}
-                  <p class="cmtr-view-range-empty">
-					  This range is empty
-				  </p>
+				<p class="cmtr-view-range-empty">
+					This range is empty
+				</p>
 			{:else}
 				{@const parts = row.range.unwrap_parts()}
 				<MarkdownRenderer
@@ -91,11 +120,7 @@
 					class={row.range.fields.style}
 				/>
 				{#if row.range.type === SuggestionType.SUBSTITUTION}
-					<MarkdownRenderer
-						{plugin}
-						text={parts[1]}
-						source={row.path}
-					/>
+					<MarkdownRenderer {plugin} text={parts[1]} source={row.path} />
 				{/if}
 			{/if}
 		</div>
@@ -104,11 +129,15 @@
 	{#if row.range.replies.length}
 		{#each row.range.replies as reply, idx}
 			{#key reply.text}
-				<div class="cmtr-view-range-reply"
-					onmouseenter={() => { setHoveredIndex(idx + 1); }}
+				<div
+					class="cmtr-view-range-reply"
+					onmouseenter={() => {
+						setHoveredIndex(idx + 1);
+					}}
 					class:cmtr-view-range-reply-hovered={hovered_idx === idx + 1}
 				>
-					{#if (!menu_open && hovered_idx === idx + 1) || (menu_open && menu_open_at_idx === idx + 1)}
+					{#if (!menu_open && hovered_idx === idx + 1) ||
+	(menu_open && menu_open_at_idx === idx + 1)}
 						<AnnotationThreadQuickActions
 							plugin={plugin}
 							entry={{ path: row.path, range: reply }}

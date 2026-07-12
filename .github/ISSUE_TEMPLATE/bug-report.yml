@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         ## User Report
-        
+
         Please describe the issue you encountered as clearly as possible.
         Always check the [console log](https://help.obsidian.md/resources#Capture+console+logs) for errors (open with `Mod/Ctrl+Shift+I`).
         Include any relevant error messages in your report; make sure to remove any sensitive information before submitting.
@@ -52,10 +52,10 @@ body:
   - type: markdown
     attributes:
       value: |
-          ## Additional Data
-        
-          If you have opened an issue via Commentator's settings, the following data will have been automatically filled in.
-          Feel free to remove any information that you do not want to share, but please keep as much as possible.
+        ## Additional Data
+
+        If you have opened an issue via Commentator's settings, the following data will have been automatically filled in.
+        Feel free to remove any information that you do not want to share, but please keep as much as possible.
 
   - type: input
     id: operating-systems
@@ -106,7 +106,7 @@ body:
     attributes:
       value: |
         ## Final Checks
-        
+
         The following checkboxes are not required by any means, and can be safely ignored if they do not apply to your situation.
         But, if you did try any of these, they give us an idea of what other steps you have taken to try and resolve the issue.
 

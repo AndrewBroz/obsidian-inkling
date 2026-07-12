@@ -15,7 +15,7 @@ export function inlineWorkerPlugin(config: BuildOptions = {}) {
 						entryPoints: [workerPath],
 						bundle: true,
 						write: false,
-						format: "iife"
+						format: "iife",
 					});
 
 					// EXPL: Extract the code as a string

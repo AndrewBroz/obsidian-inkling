@@ -1,7 +1,7 @@
 import { App } from "obsidian";
 
-import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
 import { DEFAULT_SETTINGS } from "../src/constants";
+import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
 
 // @ts-ignore (Doesn't like me assigning partial app to App)
 global.app = <Partial<App>> {

@@ -50,7 +50,7 @@ All verified broken as of 2026-07-11:
 
 1. **Falsy-zero bug** in `acceptSuggestions`/`rejectSuggestions`
    (`src/editor/base/edit-logic/alter-suggestion.ts:9-27`): `(from || to)` treats position 0 as
-   "no selection", falling back to *all ranges in the document*. Fix with
+   "no selection", falling back to _all ranges in the document_. Fix with
    `from !== undefined || to !== undefined`; regression test for selection at position 0.
 2. **Stale-index vault edits**: add mtime guard to `applyRangeEditsToVault`
    (`src/editor/uix/workspace.ts:8-35`), mirroring the check `undoRangeEditsToVault` already does
@@ -126,7 +126,7 @@ entry points.
 ### 3d. Frontmatter-enforced mode
 
 - Frontmatter: `commentator: suggest | comment | off`; optional `commentator-authors: [...]` —
-  when present, enforcement applies only to users *not* listed (owner writes freely, reviewers
+  when present, enforcement applies only to users _not_ listed (owner writes freely, reviewers
   forced into the declared mode).
 - On file-open and `metadataCache` change, dispatch per-editor mode via existing
   `plugin-settings.ts` facet infrastructure. Manual toggle locked while enforced, with tooltip.

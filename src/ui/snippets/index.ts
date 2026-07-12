@@ -1,5 +1,5 @@
 import { createMetadataInfoElement } from "./metadata";
 
 export {
-    createMetadataInfoElement,
-}
+	createMetadataInfoElement,
+};

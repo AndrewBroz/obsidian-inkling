@@ -1,11 +1,14 @@
 import { type Editor, type MarkdownView, Platform } from "obsidian";
 
+import { type SelectionRange } from "@codemirror/state";
 import type CommentatorPlugin from "../../main";
 import { type ECommand, EditMode } from "../../types";
-import { type SelectionRange } from "@codemirror/state";
 
+import { showProgressBarNotice } from "../../util/obsidian-util";
+import { pathWithoutExtension } from "../../util/util";
 import {
-	acceptSuggestions, applyToText,
+	acceptSuggestions,
+	applyToText,
 	CM_SuggestionTypes,
 	mark_editor_ranges,
 	rangeParser,
@@ -13,6 +16,7 @@ import {
 	selectionContainsRanges,
 } from "../base";
 import { addCommentToView, generateCriticMarkupPatchFromDiff } from "../base";
+import { annotationGutterFoldAnnotation } from "../renderers/gutters";
 import {
 	editMode,
 	editModeValue,
@@ -21,9 +25,6 @@ import {
 	previewModeState,
 } from "../settings";
 import { getEditMode } from "./extensions/editing-modes";
-import { showProgressBarNotice } from "../../util/obsidian-util";
-import { annotationGutterFoldAnnotation } from "../renderers/gutters";
-import {pathWithoutExtension} from "../../util/util";
 
 export const debug_application_commands = (plugin: CommentatorPlugin) => [
 	{
@@ -38,15 +39,20 @@ export const debug_application_commands = (plugin: CommentatorPlugin) => [
 		id: "progress-bar-notice",
 		name: "(DEBUG) Test Progress Bar Notice",
 		callback: async () => {
-			const progressBarUpdate = showProgressBarNotice("Test progress bar", "Test progress bar finished", 10, 1000, "Test");
+			const progressBarUpdate = showProgressBarNotice(
+				"Test progress bar",
+				"Test progress bar finished",
+				10,
+				1000,
+				"Test",
+			);
 			for (let i = 0; i < 10; i++) {
 				progressBarUpdate(i + 1);
 				await new Promise(resolve => activeWindow.setTimeout(resolve, 300));
 			}
-		}
+		},
 	},
 ];
-
 
 export const suggestion_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugin) =>
 	Object.entries(CM_SuggestionTypes).map(([text, type]) => ({
@@ -94,9 +100,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 				return contains_range;
 			const selections = editor.cm.state.selection.ranges;
 			// @ts-expect-error Somehow selections is any (while ranges is defined)
-			const changes = selections.map(selection =>
-				acceptSuggestions(editor.cm.state, selection.from, selection.to)
-			);
+			const changes = selections.map(selection => acceptSuggestions(editor.cm.state, selection.from, selection.to));
 			editor.cm.dispatch(editor.cm.state.update({
 				changes,
 			}));
@@ -140,8 +144,8 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		regular_callback: (editor: Editor, _) => {
 			editor.cm.dispatch({
 				annotations: [
-					annotationGutterFoldAnnotation.of(null)
-				]
+					annotationGutterFoldAnnotation.of(null),
+				],
 			});
 		},
 	},
@@ -206,22 +210,22 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		editor_context: true,
 		regular_callback: async (editor: Editor, view: MarkdownView) => {
 			if (view.file) {
-				const new_path = plugin.app.vault.getAvailablePath(pathWithoutExtension(view.file.path), view.file.extension)
+				const new_path = plugin.app.vault.getAvailablePath(pathWithoutExtension(view.file.path), view.file.extension);
 				const original_content = await plugin.app.vault.read(view.file);
 				const new_file = await plugin.app.vault.copy(view.file, new_path);
 				const new_content = applyToText(
 					original_content,
 					(range, text) => range.unwrap(),
-					editor.cm.state.field(rangeParser).ranges.ranges
+					editor.cm.state.field(rangeParser).ranges.ranges,
 				);
-				await plugin.app.vault.modify(new_file, new_content)
+				await plugin.app.vault.modify(new_file, new_content);
 				await plugin.app.workspace.getLeaf("tab").openFile(new_file, {
 					active: true,
-					eState: { rename: "all"}
+					eState: { rename: "all" },
 				});
 			}
-		}
-	}
+		},
+	},
 ];
 
 export const application_commmands = (plugin: CommentatorPlugin): ECommand[] => [
@@ -232,7 +236,7 @@ export const application_commmands = (plugin: CommentatorPlugin): ECommand[] => 
 		regular_callback: async () => {
 			await plugin.activateView();
 		},
-	}
+	},
 ];
 
 export const commands: (plugin: CommentatorPlugin) => ECommand[] = (plugin) =>
@@ -241,7 +245,7 @@ export const commands: (plugin: CommentatorPlugin) => ECommand[] = (plugin) =>
 			...suggestion_commands(plugin),
 			...editor_commands(plugin),
 			...application_commmands(plugin),
-			...(process.env.NODE_ENV === "development" ? debug_application_commands(plugin) : [])
+			...(process.env.NODE_ENV === "development" ? debug_application_commands(plugin) : []),
 		],
 	);
 

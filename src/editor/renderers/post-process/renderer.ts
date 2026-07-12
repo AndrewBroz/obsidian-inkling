@@ -1,8 +1,8 @@
 import { decodeHTML, DecodingMode } from "entities";
 import { App, type MarkdownPostProcessorContext, MarkdownView, sanitizeHTMLToDom } from "obsidian";
 
-import { PreviewMode } from "../../../types";
 import type CommentatorPlugin from "../../../main";
+import { PreviewMode } from "../../../types";
 
 import {
 	CM_All_Brackets,
@@ -13,8 +13,8 @@ import {
 	SubstitutionRange,
 	SuggestionType,
 } from "../../base";
-import { renderCommentWidget } from "../live-preview";
 import { previewModeState } from "../../settings";
+import { renderCommentWidget } from "../live-preview";
 
 export function rangePostProcess(
 	app: App,
@@ -43,9 +43,8 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 		// FIXME: Temporarily getting preview mode from the leaf editor state
 		if (plugin.app.workspace.activeLeaf?.view instanceof MarkdownView) {
 			const view = plugin.app.workspace.activeLeaf.view;
-			if (view.previewMode.docId === ctx.docId) {
+			if (view.previewMode.docId === ctx.docId)
 				preview_mode = view.editor.cm.state.field(previewModeState);
-			}
 		}
 
 		const lines = ctx.getSectionInfo(el);
@@ -114,11 +113,10 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 						element_contents,
 					);
 					el.empty();
-					if (typeof new_el === "string") {
+					if (typeof new_el === "string")
 						el.append(sanitizeHTMLToDom(new_el));
-					} else {
+					else
 						el.appendChild(new_el);
-					}
 
 					return;
 				}

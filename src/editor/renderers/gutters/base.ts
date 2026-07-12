@@ -42,9 +42,8 @@ export function sameMarkers(a: readonly GutterMarker[], b: readonly GutterMarker
 	if (a.length != b.length) return false;
 	for (let i = 0; i < a.length; i++) {
 		// @ts-expect-error (compare does exist on marker)
-		if (!a[i].compare(b[i])) {
+		if (!a[i].compare(b[i]))
 			return false;
-		}
 	}
 	return true;
 }
@@ -173,15 +172,14 @@ export class GutterElement {
 						// MODF: Prevents unloading of a marker if it used in both old and new GutterElement
 						// FIXME: This if-check prevents a re-used Marker (specifically, a marker that is used
 						//  	 	in both a old _and_ a new GutterElement) from being completely removed from the DOM
-						//		    This needs to be done, as `AnnotationMarker`s are reused across multiple state updates
+						// 		    This needs to be done, as `AnnotationMarker`s are reused across multiple state updates
 						// 			via the `annotationGutterMarkers` StateField. If the user changes a annotation in
-						//			a single line (which encompasses a GutterElement), all AnnotationMarkers in this
-						//			element get removed, and then re-added to the new GutterElement.
-						//		A more sane solution would be to change the StateField to construct new Markers
-						//		for _all_ markers in a single line, but this requires much more effort.
-						if (!next.preventUnload) {
+						// 			a single line (which encompasses a GutterElement), all AnnotationMarkers in this
+						// 			element get removed, and then re-added to the new GutterElement.
+						// 		A more sane solution would be to change the StateField to construct new Markers
+						// 		for _all_ markers in a single line, but this requires much more effort.
+						if (!next.preventUnload)
 							next.destroy(domPos!);
-						}
 						next.preventUnload = false;
 						// ORIGINAL: next.destroy(domPos!)
 						const after = domPos.nextSibling;
@@ -386,9 +384,7 @@ export class GutterView {
 	}
 
 	getUpdateContexts() {
-		return this.gutters.map(gutter =>
-			new UpdateContext(gutter, this.view.viewport, -this.view.documentPadding.top)
-		);
+		return this.gutters.map(gutter => new UpdateContext(gutter, this.view.viewport, -this.view.documentPadding.top));
 	}
 
 	update(update: ViewUpdate) {

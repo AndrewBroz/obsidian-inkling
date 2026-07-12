@@ -3,10 +3,10 @@ import { EditorView } from "@codemirror/view";
 
 import { editorEditorField } from "obsidian";
 
-import { pluginSettingsField, suggestionMode } from "../src/editor/uix/extensions";
+import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import { acceptSuggestions, rejectSuggestions } from "../src/editor/base/edit-logic/alter-suggestion";
-import { DEFAULT_SETTINGS } from "../src/constants";
+import { pluginSettingsField, suggestionMode } from "../src/editor/uix/extensions";
 
 describe("accept/reject suggestion interval handling", () => {
 	const doc = "hello {++world++}";

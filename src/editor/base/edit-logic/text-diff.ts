@@ -1,6 +1,6 @@
 import DiffMatchPatch from "diff-match-patch";
+import type { PluginSettings } from "../../../types";
 import { create_suggestion } from "../edit-util/range-create";
-import type {PluginSettings} from "../../../types";
 
 DiffMatchPatch.DIFF_DELETE = -1;
 DiffMatchPatch.DIFF_INSERT = 1;

@@ -1,8 +1,8 @@
 import { ItemView, type ViewStateResult, WorkspaceLeaf } from "obsidian";
 
 import { mount, unmount } from "svelte";
-import { AnnotationsViewPage } from "./pages/annotations-view";
 import type CommentatorPlugin from "../main";
+import { AnnotationsViewPage } from "./pages/annotations-view";
 
 export const COMMENTATOR_ANNOTATIONS_VIEW = "commentator-annotations-view";
 
@@ -36,9 +36,8 @@ export class CommentatorAnnotationsView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
-		if (this.view) {
+		if (this.view)
 			await unmount(this.view);
-		}
 		this.containerEl.detach();
 	}
 
@@ -59,7 +58,7 @@ export class CommentatorAnnotationsView extends ItemView {
 		return {
 			...super.getState(),
 			...props,
-		}
+		};
 	}
 
 	async setState(state: Partial<CommentatorAnnotationsViewState>, result: ViewStateResult): Promise<void> {
@@ -77,10 +76,9 @@ export class CommentatorAnnotationsView extends ItemView {
 					...this.props,
 					// TODO: Find a more canonical way to get props synced from the view to the mounter
 					sync_props: (props: CommentatorAnnotationsViewState) => {
-						for (const [key, value] of Object.entries(props)) {
+						for (const [key, value] of Object.entries(props))
 							this.props[key as keyof typeof this.props] = value;
-						}
-					}
+					},
 				},
 			});
 		}

@@ -1,9 +1,9 @@
 import { EditorSelection, EditorState } from "@codemirror/state";
 
+import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
 import { rangeCorrecter } from "../src/editor/uix/extensions/range-correcter";
-import { DEFAULT_SETTINGS } from "../src/constants";
 
 // EXPL: DEFAULT_SETTINGS.enable_metadata is false; with it false, cursorGenerateRanges()
 // (src/editor/base/edit-util/range-parser.ts:12-25) never recognizes the MDSepSub child as

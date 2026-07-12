@@ -1,11 +1,11 @@
 import { EditorState } from "@codemirror/state";
 
+import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser, SuggestionType } from "../src/editor/base";
 import type { EditorSuggestion } from "../src/editor/base/edit-handler";
 import { mark_ranges, MarkAction, type MarkType } from "../src/editor/base/edit-logic/mark";
 import type { MetadataFields } from "../src/editor/base/ranges";
 import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
-import { DEFAULT_SETTINGS } from "../src/constants";
 
 // EXPL: Bare `extensions: [rangeParser]` crashes ("Field is not present in this state") per
 // Tasks 5/7/8 test-infrastructure findings (see tests/range_correcter.test.ts,
@@ -17,7 +17,14 @@ const pluginSettingsField = providePluginSettingsExtension(
 	<any> { settings: { ...DEFAULT_SETTINGS, enable_metadata: true, enable_author_metadata: true } },
 );
 
-function mark(doc: string, from: number, to: number, inserted: string, type: MarkType, metadata_fields?: MetadataFields): string {
+function mark(
+	doc: string,
+	from: number,
+	to: number,
+	inserted: string,
+	type: MarkType,
+	metadata_fields?: MetadataFields,
+): string {
 	const state = EditorState.create({ doc, extensions: [rangeParser, pluginSettingsField] });
 	const ranges = state.field(rangeParser).ranges;
 	const edits: EditorSuggestion[] = mark_ranges(ranges, state.doc, from, to, inserted, type, metadata_fields);

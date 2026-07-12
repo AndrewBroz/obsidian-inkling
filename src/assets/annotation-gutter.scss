@@ -3,9 +3,7 @@
   max-width: calc(var(--file-line-width) + var(--cmtr-anno-gutter-width, 0));
 }
 
-.cm-gutters.cm-gutters.cm-gutters.cm-gutters:has(
-    .is-minimal.cmtr-anno-gutter
-  ) {
+.cm-gutters.cm-gutters.cm-gutters.cm-gutters:has(.is-minimal.cmtr-anno-gutter) {
   position: sticky !important;
 }
 
@@ -44,7 +42,7 @@
 }
 
 .cmtr-anno-gutter-thread-highlight {
-  border-color: var(--interactive-accent)
+  border-color: var(--interactive-accent);
 }
 
 .cmtr-anno-gutter-annotation {
@@ -122,7 +120,10 @@
   position: absolute;
 
   background: transparent;
-  transition: background-color 200ms ease-in-out, border-color 200ms ease-in-out, opacity 200ms ease-in-out;
+  transition:
+    background-color 200ms ease-in-out,
+    border-color 200ms ease-in-out,
+    opacity 200ms ease-in-out;
 
   border: unset;
   margin: 0;
@@ -137,10 +138,10 @@
   width: var(--divider-width-hover);
 
   cursor: col-resize;
-
 }
 
-.cmtr-anno-gutter-resize-handle:hover, .cmtr-anno-gutter-resize-handle-hover {
+.cmtr-anno-gutter-resize-handle:hover,
+.cmtr-anno-gutter-resize-handle-hover {
   background: var(--divider-color-hover);
   border-color: var(--divider-color-hover);
 }
@@ -154,7 +155,6 @@
   top: calc(var(--file-margins) + 60px);
   transform: translateX(-36px);
   z-index: 1000;
-
 }
 
 // EXPL: If the gutter is placed inside an embed, it should be positioned absolutely
@@ -163,14 +163,13 @@
   top: 0;
 }
 
-
 .cmtr-anno-gutter-button a {
   position: absolute;
   color: var(--text-faint);
   transition:
-          color 200ms ease-in-out 0ms,
-          right 400ms ease-in-out,
-          rotate 200ms ease-in-out;
+    color 200ms ease-in-out 0ms,
+    right 400ms ease-in-out,
+    rotate 200ms ease-in-out;
 }
 
 .cmtr-anno-gutter-button a:hover {

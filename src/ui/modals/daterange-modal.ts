@@ -26,14 +26,13 @@ export class DaterangeModal extends Modal {
 				onClose: async (e: string | string[] | null) => {
 					this.callback(e);
 					super.close();
-				}
-			}
+				},
+			},
 		});
 	}
 
 	onClose() {
-		if (this.view) {
+		if (this.view)
 			unmount(this.view);
-		}
 	}
 }

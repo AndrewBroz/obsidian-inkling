@@ -1,5 +1,5 @@
-import { CriticMarkupRange, type METADATA_TYPE, type MetadataFields } from "../ranges";
 import type { PluginSettings } from "../../../types";
+import { CriticMarkupRange, type METADATA_TYPE, type MetadataFields } from "../ranges";
 
 export type MetadataCompatibility = {
 	[key in METADATA_TYPE]?: MetadataMergeAction;

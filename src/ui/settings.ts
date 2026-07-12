@@ -27,8 +27,7 @@ export class CommentatorSettings extends PluginSettingTab {
 
 	hide(): void {
 		super.hide();
-		if (this.view) {
+		if (this.view)
 			unmount(this.view);
-		}
 	}
 }

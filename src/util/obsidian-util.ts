@@ -1,4 +1,4 @@
-import {apiVersion, App, type Menu, MenuItem, Notice, Platform} from "obsidian";
+import { apiVersion, App, type Menu, MenuItem, Notice, Platform } from "obsidian";
 
 /**
  * Helper function for opening the settings tab of the plugin
@@ -25,14 +25,14 @@ export async function getObsidianData(app: App) {
 	if (Platform.isMobileApp) {
 		// @ts-expect-error (nativePromise exists and is used internally)
 		const app_info = await window.Capacitor.nativePromise("App", "getInfo");
-		if (app_info) {
+		if (app_info)
 			framework_version = app_info.version + " (" + app_info.build + ")";
-		}
 
 		// @ts-expect-error (nativePromise exists and is used internally)
 		const device_info = await window.Capacitor.nativePromise("Device", "getInfo");
 		if (device_info) {
-			operating_system = `${device_info.platform} ${device_info.osVersion} (${device_info.manufacturer} ${device_info.model})`;
+			operating_system =
+				`${device_info.platform} ${device_info.osVersion} (${device_info.manufacturer} ${device_info.model})`;
 		} else {
 			operating_system = navigator.userAgent.match(/(Android|iOS) ([\d.]+)/)?.[0] || "unknown";
 		}
@@ -71,7 +71,11 @@ export async function getObsidianData(app: App) {
  * @param data - Debug information
  * @returns {string} - URL to create a new issue on GitHub
  */
-export async function generateGithubIssueLink(app: App, title: string, data: Record<string, string> = {}): Promise<string> {
+export async function generateGithubIssueLink(
+	app: App,
+	title: string,
+	data: Record<string, string> = {},
+): Promise<string> {
 	const base_data = await getObsidianData(app);
 	const issue_data = { ...base_data, ...data };
 
@@ -143,7 +147,13 @@ export function getViewPrototype<T>(
  * @param duration - The duration in milliseconds to keep the notice visible after completion (default is 300ms)
  * @param description - Optional small description to display in the notice
  */
-export function showProgressBarNotice(initialMessage: string, finishedMessage: string, numOperations: number = 100, duration: number = 3000, description?: string) {
+export function showProgressBarNotice(
+	initialMessage: string,
+	finishedMessage: string,
+	numOperations: number = 100,
+	duration: number = 3000,
+	description?: string,
+) {
 	const notice = new Notice("", 0);
 	notice.messageEl.appendChild(createEl("span", { text: initialMessage }));
 
@@ -167,16 +177,16 @@ export function showProgressBarNotice(initialMessage: string, finishedMessage: s
 		} else {
 			progressBar.value = Math.round(val);
 		}
-	}
+	};
 }
 
 export function menuSingleChoiceExclusive<T>(
 	menu: Menu,
 	current_value: T,
-	options: { icon: string, value: T, tooltip: string}[],
+	options: { icon: string; value: T; tooltip: string }[],
 	onChange: (value: T) => void,
 ) {
-	for (const { icon, tooltip, value} of options) {
+	for (const { icon, tooltip, value } of options) {
 		menu.addItem((item) => {
 			item
 				.setTitle(tooltip)

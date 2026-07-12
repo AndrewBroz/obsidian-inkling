@@ -9,7 +9,7 @@ Final state: `bun run build` clean; `bun run test` 1081/1081 across 6 suites (ba
 
 1. **Substitution separator destruction in rangeCorrecter** (fixed in `a1d2996`).
    `SubstitutionRange.unwrap()` strips the `~>` separator (substitution_range.ts:26-28), so the
-   *original shipped code* corrupted every substitution range it "corrected" — deleting the
+   _original shipped code_ corrupted every substitution range it "corrected" — deleting the
    separator along with the metadata. The plan's replacement code shared the bug; the landed fix
    rebuilds via `unwrap_parts().join("~>")`. Regression-tested with a separator-survival assertion.
 
@@ -25,9 +25,9 @@ Final state: `bun run build` clean; `bun run test` 1081/1081 across 6 suites (ba
    - `ab{++cd++}ef` + delete `cd` → `ab{--cd--}ef`: same resurrection of `cd`
    - `x{~~y~>z~~}u` + substitute-all → `{~~xyzu~>new~~}`: resurrects `z`
    - `uv{++w++}{++y++}z` + substitute-all → `{~~uvwyz~>q~~}`: resurrects `w`, `y`
-   Root fix belongs in `mark_range`'s fold-in logic (drop pending-addition text when folding into
-   deletion/substitution). Should be scheduled early in Phase 3 (before comment mode builds on
-   suggestion semantics) or as a Phase 2 rider. Do NOT update the snapshots to hide this.
+     Root fix belongs in `mark_range`'s fold-in logic (drop pending-addition text when folding into
+     deletion/substitution). Should be scheduled early in Phase 3 (before comment mode builds on
+     suggestion semantics) or as a Phase 2 rider. Do NOT update the snapshots to hide this.
 
 ## Recorded spec deviation (Task 6)
 

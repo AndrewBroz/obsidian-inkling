@@ -1,6 +1,7 @@
 import { EditorSelection, Text } from "@codemirror/state";
 import type { Editor } from "obsidian";
 import { type PluginSettings } from "../../../types";
+import { pluginSettingsField } from "../../uix";
 import { type EditorSuggestion } from "../edit-handler";
 import { type MetadataCompatibility, MetadataMergeAction, range_metadata_compatible, rangeParser } from "../edit-util";
 import { generate_metadata } from "../edit-util/metadata";
@@ -13,7 +14,6 @@ import {
 	SubstitutionRange,
 	SuggestionType,
 } from "../ranges";
-import {pluginSettingsField} from "../../uix";
 
 export enum MarkAction {
 	REGULAR = "regular",

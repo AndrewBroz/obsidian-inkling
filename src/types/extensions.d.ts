@@ -1,7 +1,7 @@
 import IntervalTree, { Node } from "@flatten-js/interval-tree";
-import CommentatorPlugin from "../main";
-import { PluginsPluginsRecord } from "obsidian-typings";
 import { App } from "obsidian";
+import { PluginsPluginsRecord } from "obsidian-typings";
+import CommentatorPlugin from "../main";
 
 declare module "@flatten-js/interval-tree" {
 	export default interface IntervalTree<T = unknown> {

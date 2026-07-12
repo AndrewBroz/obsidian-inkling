@@ -1,15 +1,31 @@
 import { Compartment } from "@codemirror/state";
-import { annotation_gutter, AnnotationGutterView, annotationGutterView,
-	annotationGutterFocusAnnotation, annotationGutterFoldAnnotation, annotationGutterWidthAnnotation, annotationGutterHideEmptyAnnotation,
-	annotationGutterResizeHandleAnnotation, annotationGutterFoldButtonAnnotation, annotationGutterFocusThreadAnnotation
- } from "./annotation-gutter";
-import { annotationGutterMarkers, AnnotationMarker } from "./marker";
 import type CommentatorPlugin from "../../../../main";
+import {
+	annotation_gutter,
+	annotationGutterFocusAnnotation,
+	annotationGutterFocusThreadAnnotation,
+	annotationGutterFoldAnnotation,
+	annotationGutterFoldButtonAnnotation,
+	annotationGutterHideEmptyAnnotation,
+	annotationGutterResizeHandleAnnotation,
+	AnnotationGutterView,
+	annotationGutterView,
+	annotationGutterWidthAnnotation,
+} from "./annotation-gutter";
+import { annotationGutterMarkers, AnnotationMarker } from "./marker";
 
 export {
-	AnnotationGutterView, annotationGutterMarkers, AnnotationMarker, annotationGutterView,
-	annotationGutterFocusAnnotation, annotationGutterFoldAnnotation, annotationGutterWidthAnnotation, annotationGutterHideEmptyAnnotation,
-	annotationGutterResizeHandleAnnotation, annotationGutterFoldButtonAnnotation, annotationGutterFocusThreadAnnotation,
+	annotationGutterFocusAnnotation,
+	annotationGutterFocusThreadAnnotation,
+	annotationGutterFoldAnnotation,
+	annotationGutterFoldButtonAnnotation,
+	annotationGutterHideEmptyAnnotation,
+	annotationGutterMarkers,
+	annotationGutterResizeHandleAnnotation,
+	AnnotationGutterView,
+	annotationGutterView,
+	annotationGutterWidthAnnotation,
+	AnnotationMarker,
 };
 
 // NOTE: Keep the gutter here, as Obsidian *really* does not like the circular reference
@@ -28,5 +44,3 @@ export const annotationGutter = (plugin: CommentatorPlugin) => {
 };
 
 export const annotationGutterCompartment = new Compartment();
-
-
