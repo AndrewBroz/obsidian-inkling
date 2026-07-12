@@ -233,10 +233,7 @@ export interface AnnotationGutterConfig extends GutterConfig {
 export function annotation_gutter(
 	config: AnnotationGutterConfig,
 ): { extension: Extension; config: Required<AnnotationGutterConfig> } {
-	return createGutterWithConfig(annotationGutterView, config, activeGutters, unfixGutters) as {
-		extension: Extension;
-		config: Required<AnnotationGutterConfig>;
-	};
+	return createGutterWithConfig(annotationGutterView, config, activeGutters, unfixGutters);
 }
 
 class AnnotationUpdateContext extends UpdateContext {

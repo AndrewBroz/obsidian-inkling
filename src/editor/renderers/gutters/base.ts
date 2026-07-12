@@ -562,13 +562,13 @@ export function createGutter(
  * EXPL: The returned object is the exact instance the gutter reads; callers may mutate it
  *       to communicate initial width/fold state before the gutter initializes.
  */
-export function createGutterWithConfig(
+export function createGutterWithConfig<C extends GutterConfig>(
 	viewplugin: ViewPlugin<GutterView>,
-	config: GutterConfig,
-	activeGutters: Facet<Required<GutterConfig>>,
+	config: C,
+	activeGutters: Facet<Required<C>>,
 	unfixGutters: Facet<boolean, boolean>,
-): { extension: Extension; config: Required<GutterConfig> } {
-	const merged = { ...defaults, ...config } as Required<GutterConfig>;
+): { extension: Extension; config: Required<C> } {
+	const merged = { ...defaults, ...config } as unknown as Required<C>;
 	return {
 		extension: [createGutterExtension(viewplugin, {}, unfixGutters), activeGutters.of(merged)],
 		config: merged,
