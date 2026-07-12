@@ -11,7 +11,6 @@ import {
 	SubstitutionRange,
 } from "../src/editor/base";
 
-import { App } from "obsidian";
 import { DEFAULT_SETTINGS } from "../src/constants";
 
 const test_cases = [
@@ -33,13 +32,6 @@ const test_cases = [
 	"x{~~y~>z~~}{~~v~>w~~}ll",
 	"x{~~~>~~}u",
 ];
-
-// @ts-ignore (Doesn't like me assigning partial app to App)
-global.app = <Partial<App>> {
-	workspace: {
-		activeEditor: null,
-	},
-};
 
 const movement_directions = ["ArrowLeft", "ArrowRight", "Mod-ArrowLeft", "Mod-ArrowRight"];
 

@@ -93,7 +93,6 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 			if (checking || !contains_range)
 				return contains_range;
 			const selections = editor.cm.state.selection.ranges;
-			// @ts-expect-error Somehow selections is any (while ranges is defined)
 			const changes = selections.map(selection =>
 				acceptSuggestions(editor.cm.state, selection.from, selection.to)
 			);

@@ -5,10 +5,17 @@ module.exports = {
 	collectCoverage: false,
 
 	transform: {
-		'^.+\\.ts$': 'ts-jest',
+		'^.+\\.ts$': ['ts-jest', {
+			useESM: true,
+			tsconfig: {
+				verbatimModuleSyntax: false,
+			}
+		}],
 		"^.+\\.(js|jsx)$": "esbuild-jest"
 	},
+	extensionsToTreatAsEsm: ['.ts'],
 
+	setupFiles: ["<rootDir>/tests/setup.ts"],
 
 	moduleDirectories: ["node_modules", "src", "tests"],
 	moduleFileExtensions: ['js', 'ts'],
