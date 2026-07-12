@@ -34,6 +34,7 @@ import {
 	ContentFilter,
 	filterRanges,
 	LocationFilter,
+	ResolvedFilter,
 	SuggestionTypeFilter,
 } from "./filter-ranges";
 
@@ -44,6 +45,7 @@ interface Props {
 	content_filter?: ContentFilter;
 	author_filter?: AuthorFilter;
 	date_filter?: number[] | undefined;
+	resolved_filter?: ResolvedFilter;
 
 	sync_props: (args: CommentatorAnnotationsViewState) => void;
 }
@@ -55,6 +57,7 @@ let {
 	content_filter = ContentFilter.ALL,
 	author_filter = AuthorFilter.ALL,
 	date_filter = undefined,
+	resolved_filter = ResolvedFilter.UNRESOLVED,
 
 	sync_props,
 }: Props = $props();
@@ -146,6 +149,20 @@ const author_filters = [
 	},
 ];
 
+const resolved_filters = [
+	{ icon: "list", tooltip: "All threads", value: ResolvedFilter.ALL },
+	{
+		icon: "circle",
+		tooltip: "Unresolved threads",
+		value: ResolvedFilter.UNRESOLVED,
+	},
+	{
+		icon: "circle-check",
+		tooltip: "Resolved threads",
+		value: ResolvedFilter.RESOLVED,
+	},
+];
+
 onMount(() => {
 	plugin.database.on("database-update", (ranges) => {
 		all_ranges = ranges;
@@ -168,6 +185,7 @@ let filtered_items = $derived(
 		author_filter,
 		date_filter,
 		active_file,
+		resolved_filter,
 	),
 );
 let description_blurb = $derived.by(() => {
@@ -189,6 +207,7 @@ const save_view_state = debounce(
 				author_filter,
 				date_filter,
 				search_filter,
+				resolved_filter,
 			},
 		);
 		plugin.app.workspace.requestSaveLayout();
@@ -202,6 +221,7 @@ $effect(() => {
 	content_filter;
 	author_filter;
 	date_filter;
+	resolved_filter;
 	save_view_state();
 });
 
@@ -357,6 +377,27 @@ async function onClickOutside() {
 						bind:value={content_filter}
 						states={content_filters}
 					/>
+					<StateButton
+						onContextMenu={(e) => {
+							let menu = new Menu();
+
+							resolved_filters.map((filter, index) => {
+								menu.addItem((item) => {
+									item
+										.setTitle(filter.tooltip)
+										.setIcon(filter.icon)
+										.onClick(() => {
+											resolved_filter = index;
+										});
+								});
+							});
+
+							menu.showAtMouseEvent(e);
+						}}
+						class="cmtr-view-action clickable-icon nav-action-button"
+						bind:value={resolved_filter}
+						states={resolved_filters}
+					/>
 					{#if plugin.settings.enable_metadata}
 						{#if plugin.settings.enable_author_metadata}
 							<StateButton
@@ -472,7 +513,24 @@ async function onClickOutside() {
 										author_filter = AuthorFilter.ALL;
 										date_filter = undefined;
 										search_filter = "";
+										resolved_filter = ResolvedFilter.UNRESOLVED;
 									});
+							});
+
+							menu.addItem((item) => {
+								const submenu = item
+									.setTitle("Filter by resolved")
+									.setIcon("circle-check")
+									.setSection("filter-actions")
+									.setSubmenu();
+								menuSingleChoiceExclusive(
+									submenu,
+									resolved_filter,
+									resolved_filters,
+									(value) => {
+										resolved_filter = value;
+									},
+								);
 							});
 
 							menu.addItem((item) => {

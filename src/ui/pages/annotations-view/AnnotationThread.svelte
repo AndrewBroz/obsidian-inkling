@@ -46,6 +46,13 @@ let is_selected = $derived(
 		range.path === row.path && range.range.from === row.range.from
 	),
 );
+
+// EXPL: An anchored highlight (HIGHLIGHT with replies) is the quote the thread is attached to,
+// not a comment itself — render it as a muted quote instead of a full comment card. Standalone
+// highlights (no replies) keep today's rendering.
+let is_anchor_quote = $derived(
+	row.range.type === SuggestionType.HIGHLIGHT && row.range.replies.length > 0,
+);
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -86,6 +93,7 @@ let is_selected = $derived(
 		<AnnotationThreadQuickActions
 			plugin={plugin}
 			entry={row}
+			is_base={true}
 			bind:menu_open={menu_open}
 			moreOptionsMenu={onContextMenu}
 		/>
@@ -96,13 +104,16 @@ let is_selected = $derived(
 		<Icon size={24} icon={SUGGESTION_ICON_MAPPER[row.range.type]} />
 		<div>
 			<span class="cmtr-view-range-title">{row.path}</span>
-			{@html createMetadataInfoElement(row.range, "", "icon").outerHTML}
+			{#if !is_anchor_quote}
+				{@html createMetadataInfoElement(row.range, "", "icon").outerHTML}
+			{/if}
 		</div>
 	</div>
 
 	{#key row.range.text}
 		<div
 			class="cmtr-view-range-text"
+			class:cmtr-view-range-anchor-quote={is_anchor_quote}
 			onmouseenter={() => {
 				setHoveredIndex(0);
 			}}

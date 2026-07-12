@@ -8,7 +8,9 @@ import {
 	CommentRange,
 	type CriticMarkupRangeEntry,
 	groupRangeEntryByPath,
+	range_source_with_fields,
 	SuggestionType,
+	thread_resolved,
 } from "../../../editor/base";
 import { annotationGutterFocusAnnotation } from "../../../editor/renderers/gutters";
 import { applyRangeEditsToVault, centerRangeInEditorView } from "../../../editor/uix";
@@ -23,6 +25,15 @@ export function onContextMenu(
 	const used_types = new Set(ranges.map((range) => range.range.type));
 	const use_warning = ranges.length > 20;
 	const multiple_ranges = ranges.length > 1;
+
+	// EXPL: Resolve/reopen always act on whole threads (base_range.full_thread), regardless of
+	// whether the base or one of its replies was the range actually right-clicked/selected —
+	// same semantics as the gutter's resolve_thread/reopen_thread. Dedupe by base range identity
+	// so a thread selected via multiple of its own replies isn't rewritten more than once (which
+	// would corrupt applyToText's sequential span replacement).
+	const base_entries = [...new Map(
+		ranges.map((entry) => [entry.range.base_range, { path: entry.path, range: entry.range.base_range }]),
+	).values()];
 
 	// EXPL: Only suggestions are used
 	if (!(used_types.has(SuggestionType.COMMENT) || used_types.has(SuggestionType.HIGHLIGHT))) {
@@ -65,6 +76,45 @@ export function onContextMenu(
 				.onClick(async () => applyRangeEditsToVault(plugin, ranges, applyToFile.bind(null, (range, _) => "")));
 		});
 	}
+
+	menu.addItem((item) => {
+		// EXPL: A thread is resolved iff its base carries `done: true` (see `thread_resolved`).
+		// When multiple threads are selected with a mixed resolved state, resolve wins — the
+		// action always moves every selected thread toward "resolved".
+		const any_unresolved = base_entries.some((entry) => !thread_resolved(entry.range));
+		if (any_unresolved) {
+			item
+				.setTitle(multiple_ranges ? "Resolve selected threads" : "Resolve thread")
+				.setIcon("check")
+				.setSection("close-annotation")
+				.onClick(async () =>
+					applyRangeEditsToVault(
+						plugin,
+						base_entries,
+						applyToFile.bind(
+							null,
+							(range, _) => range_source_with_fields(range, { ...range.fields, done: true }),
+						),
+					)
+				);
+		} else {
+			item
+				.setTitle(multiple_ranges ? "Reopen selected threads" : "Reopen thread")
+				.setIcon("rotate-ccw")
+				.setSection("close-annotation")
+				.onClick(async () =>
+					applyRangeEditsToVault(
+						plugin,
+						base_entries,
+						applyToFile.bind(null, (range, _) => {
+							const fields = { ...range.fields };
+							delete fields.done;
+							return range_source_with_fields(range, fields);
+						}),
+					)
+				);
+		}
+	});
 
 	if (!multiple_ranges) {
 		const { range, path } = ranges[0];

@@ -3,7 +3,9 @@
 import {
 	applyToFile,
 	type CriticMarkupRangeEntry,
+	range_source_with_fields,
 	SuggestionType,
+	thread_resolved,
 } from "../../../editor/base";
 import {
 	applyRangeEditsToVault,
@@ -17,6 +19,10 @@ interface Props {
 
 	entry: CriticMarkupRangeEntry;
 
+	// EXPL: Resolve/reopen apply to the whole thread and are only shown on the base entry, not
+	// on individual replies.
+	is_base?: boolean;
+
 	menu_open?: boolean;
 	moreOptionsMenu: (
 		plugin: any,
@@ -29,6 +35,8 @@ let {
 	plugin,
 
 	entry,
+
+	is_base = false,
 
 	menu_open = $bindable(false),
 	moreOptionsMenu,
@@ -82,6 +90,39 @@ let {
 					applyToFile.bind(null, (range, _) => range.reject()),
 				))}
 			/>
+		{/if}
+
+		{#if is_base}
+			{#if thread_resolved(entry.range)}
+				<Button
+					icon="rotate-ccw"
+					tooltip="Reopen thread"
+					onClick={(() =>
+					applyRangeEditsToVault(
+						plugin,
+						[entry],
+						applyToFile.bind(null, (range, _) => {
+							const fields = { ...range.fields };
+							delete fields.done;
+							return range_source_with_fields(range, fields);
+						}),
+						true,
+					))}
+				/>
+			{:else}
+				<Button
+					icon="check"
+					tooltip="Resolve thread"
+					onClick={(() =>
+					applyRangeEditsToVault(
+						plugin,
+						[entry],
+						applyToFile.bind(null, (range, _) =>
+							range_source_with_fields(range, { ...range.fields, done: true })),
+						true,
+					))}
+				/>
+			{/if}
 		{/if}
 
 		<div class="cmtr-view-suggestion-button-sep"></div>

@@ -29,6 +29,18 @@
   padding-left: 30px;
 }
 
+.cmtr-view-range-anchor-quote {
+  font-size: var(--font-smaller);
+  color: var(--text-muted);
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: var(--size-4-2);
+  margin-left: 30px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
 .cmtr-view-range-completed {
   background: var(--background-primary-alt);
   color: var(--text-muted);

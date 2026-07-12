@@ -1,7 +1,12 @@
 import { search } from "@codemirror/search";
 import { prepareSimpleSearch, TFile } from "obsidian";
 import { type DatabaseEntry } from "../../../database";
-import { type CommentRange, type CriticMarkupRange, SuggestionType } from "../../../editor/base";
+import {
+	type CommentRange,
+	type CriticMarkupRange,
+	SuggestionType,
+	thread_resolved,
+} from "../../../editor/base";
 import type CommentatorPlugin from "../../../main";
 
 export const enum SuggestionTypeFilter {
@@ -31,6 +36,12 @@ export const enum AuthorFilter {
 	OTHERS,
 }
 
+export const enum ResolvedFilter {
+	ALL,
+	UNRESOLVED,
+	RESOLVED,
+}
+
 const SuggestionTypeValues = Object.values(SuggestionType);
 
 /**
@@ -44,6 +55,7 @@ const SuggestionTypeValues = Object.values(SuggestionType);
  * @param author_filter - Filter by author of the range.
  * @param date_filter - Filter by date range of the range's metadata.
  * @param active_file - The currently active file in the editor, used for location filtering.
+ * @param resolved_filter - Filter by resolved status of the thread (defaults to UNRESOLVED).
  */
 export function filterRanges(
 	plugin: CommentatorPlugin,
@@ -55,6 +67,7 @@ export function filterRanges(
 	author_filter?: AuthorFilter,
 	date_filter?: number[],
 	active_file?: TFile | null,
+	resolved_filter: ResolvedFilter = ResolvedFilter.UNRESOLVED,
 ) {
 	if (!items)
 		return [];
@@ -88,6 +101,14 @@ export function filterRanges(
 			item.range.type !== SuggestionType.COMMENT ||
 			!(item.range as CommentRange).attached_comment,
 	);
+
+	// EXPL: Filter by resolved status. Independent of enable_metadata: when metadata parsing is
+	// off, no range ever carries `done`, so everything is simply unresolved.
+	if (resolved_filter !== ResolvedFilter.ALL) {
+		filtered_ranges = filtered_ranges.filter(
+			(item) => thread_resolved(item.range) === (resolved_filter === ResolvedFilter.RESOLVED),
+		);
+	}
 
 	// EXPL: Filter by type (addition, deletion, etc.)
 	if (range_type_filter !== undefined && range_type_filter !== SuggestionTypeFilter.ALL) {

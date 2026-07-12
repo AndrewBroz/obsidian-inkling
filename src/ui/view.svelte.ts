@@ -3,6 +3,7 @@ import { ItemView, type ViewStateResult, WorkspaceLeaf } from "obsidian";
 import { mount, unmount } from "svelte";
 import type CommentatorPlugin from "../main";
 import { AnnotationsViewPage } from "./pages/annotations-view";
+import { ResolvedFilter } from "./pages/annotations-view/filter-ranges";
 
 export const COMMENTATOR_ANNOTATIONS_VIEW = "commentator-annotations-view";
 
@@ -12,6 +13,7 @@ export interface CommentatorAnnotationsViewState {
 	content_filter: number;
 	author_filter: number;
 	date_filter: number[];
+	resolved_filter: number;
 }
 
 export class CommentatorAnnotationsView extends ItemView {
@@ -23,6 +25,7 @@ export class CommentatorAnnotationsView extends ItemView {
 		content_filter: undefined,
 		author_filter: undefined,
 		date_filter: undefined,
+		resolved_filter: undefined,
 	});
 
 	constructor(leaf: WorkspaceLeaf, public plugin: CommentatorPlugin) {
@@ -67,6 +70,9 @@ export class CommentatorAnnotationsView extends ItemView {
 		this.props.content_filter = state.content_filter || 0;
 		this.props.author_filter = state.author_filter || 0;
 		this.props.date_filter = state.date_filter || undefined;
+		// EXPL: Default to UNRESOLVED (Google Docs behavior) rather than the falsy-0 pattern
+		// used above, since ResolvedFilter.ALL is 0 and would otherwise become the default.
+		this.props.resolved_filter = state.resolved_filter ?? ResolvedFilter.UNRESOLVED;
 
 		if (!this.view) {
 			this.props.plugin = this.plugin;
