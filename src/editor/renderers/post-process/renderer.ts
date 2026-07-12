@@ -12,6 +12,7 @@ import {
 	RANGE_PROTOTYPE_MAPPER,
 	SubstitutionRange,
 	SuggestionType,
+	thread_resolvable,
 	thread_resolved,
 } from "../../base";
 import { previewModeState } from "../../settings";
@@ -30,7 +31,10 @@ export function rangePostProcess(
 		// EXPL: Resolved comment threads render as nothing in reading view (no icon, no inline
 		//       text) — comment text is not document text, unlike a resolved highlight's anchor.
 		//       Annotations View remains the place to review resolved threads.
-		if (thread_resolved(range))
+		//       thread_resolvable gates on the BASE type: a comment attached to a legacy
+		//       done-flagged SUGGESTION base must stay visible — the suggestion is not a
+		//       resolvable thread (accept/reject is its lifecycle, not resolve/reopen).
+		if (thread_resolvable(range) && thread_resolved(range))
 			return "";
 		return renderCommentWidget(app, range as CommentRange, text, unwrap);
 	} else {

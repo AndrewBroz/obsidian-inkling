@@ -176,6 +176,20 @@ describe("postprocess for resolved ranges (reading view)", () => {
 		expect(rendered).not.toContain("cmtr-resolved");
 	});
 
+	// EXPL: A COMMENT attached to a suggestion base reads `done` from that base via
+	//       base_range — a legacy done-flagged ADDITION must NOT make its attached comment
+	//       vanish in reading view: the suggestion is not a resolvable thread, so its
+	//       comment stays visible (widget rendered, not "").
+	test("comment attached to a done-flagged ADDITION base still renders its widget", () => {
+		const state = createRangeState(`{++{"done":true}@@add++}{>>c<<}`);
+		const ranges = state.field(rangeParser).ranges.ranges;
+		const comment = ranges[1];
+		expect(comment.base_range).toBe(ranges[0]);
+
+		const rendered = rangePostProcess(null as unknown as App, comment);
+		expect(rendered).not.toBe("");
+	});
+
 	// EXPL: The base-class postprocess `done` branch is gated to HIGHLIGHT — invoked via the base
 	//       implementation directly (the path shared by TempRange-style prototype dispatch), a
 	//       done-flagged DELETION must keep cmtr-deletion rather than render as accepted plain text.

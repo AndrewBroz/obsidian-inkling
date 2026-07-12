@@ -15,6 +15,20 @@ global.app = <Partial<App>> {
 // it for scheduling; jsdom doesn't provide it, so mirror Obsidian's default.
 (global as any).activeWindow = window;
 
+// Obsidian augments the DOM with global element-creation helpers (createSpan,
+// createDiv). Widget rendering code (renderCommentWidget) uses them at
+// construction time; jsdom doesn't provide them, so shim the minimal shape
+// (element + optional class) that the code under test relies on.
+function createElHelper(tag: string) {
+	return (o?: { cls?: string }) => {
+		const el = document.createElement(tag);
+		if (o?.cls) el.className = o.cls;
+		return el;
+	};
+}
+(global as any).createSpan = createElHelper("span");
+(global as any).createDiv = createElHelper("div");
+
 // `pluginSettingsField` (used by rangeParser) is only populated once the real
 // plugin calls `providePluginSettingsExtension(plugin)` from its onload().
 // Outside the running app nothing does that, so populate it here with the
