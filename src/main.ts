@@ -357,7 +357,6 @@ export default class CommentatorPlugin extends Plugin {
 		//       attribution defaults. See backfillLegacyMetadataFlags in constants.ts.
 		backfillLegacyMetadataFlags(this.settings, new_settings);
 		backfillMarkupFocus(this.settings);
-		disableDiffGutterOnce(this.settings, new_settings);
 		this.previous_settings = Object.assign({}, original_settings, this.settings);
 
 		// EXPL: Do not migrate new installs, immediately save settings
@@ -406,6 +405,11 @@ export default class CommentatorPlugin extends Plugin {
 							}
 						}
 					}
+
+					// EXPL: Must run AFTER the 0.2.x rename migration (lines 383–407), which can
+					//       (re)introduce diff_gutter from suggestion_gutter. If run before, the
+					//       migration would override the one-time flip and the bars would remain on.
+					disableDiffGutterOnce(this.settings, new_settings);
 
 					this.settings.version = DEFAULT_SETTINGS.version;
 					await this.setSettings();

@@ -238,6 +238,21 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
   persist across restarts.
 - Plugin list shows "By Andrew Brož" and the one-sentence description.
 
+### Known follow-ups (Phase 5)
+
+- **(a) Reading-view fully-enclosed-block double-wash:** `{==...==}` in reading view can stack with
+  Obsidian's native `==highlight==` wash (renderer.ts:78–133, pre-existing path for block-transition
+  TempRanges). Smoke-test item: add "full-paragraph highlight in reading view" to the Phase 6+
+  smoke checklist.
+- **(b) Descendant neutralizer side effect:** the dual-direction neutralizer on `.cmtr-highlight`
+  (fixing the stacked-wash box) also unhighlights genuine nested native `==...==` inside a plugin
+  highlight. This is rare (CriticMarkup does not nest), and the trade-off (visual correctness wins)
+  is accepted.
+- **(c) Add-comment pill eligibility predicate:** the `showTooltip` extension (pill appearance
+  logic) duplicates the wrap-path guard from `addCommentToView` (drift risk). Suggested home for a
+  shared predicate: `base/edit-logic` next to `addCommentToView`, exported for reuse by
+  `comment-pill.ts` — avoids uix→base→uix import cycle.
+
 ## Test-infrastructure conventions established (use in later phases)
 
 - jest state setup: `EditorState.create` requires more than `[rangeParser]` — use the

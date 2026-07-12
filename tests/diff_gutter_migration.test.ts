@@ -34,4 +34,27 @@ describe("diff gutter quiet-default migration (Phase 5)", () => {
 
 		expect(merged.diff_gutter).toBe(false);
 	});
+
+	test("legacy suggestion_gutter true (pre-rename) is flipped to false once", () => {
+		// EXPL: Simulates the 0.2.x→0.2.3 rename that copies suggestion_gutter→diff_gutter,
+		//       followed by disableDiffGutterOnce. The rename introduces diff_gutter:true,
+		//       but the one-time flip must override it. This tests the ordering: first the
+		//       rename migration runs (copying the value), then disableDiffGutterOnce runs
+		//       (flipping it off if not yet migrated).
+		const legacy_saved = { suggestion_gutter: true } as Partial<PluginSettings>; // pre-0.2.3 rename
+		const merged = Object.assign({}, DEFAULT_SETTINGS, legacy_saved);
+
+		// Simulate the 0.2.x rename migration that copies suggestion_gutter → diff_gutter
+		if ("suggestion_gutter" in merged) {
+			merged.diff_gutter = (merged as unknown as Record<string, unknown>).suggestion_gutter as boolean;
+			delete merged.suggestion_gutter;
+		}
+
+		// Then the one-time migration runs
+		disableDiffGutterOnce(merged, legacy_saved);
+
+		// Result: diff_gutter must be false (one-time flip wins) and flag must be set
+		expect(merged.diff_gutter).toBe(false);
+		expect(merged.diff_gutter_migrated).toBe(true);
+	});
 });
