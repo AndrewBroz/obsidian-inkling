@@ -165,6 +165,39 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
 - Note with `commentator: comment` opens comment-locked; toggles show the enforcement Notice;
   removing the key restores the default; your own name in `commentator-authors` exempts you.
 
+## Phase 4 outcomes (comment UX, 2026-07-12)
+
+- **Anchor text never renders as a comment**: gutter cards show only real comments (HIGHLIGHT
+  base with replies is dropped from the card thread); the vault Annotations View shows the anchor
+  as a muted 2-line-clamped quote without author/timestamp.
+- **Resolve/reopen lifecycle** stored in `done` metadata on every thread member (reversible;
+  delete is a separate explicit action). Resolved threads: no gutter card, highlight renders as
+  plain text (`cmtr-resolved`), comment ranges render as NOTHING in live preview and reading
+  view. Actions: hover Resolve/Delete buttons on gutter cards (lucide check / trash-2),
+  Resolve/Reopen in both context menus and Annotations View quick actions (base-row only);
+  "Set completed" menu item replaced. Annotations View gained a ResolvedFilter
+  (All/Unresolved/Resolved, default Unresolved — resolved threads vanish from the view by
+  default; the StateButton is always visible in the toolbar).
+- **Empty comments**: blur/submit/Escape on a fresh empty comment silently cancels it
+  (anchored highlight unwrapped if it was the only comment); clearing an EXISTING comment then
+  blurring reverts, never deletes. Guarded against reentrant blur double-dispatch (a review-caught
+  CRITICAL: Escape on an empty reply could double-dispatch with stale coordinates and delete
+  unrelated text — fixed with dispatch-first ordering + a WeakSet latch; mutation-verified tests).
+- Edge notes: includeComments=false now hides anchored threads' cards entirely (anchor is
+  suppressed and replies are excluded — recorded UX change); reading-view block-transition
+  TempRanges can't see metadata (pre-existing limitation, applies to resolved detection too);
+  `removeThreadChanges` helper is marker.ts-local (promote if the view needs it later).
+
+### Manual smoke additions (Phase 4)
+
+- Anchored comment: gutter card shows ONLY the comment (no "Sed"-style anchor entry).
+- Resolve from gutter button: card + highlight disappear; find + reopen it in the Annotations
+  View under the Resolved filter; reopen restores highlight and card.
+- Empty-comment cancel: add comment → click away without typing → markup gone silently (both
+  the gutter editor and the live-preview tooltip); clear an existing comment → blur → content
+  restored; Escape on an empty reply → no stray text deleted (the reentrancy fix).
+- Delete thread from gutter trash button on an anchored thread → highlight unwraps to plain text.
+
 ## Test-infrastructure conventions established (use in later phases)
 
 - jest state setup: `EditorState.create` requires more than `[rangeParser]` — use the
