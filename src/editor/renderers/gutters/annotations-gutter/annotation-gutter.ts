@@ -28,10 +28,14 @@ import { annotationGutterMarkers, AnnotationMarker } from "./marker";
 // EXPL: Margin between the gutter and the content
 const ANNOTATION_GUTTER_MARGIN = 24;
 
-// EXPL: Fixed inset (px) from the viewport's right edge used to park the fold button while the
-//       gutter is folded, so it always lands in the empty margin/scrollbar strip beyond the text
-//       instead of wherever the (now width-0) gutter's default flow position happens to be
-const FOLDED_FOLD_BUTTON_INSET = 20;
+// EXPL: Inset (px) from the PANE's right edge used to park the fold button while the gutter is
+//       folded. Small enough that the button sits inside the scroller's right padding strip
+//       (Obsidian: `.cm-scroller { padding: var(--file-margins) }`, --file-margins-x ≥ 20px in
+//       every pane type), which is guaranteed text-free at any editor width
+const FOLDED_FOLD_BUTTON_EDGE_INSET = 6;
+// EXPL: Gap (px) between the unfolded button's right edge and the gutter panel's left edge; the
+//       button then sits inside the ANNOTATION_GUTTER_MARGIN strip, which is also text-free
+const UNFOLDED_FOLD_BUTTON_GUTTER_GAP = 4;
 
 const unfixGutters = Facet.define<boolean, boolean>({
 	combine: values => values.some(x => x),
@@ -403,7 +407,11 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 		this.fold_button_el = createDiv({ cls: ["cmtr-anno-gutter-button"] });
 		this.fold_button_el.appendChild(foldButtonElement);
-		this.gutterDom.appendChild(this.fold_button_el);
+		// EXPL: The button is anchored to `view.dom` (`.cm-editor`, position: relative per CM6's
+		//       base theme) rather than the gutter container, so its absolute `right` offset is
+		//       measured from the PANE's right edge — correct in split layouts and with sidebars
+		//       open — and it stays put while the gutter itself folds to zero width
+		this.view.dom.appendChild(this.fold_button_el);
 		// NOTE: Must run after fold_button_el is assigned above (setFoldButtonState is a no-op
 		//       while it's still undefined) so the button gets its rotate/aria-label/position state
 		//       immediately instead of only after the first fold toggle
@@ -442,7 +450,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			}, 25);
 
 			this.resize_handle_el!.classList.toggle("cmtr-anno-gutter-resize-handle-hover", true);
-			this.view.scrollDOM.classList.toggle("cmtr-anno-gutter-resizing", true);
+			// EXPL: Toggled on view.dom (not scrollDOM) so the `.cmtr-anno-gutter-resizing …` rules
+			//       reach the fold button too, which lives in view.dom rather than inside the scroller
+			this.view.dom.classList.toggle("cmtr-anno-gutter-resizing", true);
 
 			let currentWidth = parseInt(this.dom.style.width.slice(0, -2));
 			const onMouseMove = (evt: MouseEvent) => {
@@ -457,7 +467,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				this.view.dom.doc.removeEventListener("mousemove", onMouseMove);
 				this.view.dom.doc.removeEventListener("mouseup", onMouseStop);
 				this.resize_handle_el!.classList.toggle("cmtr-anno-gutter-resize-handle-hover", false);
-				this.view.scrollDOM.classList.toggle("cmtr-anno-gutter-resizing", false);
+				this.view.dom.classList.toggle("cmtr-anno-gutter-resizing", false);
 
 				if (isReadableLineWidth)
 					temporarySheet.deleteRule(temporarySheet.cssRules.length - 1);
@@ -490,22 +500,33 @@ class AnnotationSingleGutterView extends SingleGutterView {
 	}
 
 	/**
-	 * Explicitly anchors the fold button's `right` offset instead of leaving it to the browser's
-	 * CSS "static position" fallback (position: fixed with left/right: auto). That fallback is
-	 * what caused the button to render on top of document text: once the gutter is folded, its
-	 * width collapses to 0, and the button — appended as a sibling inside `gutterDom`, which sits
-	 * immediately after the content DOM — has no in-flow box left to derive a position from, so it
-	 * lands right at (or past) the text's edge.
-	 * - Folded: parked at a fixed, width-independent inset from the viewport's right edge — always
-	 *   inside the empty margin/scrollbar strip beyond the text, never over it.
-	 * - Unfolded: parked at the start of the visible gutter panel (its width + the gap before it),
-	 *   tracking `this.width` live so it stays put while the panel is resized.
+	 * Explicitly anchors the fold button's `right` offset (pane-relative: the button is an
+	 * absolutely positioned child of `view.dom`) instead of leaving it to the browser's CSS
+	 * "static position" fallback. That fallback is what caused the button to render on top of
+	 * document text: once the gutter folded to width 0, the button — then a child of the gutter
+	 * container sitting flush against the content DOM — derived its position from the collapsed
+	 * gutter's flow position, i.e. right at the text's edge (and a -36px translate pushed it
+	 * further onto the text).
+	 * - Folded: a small fixed inset from the pane's right edge, inside the scroller's right
+	 *   padding strip (`padding: var(--file-margins)`), which never contains text.
+	 * - Unfolded: just before the gutter panel's left edge — the scroller's measured right
+	 *   padding + the panel width + a small gap — landing inside the reserved
+	 *   ANNOTATION_GUTTER_MARGIN strip between text and panel; tracks `this.width` live so it
+	 *   stays put while the panel is resized.
 	 */
 	updateFoldButtonPosition() {
 		if (!this.fold_button_el) return;
-		this.fold_button_el.style.right = this.folded ?
-			`${FOLDED_FOLD_BUTTON_INSET}px` :
-			`${this.width + ANNOTATION_GUTTER_MARGIN}px`;
+		if (this.folded)
+			this.fold_button_el.style.right = `${FOLDED_FOLD_BUTTON_EDGE_INSET}px`;
+		else {
+			// EXPL: The gutter panel's right edge sits at the scroller's content-box edge, i.e. inset
+			//       by the scroller's right padding (--file-margins-x; theme/pane-type dependent, so
+			//       measured). Computed style is resolved to px and needs no layout pass; `.win`
+			//       keeps this correct in pop-out windows.
+			const scroller_padding = parseFloat(this.view.scrollDOM.win.getComputedStyle(this.view.scrollDOM).paddingRight) ||
+				0;
+			this.fold_button_el.style.right = `${scroller_padding + this.width + UNFOLDED_FOLD_BUTTON_GUTTER_GAP}px`;
+		}
 	}
 
 	foldGutter() {

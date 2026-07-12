@@ -201,28 +201,32 @@
 // 	   Editor Comment Gutter Fold Button Styling
 // ================================================
 
-// EXPL: `right` is set explicitly by AnnotationSingleGutterView.updateFoldButtonPosition() (see
-//       annotation-gutter.ts), not left to the browser's "static position" fallback — that fallback
-//       is what previously let the button (and its folded-state tooltip) render on top of document
-//       text once the gutter's width collapsed to 0. The transition below animates that JS-driven
-//       change smoothly between the folded/unfolded resting positions.
+// EXPL: The button lives in `view.dom` (`.cm-editor`, position: relative per the CM6 base theme),
+//       so `position: absolute` + `right` anchor it to the PANE's right edge — correct in splits
+//       and with sidebars open, unlike the previous viewport-anchored `position: fixed`.
+//       `right` is kept in sync by AnnotationSingleGutterView.updateFoldButtonPosition() (see
+//       annotation-gutter.ts): folded → a small inset inside the scroller's right padding strip
+//       (text-free by Obsidian's `.cm-scroller { padding: var(--file-margins) }`); unfolded →
+//       just before the gutter panel. Never left to the browser's "static position" fallback,
+//       which is what previously let the folded button (and its tooltip) sit on document text.
+// NOTE: `top` must use --file-margins-y — the `--file-margins` shorthand is a two-value token
+//       stream, and calc() over it is invalid-at-computed-value time (top silently became `auto`,
+//       i.e. the static position, in main panes).
 .cmtr-anno-gutter-button {
-  position: fixed;
-  top: calc(var(--file-margins) + 60px);
-  right: 20px;
+  position: absolute;
+  top: calc(var(--file-margins-y, var(--size-4-8)) + 8px);
+  right: 6px;
   z-index: 1000;
 
   transition: right 400ms ease-in-out;
 }
 
-// EXPL: If the gutter is placed inside an embed, it should be positioned absolutely
+// EXPL: If the gutter is placed inside an embed, pin the button to the embed's top edge
 .markdown-embed .cmtr-anno-gutter-button {
-  position: absolute;
   top: 0;
 }
 
 .cmtr-anno-gutter-button a {
-  position: absolute;
   color: var(--text-faint);
   transition:
     color 200ms ease-in-out 0ms,

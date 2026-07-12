@@ -210,7 +210,18 @@ span.cm-strikethrough:has([data-type="cmtr-substitution"]) {
   text-decoration: unset;
 }
 
-span.cm-highlight:has([data-type="cmtr-highlight"]) {
+// EXPL: `{==text==}` also parses as a NATIVE Obsidian highlight (`==text==`), so the visible text
+//       carries two spans: the plugin's mark (`[data-type="cmtr-highlight"]`, --highlight-color)
+//       and Obsidian's token span (`span.cm-highlight`, --text-highlight-bg). Both default to the
+//       same 0.4-alpha yellow — left unneutralized they stack into a darker, more saturated box
+//       that paints square over the plugin span's border-radius (pixel-verified from the bug
+//       screenshot: uniform fill ~rgb(255,218,88) vs the ~rgb(255,236,153) a single wash gives).
+//       The first selector covers the native span wrapping the plugin mark; the second covers the
+//       observed present-day nesting where the native span renders INSIDE the plugin mark — the
+//       original ancestor-only `:has()` rule silently stopped matching there, which is what
+//       produced the "dirty" squared highlight box.
+span.cm-highlight:has([data-type="cmtr-highlight"]),
+[data-type="cmtr-highlight"] span.cm-highlight {
   background-color: unset;
 }
 
