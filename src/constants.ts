@@ -39,6 +39,13 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 			focus_annotation: true,
 			show_comment: false,
 		},
+		[EditMode.COMMENT]: {
+			show_styling: true,
+			show_syntax: false,
+			show_metadata: false,
+			focus_annotation: true,
+			show_comment: true,
+		},
 	},
 
 	diff_gutter: true,
@@ -133,6 +140,13 @@ export function backfillLegacyMetadataFlags(
 		if (!(key in saved))
 			settings[key] = false;
 	}
+}
+
+// EXPL: EditMode.COMMENT (Phase 3B) added a markup_focus entry; settings saved before it
+//       exists lack the key and would leave renderers reading undefined for COMMENT mode.
+export function backfillMarkupFocus(settings: PluginSettings): void {
+	if (!settings.markup_focus[EditMode.COMMENT])
+		settings.markup_focus[EditMode.COMMENT] = DEFAULT_SETTINGS.markup_focus[EditMode.COMMENT];
 }
 
 export const REQUIRES_FULL_RELOAD: Set<string> = new Set([

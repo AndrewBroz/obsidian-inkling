@@ -14,6 +14,7 @@ export enum EditMode {
 	OFF = 0,
 	CORRECTED = 1,
 	SUGGEST = 2,
+	COMMENT = 3,
 }
 
 /**

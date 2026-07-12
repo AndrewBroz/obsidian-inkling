@@ -60,6 +60,7 @@ import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/v
 
 import {
 	backfillLegacyMetadataFlags,
+	backfillMarkupFocus,
 	DATABASE_VERSION,
 	DEFAULT_SETTINGS,
 	REQUIRES_DATABASE_REINDEX,
@@ -316,6 +317,7 @@ export default class CommentatorPlugin extends Plugin {
 		//       branch below) so pre-Phase-3A saves never silently inherit the new `true`
 		//       attribution defaults. See backfillLegacyMetadataFlags in constants.ts.
 		backfillLegacyMetadataFlags(this.settings, new_settings);
+		backfillMarkupFocus(this.settings);
 		this.previous_settings = Object.assign({}, original_settings, this.settings);
 
 		// EXPL: Do not migrate new installs, immediately save settings

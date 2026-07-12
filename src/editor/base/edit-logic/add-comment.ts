@@ -8,6 +8,7 @@ import { create_range } from "../edit-util/range-create";
 
 import { annotationGutterFocusAnnotation } from "../../renderers/gutters/annotations-gutter";
 import { pluginSettingsField } from "../../uix";
+import { commentModeAnnotation } from "../../uix/extensions/editing-modes";
 
 export function addCommentToView(
 	editor: EditorView,
@@ -32,6 +33,7 @@ export function addCommentToView(
 				changes: { from: selection.from, to: selection.to, insert },
 				selection: EditorSelection.cursor(selection.from + insert.length - 3),
 				scrollIntoView: scroll,
+				annotations: [commentModeAnnotation.of(true)],
 			}));
 			activeWindow.setTimeout(() => {
 				editor.dispatch(editor.state.update({
@@ -59,6 +61,7 @@ export function addCommentToView(
 		},
 		selection: EditorSelection.cursor(cursor),
 		scrollIntoView: scroll,
+		annotations: [commentModeAnnotation.of(true)],
 	}));
 
 	// EXPL: This code ensures that the input of a new comment is focused on when created
