@@ -202,6 +202,42 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
   restored; Escape on an empty reply → no stray text deleted (the reentrancy fix).
 - Delete thread from gutter trash button on an anchored thread → highlight unwraps to plain text.
 
+## Phase 5 outcomes (visual polish + comment pill, 2026-07-12)
+
+- **Plugin-list identity finished**: author "Andrew Brož", description ends at "...CriticMarkup
+  syntax." (heritage lives in README/LICENSE).
+- **Diff gutter off by default** with a one-time migration (`diff_gutter_migrated` flag): legacy
+  saved `true` flips to `false` once; re-enabling afterwards sticks. Setting remains for opt-in.
+- **Highlight box fixed — real root cause**: `{==...==}` ALSO parses as Obsidian's native
+  `==highlight==`, stacking two 0.4-alpha washes into a darker squared box (pixel-verified
+  against the report screenshot). Fixed with a dual-direction neutralizer on the nested native
+  span; `.cmtr-highlight` also gained a uniform small radius.
+- **Folded-gutter unfold button** reparented pane-relative (`position: absolute` in `.cm-editor`)
+  — the old `position: fixed` (a regression from 3d329e2b that also dropped the right-offset
+  wiring) misplaced it over text and would misplace it in splits/sidebars; also fixed an
+  always-invalid two-value `top: calc(...)` shorthand.
+- **Add-comment pill**: CM6 `showTooltip` extension; appears on non-empty selections that touch
+  no existing markup in editable docs; one `message-square-plus` button calling the existing
+  anchored-comment flow; selection survives the click (mousedown preventDefault); returns the
+  same tooltip object when unchanged (no flicker); excluded from embedded editors by the existing
+  filteredExtensions path. Known follow-ups: mouse-first (keyboard reachability unverified);
+  the eligibility predicate is duplicated with addCommentToView's wrap-path guard (drift risk).
+- The release-bump script now emits LF JSON (dprint's json config is LF; the earlier CRLF fix
+  was wrong for JSON) — release bumps no longer break the format gate.
+
+### Manual smoke additions (Phase 5)
+
+- Highlight with attached comment renders one uniform wash, rounded, no squared bottom (light +
+  dark themes; also check a standalone native ==highlight== still renders natively).
+- Folded gutter: unfold button hugs the right margin, never over text — try narrow panes,
+  split panes, right sidebar open, readable line width on/off; unfolded button sits just left
+  of the gutter panel.
+- Select text → pill appears above selection; click → comment editor focused with highlight
+  anchor; pill absent when selection touches markup, in read-only views, and inside embeds.
+- Fresh install AND upgraded install: no red/green diff bars; re-enable in settings → bars
+  persist across restarts.
+- Plugin list shows "By Andrew Brož" and the one-sentence description.
+
 ## Test-infrastructure conventions established (use in later phases)
 
 - jest state setup: `EditorState.create` requires more than `[rangeParser]` — use the
