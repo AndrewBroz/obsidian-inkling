@@ -1,10 +1,12 @@
-import type { Range } from "@codemirror/state";
+import { EditorSelection, type Range } from "@codemirror/state";
 import type { Decoration, EditorView } from "@codemirror/view";
+import type { App } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import type { CriticMarkupRange } from "../src/editor/base/ranges";
 import { constructDecorations } from "../src/editor/renderers/live-preview/markup-renderer";
+import { rangePostProcess } from "../src/editor/renderers/post-process/renderer";
 import { EditMode, type PluginSettings, PreviewMode } from "../src/types";
 import { createRangeState } from "./helpers";
 
@@ -78,15 +80,53 @@ describe("constructDecorations for resolved threads (live preview)", () => {
 		const replaces = replaceSpans(decorations);
 		expect(replaces).toContainEqual({ from: ranges[0].from, to: ranges[0].to, widget: false });
 		expect(replaces.some(span => span.widget)).toBe(false);
+
+		// EXPL: No mark decoration exists for the range at all — no icon, no visible content
+		const classes = markClasses(decorations);
+		expect(classes.some(cls => cls.includes("cmtr-comment") || cls.includes("cmtr-resolved"))).toBe(false);
 	});
 
-	test("resolved comment in inline style renders as plain text", () => {
+	test("resolved comment in inline style renders as nothing, not plain text", () => {
 		const doc = `x{>>{"done":true}@@hi<<}y`;
-		const { decorations } = parseAndDecorate(doc, { comment_style: "inline" });
+		const { ranges, decorations } = parseAndDecorate(doc, { comment_style: "inline" });
+
+		// EXPL: Comment text is not document text (unlike a resolved highlight's anchor) — the
+		//       whole span is replaced/hidden rather than falling through to the plain-text branch
+		const classes = markClasses(decorations);
+		expect(classes.some(cls => cls.includes("cmtr-resolved"))).toBe(false);
+		expect(classes.some(cls => cls.includes("cmtr-comment"))).toBe(false);
+
+		const replaces = replaceSpans(decorations);
+		expect(replaces).toContainEqual({ from: ranges[0].from, to: ranges[0].to, widget: false });
+	});
+
+	test("resolved comment hides the full span even when show_comment is active and cursor is inside", () => {
+		const doc = `x{>>{"done":true}@@hi<<}y`;
+		const settings: PluginSettings = {
+			...DEFAULT_SETTINGS,
+			markup_focus: {
+				...DEFAULT_SETTINGS.markup_focus,
+				[EditMode.CORRECTED]: { ...DEFAULT_SETTINGS.markup_focus[EditMode.CORRECTED], show_comment: true },
+			},
+		};
+		const state = createRangeState(doc, settings);
+		const ranges = state.field(rangeParser).ranges.ranges;
+		// EXPL: Place the cursor inside the comment range so `in_range` is true
+		const selection = EditorSelection.single(ranges[0].from + 1);
+		const decorations = constructDecorations(
+			null as unknown as EditorView,
+			ranges,
+			selection,
+			PreviewMode.ALL,
+			EditMode.CORRECTED,
+			settings,
+		);
 
 		const classes = markClasses(decorations);
-		expect(classes).toContain("cmtr-inline cmtr-resolved");
-		expect(classes.some(cls => cls.includes("cmtr-comment"))).toBe(false);
+		expect(classes.some(cls => cls.includes("cmtr-resolved") || cls.includes("cmtr-comment"))).toBe(false);
+
+		const replaces = replaceSpans(decorations);
+		expect(replaces).toContainEqual({ from: ranges[0].from, to: ranges[0].to, widget: false });
 	});
 });
 
@@ -107,5 +147,11 @@ describe("postprocess for resolved ranges (reading view)", () => {
 		expect(rendered).toContain("class='cmtr-resolved'");
 		expect(rendered).not.toContain("cmtr-highlight");
 		expect(rendered).toContain("sel");
+	});
+
+	test("resolved comment renders as nothing — no icon, no inline text", () => {
+		const range = topRange(`{>>{"done":true}@@hi<<}`);
+		const rendered = rangePostProcess(null as unknown as App, range);
+		expect(rendered).toBe("");
 	});
 });

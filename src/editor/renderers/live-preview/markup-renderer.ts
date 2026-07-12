@@ -121,10 +121,20 @@ export function constructDecorations(
 				selections.ranges.some(sel_range => range.partially_in_full_range(sel_range.from, sel_range.to)) :
 				undefined;
 
-			// EXPL: Resolved highlight/comment threads render as plain text: brackets and metadata stay
-			//       hidden below, but the type styling is replaced by a hook class for themes
+			// EXPL: A resolved HIGHLIGHT thread renders as plain text: brackets and metadata stay
+			//       hidden below, but the type styling is replaced by a hook class for themes.
+			//       A resolved COMMENT thread renders as nothing at all (handled just below).
 			const resolved = (range.type === SuggestionType.HIGHLIGHT || range.type === SuggestionType.COMMENT) &&
 				thread_resolved(range);
+
+			// EXPL: A resolved COMMENT thread renders as nothing — comment text is not document
+			//       text (unlike a resolved highlight's anchor), so its entire span (brackets,
+			//       metadata, content) is hidden regardless of comment_style/show_comment/selection
+			//       state. Annotations View remains the place to review it.
+			if (resolved && range.type === SuggestionType.COMMENT) {
+				decorations.push(Decoration.replace({}).range(range.from, range.to));
+				continue;
+			}
 
 			let style = `cmtr-inline cmtr-${range.repr.toLowerCase()} ` + (range.fields.style || "");
 			if (range.replies.length)
@@ -138,8 +148,7 @@ export function constructDecorations(
 				range_show_styling = in_range ? show_styling : undefined;
 
 			if (!(show_comment && in_range) && range.type === SuggestionType.COMMENT && settings.comment_style !== "inline") {
-				// EXPL: Resolved comments never render an icon; they fall through to the hidden branch
-				if (settings.comment_style === "icon" && range.base_range === range && !resolved) {
+				if (settings.comment_style === "icon" && range.base_range === range) {
 					// FIXME: Widget is unnecessarily destroyed from selection changes
 					// EXPL: Comment ranges are only shown as icons in live preview mode
 					decorations.push(

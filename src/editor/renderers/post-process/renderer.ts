@@ -12,6 +12,7 @@ import {
 	RANGE_PROTOTYPE_MAPPER,
 	SubstitutionRange,
 	SuggestionType,
+	thread_resolved,
 } from "../../base";
 import { previewModeState } from "../../settings";
 import { renderCommentWidget } from "../live-preview";
@@ -25,10 +26,16 @@ export function rangePostProcess(
 	left: boolean | null = null,
 	text?: string,
 ) {
-	if (range.type === SuggestionType.COMMENT)
+	if (range.type === SuggestionType.COMMENT) {
+		// EXPL: Resolved comment threads render as nothing in reading view (no icon, no inline
+		//       text) — comment text is not document text, unlike a resolved highlight's anchor.
+		//       Annotations View remains the place to review resolved threads.
+		if (thread_resolved(range))
+			return "";
 		return renderCommentWidget(app, range as CommentRange, text, unwrap);
-	else
+	} else {
 		return range.postprocess(unwrap, previewMode, tag, left, text);
+	}
 }
 
 export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorContext, plugin: CommentatorPlugin) {
