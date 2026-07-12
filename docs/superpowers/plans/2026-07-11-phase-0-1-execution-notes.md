@@ -32,12 +32,12 @@ Final state: `bun run build` clean; `bun run test` 1081/1081 across 6 suites (ba
      deletion/substitution). Should be scheduled early in Phase 3 (before comment mode builds on
      suggestion semantics) or as a Phase 2 rider. Do NOT update the snapshots to hide this.
 
-  **Status update (Phase 3A):** FIXED for full-coverage cases in commits 48e81e9 + c2009533
-  (retraction semantics + insert wrapped as pending addition; invariant-asserting tests landed).
-  **Residual, still open:** a DELETION/SUBSTITUTION that only *partially* covers a pending
-  addition still folds the covered slice (e.g. `ab{++cd++}ef` delete 0–6 → reject-all yields
-  `abcef`, not `abef`). Full-coverage retraction only; schedule the partial-coverage case with
-  Phase 3B or later.
+**Status update (Phase 3A):** FIXED for full-coverage cases in commits 48e81e9 + c2009533
+(retraction semantics + insert wrapped as pending addition; invariant-asserting tests landed).
+**Residual, still open:** a DELETION/SUBSTITUTION that only _partially_ covers a pending
+addition still folds the covered slice (e.g. `ab{++cd++}ef` delete 0–6 → reject-all yields
+`abcef`, not `abef`). Full-coverage retraction only; schedule the partial-coverage case with
+Phase 3B or later.
 
 ## Recorded spec deviation (Task 6)
 
