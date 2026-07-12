@@ -71,6 +71,24 @@ root postinstall still runs). dprint's CLI works via bun (`bun node_modules/dpri
 or `bun run format`). **Recommended machine fix:** replace the Rosetta node with an arm64
 build; the `trustedDependencies` hardening is worth keeping regardless (supply-chain benefit).
 
+## Phase 2 outcomes
+
+All 9 modernization tasks landed on branch `phase-2-modernization`. Versions: eslint 10.6.0
+(flat config, svelte files now actually linted), typescript-eslint 8.63, eslint-plugin-svelte
+3.20, commander 15.0.0, @types/node 26.1.1, esbuild 0.28.1, dprint 0.55.1 (markup_fmt 0.27.3
+formats Svelte 5 runes; 136-file style-only reformat landed). prettier and esbuild-jest removed.
+Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in tests/helpers.ts.
+
+- **jest stays on 29**: jest 30's `unrs-resolver` native module cannot load under this machine's
+  Rosetta x64 node while bun installs arm64 bindings — same root cause as the dprint postinstall
+  failure. Retry the jest 30 bump after replacing the system node with an arm64 build.
+- **Lint burn-down list** (12 rules downgraded to warn, 89 pre-existing findings — see task-3
+  report table): prioritize `svelte/no-at-html-tags` (XSS-adjacent, AnnotationThread.svelte ×2)
+  and the 3 `no-undef` hits (`Row` ×2, `Interval` ×1 — real missing references).
+- Minor deferrals: why-comment for the `as unknown as Required<C>` double-cast in gutters/base.ts
+  (verified TS2352 compiler necessity); manual smoke check that bulk-stale accept shows ONE
+  summary Notice.
+
 ## Test-infrastructure conventions established (use in later phases)
 
 - jest state setup: `EditorState.create` requires more than `[rangeParser]` — use the
