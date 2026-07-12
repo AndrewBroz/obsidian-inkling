@@ -1,40 +1,23 @@
 # Inkling — collaborative CriticMarkup editing for Obsidian
 
-> [!IMPORTANT]
-> **This is a hard fork** of [Fevol/obsidian-criticmarkup](https://github.com/Fevol/obsidian-criticmarkup) ("Commentator"),
-> maintained independently by [@AndrewBroz](https://github.com/AndrewBroz). It diverges from upstream with additional
-> data-safety fixes and collaboration features (see [What's different](#whats-different-in-this-fork)).
-> For the original plugin, use the upstream repository. Bugs in **this fork** belong in
-> [this repo's issue tracker](https://github.com/AndrewBroz/obsidian-inkling/issues) — please don't report
-> fork issues upstream.
->
-> As for the name: a comment is a note about someone else's writing; an inkling is the first trace of an idea
-> before it's fully formed. That's closer to what suggestion mode and comment threads are for here — a slight
-> suggestion, not a verdict. Same plugin, new name.
+**Inkling** is a [CriticMarkup](https://github.com/CriticMarkup/CriticMarkup-toolkit) editor for [Obsidian](https://obsidian.md/).
+It is designed both for collaborative editing (with tools like Relay) and for reviewing your notes, providing a suggestion mode
+for tracking changes, comments anchored to text selections, and a comment-only mode for reviewers.
 
-A [CriticMarkup](https://github.com/CriticMarkup/CriticMarkup-toolkit) editor for [Obsidian](https://obsidian.md/) for
-collaborative editing and reviewing your notes: a suggestion mode for tracking changes (like Word's Track Changes /
-Google Docs' Suggesting), comments anchored to text selections, and a comment-only mode for reviewers.
-
-Commentator was built by [@Fevol](https://github.com/Fevol) upon the excellent work and advice of
-[@kometenstaub](https://github.com/kometenstaub) (original [plugin](https://github.com/kometenstaub/obsidian-criticmarkup)
+This is a fork of Commentator. Commentator was built by [@Fevol](https://github.com/Fevol) upon the excellent work and
+advice of [@kometenstaub](https://github.com/kometenstaub) (original [plugin](https://github.com/kometenstaub/obsidian-criticmarkup)
 and [parser](https://github.com/kometenstaub/lang-criticmarkup)). All credit for the plugin's foundation belongs to them.
 
 ## Installing (via BRAT)
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin
-2. In BRAT: **Add beta plugin** → `AndrewBroz/obsidian-inkling` (this repository was renamed from
-   `obsidian-criticmarkup`; old links to it redirect here automatically)
+2. In BRAT: **Add beta plugin** → `AndrewBroz/obsidian-inkling`
 3. Enable **Inkling** in Settings → Community plugins
 
 > [!WARNING]
 > This fork is in beta. It carries an extensive automated regression suite (1,100+ tests, including
 > round-trip safety tests for accept/reject), but has not yet finished manual validation in live vaults.
 > Use it in a test vault or a synced/backed-up vault first.
->
-> Inkling uses its own plugin id (`inkling`), so it can coexist side-by-side with upstream Commentator —
-> installing both at once is safe. If you were already running an earlier build of this fork under the
-> `commentator` id, Inkling automatically imports its settings the first time it loads, so nothing is lost.
 
 ## What's different in this fork
 
@@ -47,16 +30,16 @@ and [parser](https://github.com/kometenstaub/lang-criticmarkup)). All credit for
 
 **Collaboration features:**
 
-- **Comments anchored to selections** — select text → _Add comment_ → `{==highlight==}{>>comment<<}` thread
-- **Comment mode** — a reviewer-friendly mode where text edits are blocked (with feedback) but commenting works
-- **Frontmatter-enforced modes** — a note can force `suggest`/`comment`/`off` for everyone except listed authors (see [Frontmatter](#frontmatter))
-- **Attribution on by default** — new installs stamp author + timestamp metadata and prompt once for your display name; the vault-wide Suggestion View can filter by author and recency
+- **Comments anchored to selections** — Select text → _Add comment_ → `{==highlight==}{>>comment<<}` thread.
+- **Comment mode** — A reviewer-friendly mode where text edits are blocked (with feedback) but commenting works
+- **Frontmatter-enforced modes** — A note can force `suggest`/`comment`/`off` for everyone except listed authors (see [Frontmatter](#frontmatter))
+- **Attribution on by default** — New installs stamp author + timestamp metadata and prompt once for your display name. The vault-wide Suggestion View can filter by author and recency.
 
-**Maintenance:** modernized toolchain (ESLint 10 with Svelte linting, dprint, vendored dependencies), repaired release CI, and a large regression-test suite where none could previously run.
+**Maintenance:** Modernized toolchain (ESLint 10 with Svelte linting, dprint, vendored dependencies), repaired release CI, and a large regression-test suite.
 
 ## Frontmatter
 
-Enforce an editing mode for a note via frontmatter (overrides the per-editor toggle):
+Enforce an editing mode for a note via frontmatter that overrides the per-editor toggle:
 
 ```yaml
 ---
@@ -67,6 +50,8 @@ inkling-authors: [Alice]   # optional: these authors are exempt from enforcement
 
 The legacy `commentator:` / `commentator-authors:` keys still work (checked when no `inkling` key is present),
 so existing notes from before the rename don't need to be updated.
+
+Note that this is not hard technical enforecement! This tool is for high-trust teams.
 
 ## Developing
 
@@ -85,7 +70,8 @@ builds the GitHub release via CI (fallback: `gh workflow run releases.yml --ref 
 
 ## Roadmap
 
-Inherited from upstream and updated for this fork. No timeline is given; infeasible items may be dropped.
+This project inherited a roadmap from Commentator and introduced its own priorities. No timeline is given.
+Items may be dropped for any reason.
 
 ### Parser
 
