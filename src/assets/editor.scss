@@ -102,15 +102,23 @@
 
 .cmtr-highlight {
   background-color: var(--highlight-color);
+  border-radius: var(--radius-s);
 
   .cmtr-focused {
     background-color: var(--highlight-color-alt);
   }
 }
 
+// EXPL: An anchored highlight's attached comment thread renders inline directly after the
+//       highlight (comment_style: "inline", or focused/in-range while show_comment is on) with
+//       no gap between the two spans. The old `border-bottom: 2px solid` connector line used to
+//       visually mark inline comments read as a stray "squared bottom edge" glued onto the
+//       highlight ahead of it. Dropped in favor of the same simple-background + small-radius
+//       language as `.cmtr-highlight`, so a comment (standalone or trailing a highlight) never
+//       draws a connector artifact.
 .cmtr-comment {
   background-color: var(--comment-color);
-  border-bottom: 2px solid var(--comment-border-color);
+  border-radius: var(--radius-s);
 }
 
 // EXPL: Resolved ranges render as plain text; the class is kept as a hook for themes

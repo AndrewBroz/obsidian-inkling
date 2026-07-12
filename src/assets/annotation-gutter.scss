@@ -201,11 +201,18 @@
 // 	   Editor Comment Gutter Fold Button Styling
 // ================================================
 
+// EXPL: `right` is set explicitly by AnnotationSingleGutterView.updateFoldButtonPosition() (see
+//       annotation-gutter.ts), not left to the browser's "static position" fallback — that fallback
+//       is what previously let the button (and its folded-state tooltip) render on top of document
+//       text once the gutter's width collapsed to 0. The transition below animates that JS-driven
+//       change smoothly between the folded/unfolded resting positions.
 .cmtr-anno-gutter-button {
   position: fixed;
   top: calc(var(--file-margins) + 60px);
-  transform: translateX(-36px);
+  right: 20px;
   z-index: 1000;
+
+  transition: right 400ms ease-in-out;
 }
 
 // EXPL: If the gutter is placed inside an embed, it should be positioned absolutely
@@ -219,7 +226,6 @@
   color: var(--text-faint);
   transition:
     color 200ms ease-in-out 0ms,
-    right 400ms ease-in-out,
     rotate 200ms ease-in-out;
 }
 

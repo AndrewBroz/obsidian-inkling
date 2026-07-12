@@ -28,6 +28,11 @@ import { annotationGutterMarkers, AnnotationMarker } from "./marker";
 // EXPL: Margin between the gutter and the content
 const ANNOTATION_GUTTER_MARGIN = 24;
 
+// EXPL: Fixed inset (px) from the viewport's right edge used to park the fold button while the
+//       gutter is folded, so it always lands in the empty margin/scrollbar strip beyond the text
+//       instead of wherever the (now width-0) gutter's default flow position happens to be
+const FOLDED_FOLD_BUTTON_INSET = 20;
+
 const unfixGutters = Facet.define<boolean, boolean>({
 	combine: values => values.some(x => x),
 });
@@ -346,8 +351,6 @@ class AnnotationSingleGutterView extends SingleGutterView {
 	add_fold_button: boolean = false;
 	add_resize_handle: boolean = false;
 
-	gutter_position: number = 0;
-
 	fold_button_el: HTMLElement | undefined = undefined;
 	resize_handle_el: HTMLElement | undefined = undefined;
 	declare elements: AnnotationGutterElement[];
@@ -379,8 +382,6 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			this.dom.style.width = this.width + "px";
 		this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.folded ? "0px" : this.width + "px");
 		this.gutterDom.style.marginInlineStart = this.folded ? "0" : ANNOTATION_GUTTER_MARGIN + "px";
-		this.gutter_position = this.view.scrollDOM.getBoundingClientRect().right -
-			this.view.contentDOM.getBoundingClientRect().right + ANNOTATION_GUTTER_MARGIN;
 
 		if (this.add_fold_button)
 			this.createFoldButton();
@@ -400,10 +401,13 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			this.foldGutter();
 		};
 
-		this.setFoldButtonState();
 		this.fold_button_el = createDiv({ cls: ["cmtr-anno-gutter-button"] });
 		this.fold_button_el.appendChild(foldButtonElement);
 		this.gutterDom.appendChild(this.fold_button_el);
+		// NOTE: Must run after fold_button_el is assigned above (setFoldButtonState is a no-op
+		//       while it's still undefined) so the button gets its rotate/aria-label/position state
+		//       immediately instead of only after the first fold toggle
+		this.setFoldButtonState();
 	}
 
 	createResizeHandle() {
@@ -422,6 +426,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				this.view.state.field(editorInfoField).app.workspace.requestSaveLayout();
 				this.dom.style.width = this.width + "px";
 				this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.width + "px");
+				this.updateFoldButtonPosition();
 
 				// TODO: Improve resizing logic when user has readable line length enabled
 				//       When resizing, .cm-line's width adjust even when not necessary, causing jarring content shifts
@@ -433,8 +438,6 @@ class AnnotationSingleGutterView extends SingleGutterView {
 						`.cmtr-anno-gutter-resizing .cm-line { width: ${this.view.contentDOM.clientWidth}px !important; }`,
 						temporarySheet.cssRules.length,
 					);
-					this.gutter_position = this.view.scrollDOM.getBoundingClientRect().right -
-						this.view.contentDOM.getBoundingClientRect().right + ANNOTATION_GUTTER_MARGIN;
 				}
 			}, 25);
 
@@ -482,7 +485,27 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				if (this.resize_handle_el)
 					this.resize_handle_el.style.display = "";
 			}
+			this.updateFoldButtonPosition();
 		}
+	}
+
+	/**
+	 * Explicitly anchors the fold button's `right` offset instead of leaving it to the browser's
+	 * CSS "static position" fallback (position: fixed with left/right: auto). That fallback is
+	 * what caused the button to render on top of document text: once the gutter is folded, its
+	 * width collapses to 0, and the button — appended as a sibling inside `gutterDom`, which sits
+	 * immediately after the content DOM — has no in-flow box left to derive a position from, so it
+	 * lands right at (or past) the text's edge.
+	 * - Folded: parked at a fixed, width-independent inset from the viewport's right edge — always
+	 *   inside the empty margin/scrollbar strip beyond the text, never over it.
+	 * - Unfolded: parked at the start of the visible gutter panel (its width + the gap before it),
+	 *   tracking `this.width` live so it stays put while the panel is resized.
+	 */
+	updateFoldButtonPosition() {
+		if (!this.fold_button_el) return;
+		this.fold_button_el.style.right = this.folded ?
+			`${FOLDED_FOLD_BUTTON_INSET}px` :
+			`${this.width + ANNOTATION_GUTTER_MARGIN}px`;
 	}
 
 	foldGutter() {
@@ -561,6 +584,10 @@ class AnnotationSingleGutterView extends SingleGutterView {
 					this.dom.style.width = width + "px";
 					this.setFoldButtonState();
 				}
+				// NOTE: Keeps the button's `right` offset in sync with the latest width even when the
+				//       branch above is skipped (hidden-on-empty / folded), so it's never stale once
+				//       the button becomes visible/unfolded again
+				this.updateFoldButtonPosition();
 				this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.width + "px");
 			}
 			if (fold_status !== undefined) {
