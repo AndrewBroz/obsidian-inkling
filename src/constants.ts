@@ -145,9 +145,11 @@ export function backfillLegacyMetadataFlags(
 
 // EXPL: Phase 5 decision (5) — diff_gutter flipped from `true` to `false` as the DEFAULT_SETTINGS
 //       (quiet margins by default). `settings.version` isn't granular enough to gate this: existing
-//       users are already saved at the current PLUGIN_VERSION, so the versioned-migration branch in
-//       migrateSettings (src/main.ts) wouldn't fire for them without an unrelated version bump. Use a
-//       dedicated `diff_gutter_migrated` flag instead, following the same "in saved" check pattern as
+//       users are already saved at the current schema version, so the version-gated migration branch
+//       in migrateSettings (src/main.ts) never fires for them. The call site therefore sits OUTSIDE
+//       that branch — on every existing-settings load, but AFTER the 0.2.x rename migration (which
+//       can (re)introduce diff_gutter from a legacy suggestion_gutter). Gated instead by a dedicated
+//       `diff_gutter_migrated` flag, following the same "in saved" check pattern as
 //       backfillLegacyMetadataFlags: settings saved before the flag existed predate the flip and get
 //       diff_gutter forced to false exactly once; the flag is then persisted as true so a user who
 //       re-enables the gutter afterwards is never migrated again. No-op when `saved` is null/undefined

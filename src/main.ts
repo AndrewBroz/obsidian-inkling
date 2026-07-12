@@ -406,11 +406,6 @@ export default class CommentatorPlugin extends Plugin {
 						}
 					}
 
-					// EXPL: Must run AFTER the 0.2.x rename migration (lines 383–407), which can
-					//       (re)introduce diff_gutter from suggestion_gutter. If run before, the
-					//       migration would override the one-time flip and the bars would remain on.
-					disableDiffGutterOnce(this.settings, new_settings);
-
 					this.settings.version = DEFAULT_SETTINGS.version;
 					await this.setSettings();
 				}
@@ -421,6 +416,17 @@ export default class CommentatorPlugin extends Plugin {
 					0,
 				);
 			}
+
+			// EXPL: Must run AFTER the 0.2.x rename migration above, which can (re)introduce
+			//       diff_gutter from suggestion_gutter — but OUTSIDE the version-gated branch:
+			//       DEFAULT_SETTINGS.version is a hardcoded schema constant that current users'
+			//       saves already match, so the branch never fires for them. Every-load backfill
+			//       semantics (like backfillLegacyMetadataFlags), gated internally by the
+			//       diff_gutter_migrated flag. Persist immediately when the flip just happened
+			//       (flag absent from the saved data), so it survives a restart.
+			disableDiffGutterOnce(this.settings, new_settings);
+			if (!("diff_gutter_migrated" in new_settings))
+				await this.setSettings();
 		}
 	}
 

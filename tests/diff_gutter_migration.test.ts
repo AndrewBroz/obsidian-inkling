@@ -57,4 +57,26 @@ describe("diff gutter quiet-default migration (Phase 5)", () => {
 		expect(merged.diff_gutter).toBe(false);
 		expect(merged.diff_gutter_migrated).toBe(true);
 	});
+
+	test("flip applies to saves already at the current schema version (mainline case)", () => {
+		// EXPL: DEFAULT_SETTINGS.version is a hardcoded schema constant that existing users'
+		//       saves already match, so migrateSettings' version-gated migration branch never
+		//       fires for them. disableDiffGutterOnce must therefore run OUTSIDE that branch
+		//       (regression: it was briefly gated behind old_version !== DEFAULT_SETTINGS.version,
+		//       which disabled the flip for the entire mainline population). Simulates the
+		//       migrateSettings sequencing with version equal: versioned block skipped, then
+		//       disableDiffGutterOnce still runs.
+		const saved = { diff_gutter: true, version: DEFAULT_SETTINGS.version } as Partial<PluginSettings>;
+		const merged = Object.assign({}, DEFAULT_SETTINGS, saved);
+
+		// Simulated versioned-migration block: skipped, because versions match
+		if (saved.version !== DEFAULT_SETTINGS.version)
+			throw new Error("unreachable: versioned block must be skipped in the mainline case");
+
+		// The flip runs unconditionally after the (skipped) versioned block
+		disableDiffGutterOnce(merged, saved);
+
+		expect(merged.diff_gutter).toBe(false);
+		expect(merged.diff_gutter_migrated).toBe(true);
+	});
 });
