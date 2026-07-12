@@ -8,7 +8,7 @@ import { CriticMarkupRange, SuggestionType } from "../ranges";
 // TODO: More sophisticated removal handling
 export function acceptSuggestions(state: EditorState, from?: number, to?: number, remove_attached_comments: boolean = true): ChangeSpec[] {
 	const range_field = state.field(rangeParser).ranges;
-	return ((from || to) ? range_field.ranges_in_interval(from ?? 0, to ?? Infinity) : range_field.ranges)
+	return ((from !== undefined || to !== undefined) ? range_field.ranges_in_interval(from ?? 0, to ?? Infinity) : range_field.ranges)
 		.filter(range =>
 			range.type === SuggestionType.ADDITION || range.type === SuggestionType.DELETION ||
 			range.type === SuggestionType.SUBSTITUTION
@@ -18,7 +18,7 @@ export function acceptSuggestions(state: EditorState, from?: number, to?: number
 
 export function rejectSuggestions(state: EditorState, from?: number, to?: number, remove_attached_comments: boolean = true): ChangeSpec[] {
 	const range_field = state.field(rangeParser).ranges;
-	return ((from || to) ? range_field.ranges_in_interval(from ?? 0, to ?? Infinity) : range_field.ranges)
+	return ((from !== undefined || to !== undefined) ? range_field.ranges_in_interval(from ?? 0, to ?? Infinity) : range_field.ranges)
 		.filter(range =>
 			range.type === SuggestionType.ADDITION || range.type === SuggestionType.DELETION ||
 			range.type === SuggestionType.SUBSTITUTION
