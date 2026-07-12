@@ -113,6 +113,14 @@
   border-bottom: 2px solid var(--comment-border-color);
 }
 
+// EXPL: Resolved ranges render as plain text; the class is kept as a hook for themes
+.cmtr-resolved {
+  background-color: unset;
+  border-bottom: unset;
+  text-decoration: unset;
+  color: inherit;
+}
+
 // ================================================
 //       Editor Comment Icon Widget Rendering
 // ================================================

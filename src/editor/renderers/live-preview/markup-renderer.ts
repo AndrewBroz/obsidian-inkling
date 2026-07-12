@@ -3,7 +3,7 @@ import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 import { editorEditorField, editorLivePreviewField } from "obsidian";
 
 import { EditMode, type PluginSettings, PreviewMode } from "../../../types";
-import { CriticMarkupRange, rangeParser, SubstitutionRange, SuggestionType } from "../../base";
+import { CriticMarkupRange, rangeParser, SubstitutionRange, SuggestionType, thread_resolved } from "../../base";
 import { editModeValueState, fullReloadEffect, previewModeState } from "../../settings";
 import { CommentIconWidget } from "./comment-widget";
 
@@ -121,9 +121,16 @@ export function constructDecorations(
 				selections.ranges.some(sel_range => range.partially_in_full_range(sel_range.from, sel_range.to)) :
 				undefined;
 
+			// EXPL: Resolved highlight/comment threads render as plain text: brackets and metadata stay
+			//       hidden below, but the type styling is replaced by a hook class for themes
+			const resolved = (range.type === SuggestionType.HIGHLIGHT || range.type === SuggestionType.COMMENT) &&
+				thread_resolved(range);
+
 			let style = `cmtr-inline cmtr-${range.repr.toLowerCase()} ` + (range.fields.style || "");
 			if (range.replies.length)
 				style += " cmtr-has-reply";
+			if (resolved)
+				style = "cmtr-inline cmtr-resolved";
 
 			// TODO: This could be better (but I didn't necessarily want to create two separate code paths)
 			const range_show_syntax = in_range ? show_syntax : undefined,
@@ -131,7 +138,8 @@ export function constructDecorations(
 				range_show_styling = in_range ? show_styling : undefined;
 
 			if (!(show_comment && in_range) && range.type === SuggestionType.COMMENT && settings.comment_style !== "inline") {
-				if (settings.comment_style === "icon" && range.base_range === range) {
+				// EXPL: Resolved comments never render an icon; they fall through to the hidden branch
+				if (settings.comment_style === "icon" && range.base_range === range && !resolved) {
 					// FIXME: Widget is unnecessarily destroyed from selection changes
 					// EXPL: Comment ranges are only shown as icons in live preview mode
 					decorations.push(
@@ -153,7 +161,8 @@ export function constructDecorations(
 					hideBracket(decorations, range, 0, range_show_syntax);
 					markContents(decorations, range, style + " cmtr-addition", 1, false, range_show_styling);
 				} else {
-					markContents(decorations, range, style, 0, false, range_show_styling);
+					// EXPL: Resolved ranges also drop any custom color styling (plain text appearance)
+					markContents(decorations, range, style, 0, false, resolved ? false : range_show_styling);
 				}
 				hideBracket(decorations, range, 1, range_show_syntax);
 			}

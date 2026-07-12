@@ -319,7 +319,10 @@ export abstract class CriticMarkupRange {
 			else
 				str = this.unwrap();
 		}
-		return `<${tag} class='cmtr-${this.repr.toLowerCase()}'>${str}</${tag}>`;
+		// EXPL: Resolved ranges render as plain text in reading view (resolve writes `done` to every
+		//       thread member, so a per-range check suffices)
+		const cls = this.fields.done === true ? "cmtr-resolved" : `cmtr-${this.repr.toLowerCase()}`;
+		return `<${tag} class='${cls}'>${str}</${tag}>`;
 	}
 
 	apply_offset(offset: number) {

@@ -1,7 +1,7 @@
 import { type EditorState, Range, RangeSet, StateField } from "@codemirror/state";
 import { EditorView, GutterMarker } from "@codemirror/view";
 
-import { Component, editorEditorField, editorInfoField, MarkdownRenderer, Menu, Notice } from "obsidian";
+import { Component, editorEditorField, editorInfoField, MarkdownRenderer, Menu, Notice, setIcon } from "obsidian";
 
 import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 
@@ -10,9 +10,13 @@ import {
 	addCommentToView,
 	create_range,
 	CriticMarkupRange,
+	type EditorChange,
 	rangeParser,
 	rejectSuggestions,
+	reopen_thread,
+	resolve_thread,
 	SuggestionType,
+	thread_resolved,
 } from "../../../base";
 
 import { AnnotationInclusionType } from "../../../../constants";
@@ -22,6 +26,29 @@ import { annotationGutterFocusThreadAnnotation, annotationGutterFoldAnnotation }
 import { stickyContextMenuPatch } from "../../../../patches";
 import { createMetadataInfoElement } from "../../../../ui/snippets";
 import { pluginSettingsField } from "../../../uix";
+
+/**
+ * Computes the changes that delete an entire annotation thread.
+ * - COMMENT base: the whole thread span (base + replies) is removed.
+ * - HIGHLIGHT base: the highlight is unwrapped to plain text and its replies are removed.
+ * - Suggestion bases (addition/deletion/substitution): only the attached comments are removed,
+ *   the suggestion markup itself is kept.
+ */
+function removeThreadChanges(range: CriticMarkupRange): EditorChange[] {
+	const base = range.base_range;
+	if (base.type === SuggestionType.COMMENT)
+		return [{ from: base.full_range_front, to: base.full_range_back, insert: "" }];
+	if (base.type === SuggestionType.HIGHLIGHT)
+		return [{ from: base.from, to: base.full_range_back, insert: base.unwrap() }];
+	if (base.replies.length) {
+		return [{
+			from: base.replies[0].from,
+			to: base.replies[base.replies.length - 1].to,
+			insert: "",
+		}];
+	}
+	return [];
+}
 
 class AnnotationNode extends Component {
 	text: string;
@@ -214,11 +241,7 @@ class AnnotationNode extends Component {
 						.setSection("close-annotation")
 						.onClick(() => {
 							this.marker.view.dispatch({
-								changes: {
-									from: this.range.full_range_front,
-									to: this.range.full_range_back,
-									insert: "",
-								},
+								changes: removeThreadChanges(this.range),
 							});
 						});
 				});
@@ -268,11 +291,7 @@ class AnnotationNode extends Component {
 						.setSection("comment-handling")
 						.onClick(() => {
 							this.marker.view.dispatch({
-								changes: {
-									from: this.range.replies[0].from,
-									to: this.range.replies[this.range.replies.length - 1].to,
-									insert: "",
-								},
+								changes: removeThreadChanges(this.range),
 							});
 						});
 				});
@@ -287,6 +306,24 @@ class AnnotationNode extends Component {
 					});
 			});
 		}
+
+		menu.addItem((item) => {
+			if (thread_resolved(this.range)) {
+				item.setTitle("Reopen thread")
+					.setIcon("rotate-ccw")
+					.setSection("close-annotation")
+					.onClick(() => {
+						this.marker.view.dispatch({ changes: reopen_thread(this.range) });
+					});
+			} else {
+				item.setTitle("Resolve thread")
+					.setIcon("check")
+					.setSection("close-annotation")
+					.onClick(() => {
+						this.marker.view.dispatch({ changes: resolve_thread(this.range) });
+					});
+			}
+		});
 
 		menu.addItem((item) => {
 			item.setTitle("Fold gutter")
@@ -376,6 +413,27 @@ export class AnnotationMarker extends GutterMarker {
 		this.annotation_thread = createDiv({ cls: "cmtr-anno-gutter-thread" });
 		this.annotation_thread.addEventListener("click", this.onCommentThreadClick.bind(this));
 
+		// EXPL: Compact per-card actions (visible on hover/focus, see annotation-gutter.scss)
+		const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
+		const resolve_button = actions.createEl("button", {
+			cls: "cmtr-anno-gutter-thread-action",
+			attr: { "aria-label": "Resolve thread" },
+		});
+		setIcon(resolve_button, "check");
+		resolve_button.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.view.dispatch({ changes: resolve_thread(this.annotation) });
+		});
+		const delete_button = actions.createEl("button", {
+			cls: "cmtr-anno-gutter-thread-action",
+			attr: { "aria-label": "Delete thread" },
+		});
+		setIcon(delete_button, "trash-2");
+		delete_button.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.view.dispatch({ changes: removeThreadChanges(this.annotation) });
+		});
+
 		for (const range of this.annotations)
 			this.component.addChild(new AnnotationNode(range, this));
 		this.component.load();
@@ -428,6 +486,10 @@ function createMarkers(state: EditorState, changed_ranges: CriticMarkupRange[], 
 
 	const cm_ranges: Range<AnnotationMarker>[] = [];
 	for (const range of changed_ranges) {
+		// EXPL: Resolved threads never render a gutter card (reopen via the Annotations View or context menu)
+		if (thread_resolved(range))
+			continue;
+
 		let full_thread = range.full_thread;
 
 		if (!includeComments)
@@ -450,6 +512,12 @@ function createMarkers(state: EditorState, changed_ranges: CriticMarkupRange[], 
 				if (!includeComments) full_thread.shift();
 				break;
 		}
+
+		// EXPL: An anchored highlight is only the thread's anchor, not an annotation of its own —
+		//       never render it as a card (its replies carry the thread); standalone highlights
+		//       (no replies) keep their card, governed by the included-types pruning above
+		if (full_thread[0] === range && range.type === SuggestionType.HIGHLIGHT && range.replies.length)
+			full_thread.shift();
 
 		if (full_thread.length) {
 			// MODIFICATION: advanceCursor in base.ts required markers to be inserted into the rangeset at exactly

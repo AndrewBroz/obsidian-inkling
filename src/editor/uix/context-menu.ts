@@ -2,7 +2,16 @@ import type { SelectionRange } from "@codemirror/state";
 import type { EventRef, MarkdownView } from "obsidian";
 import type CommentatorPlugin from "../../main";
 
-import { acceptSuggestions, addCommentToView, isCursor, rangeParser, rejectSuggestions } from "../base";
+import {
+	acceptSuggestions,
+	addCommentToView,
+	isCursor,
+	rangeParser,
+	rejectSuggestions,
+	reopen_thread,
+	resolve_thread,
+	thread_resolved,
+} from "../base";
 
 import { AnnotationInclusionType } from "../../constants";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
@@ -84,13 +93,23 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 							});
 					});
 					submenu.addItem((item) => {
-						item.setTitle("Set completed")
-							.setIcon("lucide-check")
-							.onClick(() => {
-								editor.cm.dispatch(editor.cm.state.update({
-									changes: range.add_metadata("done", true),
-								}));
-							});
+						if (thread_resolved(range)) {
+							item.setTitle("Reopen thread")
+								.setIcon("lucide-rotate-ccw")
+								.onClick(() => {
+									editor.cm.dispatch(editor.cm.state.update({
+										changes: reopen_thread(range),
+									}));
+								});
+						} else {
+							item.setTitle("Resolve thread")
+								.setIcon("lucide-check")
+								.onClick(() => {
+									editor.cm.dispatch(editor.cm.state.update({
+										changes: resolve_thread(range),
+									}));
+								});
+						}
 					});
 				});
 			}
