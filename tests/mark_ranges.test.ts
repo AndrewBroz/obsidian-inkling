@@ -117,6 +117,16 @@ describe("marking over pending additions consumes them (reject-all safety)", () 
 		expect(reject_all(output)).toBe(reject_all("ab{++cd++}ef"));
 		expect(accept_all(output)).toBe("abqef");
 	});
+
+	// BUG: Partial coverage of a pending addition still folds the covered slice —
+	//      reject-all resurrects it ("abcef" instead of "abef"). Full-coverage retraction
+	//      only, by design of the Phase 3A fix; scheduled for a later phase.
+	//      Do NOT "fix" this expectation without implementing partial-coverage retraction.
+	test("KNOWN RESIDUAL: partial coverage of an addition still folds the covered slice", () => {
+		const output = mark("ab{++cd++}ef", 0, 6, "", SuggestionType.DELETION);
+		expect(output).toBe("{~~abc~>d~~}ef");
+		expect(reject_all(output)).toBe("abcef"); // ideal would be "abef"
+	});
 });
 
 // EXPL: Characterization tests — they pin down CURRENT behavior of the branches

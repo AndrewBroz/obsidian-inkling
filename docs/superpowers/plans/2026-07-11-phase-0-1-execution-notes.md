@@ -120,6 +120,8 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
   Safety note: head-inside-markup cannot reach the fallback via real callers (at_cursor's
   inclusive boundaries guarantee `range` is defined there); the guarantee lives in caller
   discipline — flagged for a defensive guard later.
+- Spec refinement: the first-run modal opens with an empty name field — no reliable
+  cross-platform "system hint" exists inside Obsidian's sandbox; deliberately skipped.
 
 ### Manual smoke checklist (needs a human in Obsidian)
 
@@ -129,6 +131,10 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
 - Select text → "Add comment" → highlight + focused comment thread; hover shows the thread.
 - (Carried from earlier phases) staleness-guard Notice; gutter fold/resize persistence;
   bulk-stale accept shows ONE summary Notice.
+- Edit a legacy metadata-free doc with an author set — author-SPLIT compatibility means edits
+  land as separate adjacent ranges (expected).
+- Delete across an anchored highlight+comment in suggestion mode — thread must degrade
+  gracefully, no render error.
 
 ## Test-infrastructure conventions established (use in later phases)
 

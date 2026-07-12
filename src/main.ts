@@ -59,6 +59,7 @@ import { CommentatorSettings } from "./ui/settings";
 import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/view.svelte";
 
 import {
+	backfillLegacyMetadataFlags,
 	DATABASE_VERSION,
 	DEFAULT_SETTINGS,
 	REQUIRES_DATABASE_REINDEX,
@@ -311,6 +312,10 @@ export default class CommentatorPlugin extends Plugin {
 		const original_settings = this.settings;
 		this.first_install = new_settings == null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, new_settings);
+		// EXPL: Runs on every existing-settings load (not just the versioned-migration
+		//       branch below) so pre-Phase-3A saves never silently inherit the new `true`
+		//       attribution defaults. See backfillLegacyMetadataFlags in constants.ts.
+		backfillLegacyMetadataFlags(this.settings, new_settings);
 		this.previous_settings = Object.assign({}, original_settings, this.settings);
 
 		// EXPL: Do not migrate new installs, immediately save settings

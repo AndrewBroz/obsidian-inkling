@@ -106,6 +106,35 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	},
 };
 
+// EXPL: The six Phase 3A attribution keys that flipped from `false`/absent to `true` as
+//       DEFAULT_SETTINGS. Kept as a single source of truth for both the default flip and
+//       the legacy-upgrader backfill below.
+export const LEGACY_METADATA_KEYS = [
+	"enable_metadata",
+	"enable_author_metadata",
+	"enable_timestamp_metadata",
+	"add_metadata",
+	"add_author_metadata",
+	"add_timestamp_metadata",
+] as const;
+
+// EXPL: Attribution defaults flipped to true in Phase 3A for NEW installs only.
+//       Settings saved before these keys existed must keep the old (off) behavior —
+//       Object.assign would otherwise silently backfill `true` for upgraders. Mutates
+//       `settings` (the post Object.assign merge) in place; no-op when `saved` is
+//       null/undefined (fresh installs, which should get the new `true` defaults).
+export function backfillLegacyMetadataFlags(
+	settings: PluginSettings,
+	saved: Partial<PluginSettings> | null | undefined,
+): void {
+	if (saved == null)
+		return;
+	for (const key of LEGACY_METADATA_KEYS) {
+		if (!(key in saved))
+			settings[key] = false;
+	}
+}
+
 export const REQUIRES_FULL_RELOAD: Set<string> = new Set([
 	"live_preview",
 	"diff_gutter",
