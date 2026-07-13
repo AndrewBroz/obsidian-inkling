@@ -208,14 +208,13 @@ describe("annotation gutter blur-path dispatches are synchronous", () => {
 });
 
 describe("card action buttons are gated by thread type", () => {
-	test("comment and anchored-highlight cards render Resolve/Delete actions, not Accept/Reject", () => {
+	test("comment and anchored-highlight cards render Resolve, not Accept/Reject", () => {
 		const { view, ranges } = setup("x{>>hi<<}y{==sel==}{>>reply<<}z");
 		const comment_card = mountThread(view, ranges[0]).marker;
 		const anchored_card = mountThread(view, ranges[1]).marker;
 
 		expect(comment_card.annotation_thread.querySelector(".cmtr-anno-gutter-thread-actions")).not.toBeNull();
 		expect(anchored_card.annotation_thread.querySelector("[aria-label='Resolve thread']")).not.toBeNull();
-		expect(anchored_card.annotation_thread.querySelector("[aria-label='Delete thread']")).not.toBeNull();
 		expect(comment_card.annotation_thread.querySelector("[aria-label='Accept changes']")).toBeNull();
 		expect(anchored_card.annotation_thread.querySelector("[aria-label='Reject changes']")).toBeNull();
 
@@ -223,9 +222,25 @@ describe("card action buttons are gated by thread type", () => {
 		//       app's native icon-button treatment (transparent at rest, flat hover tint) instead
 		//       of a bespoke shadow/outline style.
 		const resolve_button = anchored_card.annotation_thread.querySelector("[aria-label='Resolve thread']")!;
-		const delete_button = anchored_card.annotation_thread.querySelector("[aria-label='Delete thread']")!;
 		expect(resolve_button.classList.contains("clickable-icon")).toBe(true);
-		expect(delete_button.classList.contains("clickable-icon")).toBe(true);
+	});
+
+	// EXPL: Deleting a thread destroys the only copy of what people wrote — and on a HIGHLIGHT base
+	//       `removeThreadChanges` also unwraps the anchor back into plain text. It must NOT sit as a
+	//       one-click, hover-revealed icon a few pixels from Resolve, distinguishable only by glyph.
+	//       Resolve is reversible; delete is not, so delete costs an extra step (the context menu).
+	test("no destructive Delete button sits next to Resolve on a comment card", () => {
+		const { view, ranges } = setup("x{>>hi<<}y{==sel==}{>>reply<<}z");
+		const comment_card = mountThread(view, ranges[0]).marker;
+		const anchored_card = mountThread(view, ranges[1]).marker;
+
+		for (const card of [comment_card, anchored_card]) {
+			expect(card.annotation_thread.querySelector("[aria-label='Delete thread']")).toBeNull();
+			// nothing else destructive snuck into the hover row either
+			const actions = card.annotation_thread.querySelectorAll(".cmtr-anno-gutter-thread-action");
+			expect(actions).toHaveLength(1);
+			expect(actions[0].getAttribute("aria-label")).toBe("Resolve thread");
+		}
 	});
 
 	test("suggestion cards render Accept/Reject actions, not Resolve/Delete (standalone or with replies)", () => {

@@ -550,16 +550,22 @@ export class AnnotationMarker extends GutterMarker {
 		this.annotation_thread.addEventListener("click", this.onCommentThreadClick.bind(this));
 
 		// EXPL: Compact per-card actions (visible on hover/focus, see annotation-gutter.scss).
-		//       Resolve/Delete are comment-thread concepts: only rendered when the base is a
-		//       HIGHLIGHT anchor or a COMMENT. Suggestion bases (addition/deletion/substitution)
-		//       get Accept/Reject instead, dispatching the same `acceptSuggestions`/
-		//       `rejectSuggestions` helpers as the "Accept changes"/"Reject changes" context-menu
-		//       items below, scoped to this thread's own span — a Resolve button there would
-		//       contradict itself across views (suggestions have their own accept/reject
-		//       lifecycle), and Delete on a standalone suggestion card would be a silent no-op
-		//       (`removeThreadChanges` returns [] for it). Both branches reuse the same
+		//       Resolve is a comment-thread concept: only rendered when the base is a HIGHLIGHT anchor
+		//       or a COMMENT. Suggestion bases (addition/deletion/substitution) get Accept/Reject
+		//       instead, dispatching the same `acceptSuggestions`/`rejectSuggestions` helpers as the
+		//       "Accept changes"/"Reject changes" context-menu items below, scoped to this thread's
+		//       own span — a Resolve button there would contradict itself across views (suggestions
+		//       have their own accept/reject lifecycle). Both branches reuse the same
 		//       `.cmtr-anno-gutter-thread-actions` row/hover mechanism so suggestion cards get
 		//       identical hover-reveal treatment to comment/anchored cards.
+		//
+		// EXPL: There is deliberately NO delete button here. Resolving is reversible (reopen from the
+		//       Annotations View or the editor context menu); deleting a thread destroys the only copy
+		//       of what people wrote, and `removeThreadChanges` on a HIGHLIGHT base also unwraps the
+		//       anchor back into plain text. A one-click, hover-revealed control sitting a few pixels
+		//       from Resolve is the wrong affordance for an action that severe — the two were adjacent
+		//       icons distinguishable only by glyph. Deletion stays available, one step further away,
+		//       via the card's context menu ("Remove comment" / "Remove all comments" below).
 		if (thread_resolvable(this.annotation)) {
 			const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
 			const resolve_button = actions.createEl("button", {
@@ -570,15 +576,6 @@ export class AnnotationMarker extends GutterMarker {
 			resolve_button.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.view.dispatch({ changes: resolve_thread(this.annotation) });
-			});
-			const delete_button = actions.createEl("button", {
-				cls: ["cmtr-anno-gutter-thread-action", "clickable-icon"],
-				attr: { "aria-label": "Delete thread" },
-			});
-			setIcon(delete_button, "trash-2");
-			delete_button.addEventListener("click", (e) => {
-				e.stopPropagation();
-				this.view.dispatch({ changes: removeThreadChanges(this.annotation) });
 			});
 		} else if (
 			this.annotation.type === SuggestionType.ADDITION ||
