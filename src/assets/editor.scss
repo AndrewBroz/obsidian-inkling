@@ -210,6 +210,19 @@
   box-shadow: none;
 }
 
+// EXPL: `--background-modifier-hover` is a SEMI-TRANSPARENT overlay token, not an opaque
+//       surface color — confirmed from Obsidian's shipped app.css:
+//       `--background-modifier-hover: rgba(var(--mono-rgb-100), 0.075)` (7.5% alpha white;
+//       0.15/15% on mobile dark). It's designed to be composited ON TOP of an already-opaque
+//       surface (e.g. `.clickable-icon`'s base is `background-color: transparent`, so the
+//       wash paints straight onto whatever's behind the button — usually a solid panel).
+//       Our pill instead REPLACED an opaque `background-color: var(--background-primary)`
+//       with this translucent token on `:hover`, so at hover the pill's own paint became
+//       ~92.5% see-through and the document text underneath showed through it. Fix: keep
+//       `background-color` pinned to the opaque `--background-primary` at all times, and
+//       layer the hover tint as a `background-image` (a solid-color gradient) painted over
+//       that opaque base instead of replacing it — background-image layers always paint
+//       above background-color within the same element, so the composite stays fully opaque.
 .cmtr-comment-pill-button {
   display: flex;
   align-items: center;
@@ -228,7 +241,10 @@
 
   &:hover {
     color: var(--icon-color-hover);
-    background-color: var(--background-modifier-hover);
+    background-image: linear-gradient(
+      var(--background-modifier-hover),
+      var(--background-modifier-hover)
+    );
   }
 
   svg {

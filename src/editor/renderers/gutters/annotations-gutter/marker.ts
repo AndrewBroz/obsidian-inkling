@@ -462,7 +462,7 @@ export class AnnotationMarker extends GutterMarker {
 		if (thread_resolvable(this.annotation)) {
 			const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
 			const resolve_button = actions.createEl("button", {
-				cls: "cmtr-anno-gutter-thread-action",
+				cls: ["cmtr-anno-gutter-thread-action", "clickable-icon"],
 				attr: { "aria-label": "Resolve thread" },
 			});
 			setIcon(resolve_button, "check");
@@ -471,7 +471,7 @@ export class AnnotationMarker extends GutterMarker {
 				this.view.dispatch({ changes: resolve_thread(this.annotation) });
 			});
 			const delete_button = actions.createEl("button", {
-				cls: "cmtr-anno-gutter-thread-action",
+				cls: ["cmtr-anno-gutter-thread-action", "clickable-icon"],
 				attr: { "aria-label": "Delete thread" },
 			});
 			setIcon(delete_button, "trash-2");
@@ -486,7 +486,7 @@ export class AnnotationMarker extends GutterMarker {
 		) {
 			const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
 			const accept_button = actions.createEl("button", {
-				cls: "cmtr-anno-gutter-thread-action",
+				cls: ["cmtr-anno-gutter-thread-action", "clickable-icon"],
 				attr: { "aria-label": "Accept changes" },
 			});
 			setIcon(accept_button, "check");
@@ -497,7 +497,7 @@ export class AnnotationMarker extends GutterMarker {
 				});
 			});
 			const reject_button = actions.createEl("button", {
-				cls: "cmtr-anno-gutter-thread-action",
+				cls: ["cmtr-anno-gutter-thread-action", "clickable-icon"],
 				attr: { "aria-label": "Reject changes" },
 			});
 			setIcon(reject_button, "x");

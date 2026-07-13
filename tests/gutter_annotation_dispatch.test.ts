@@ -191,6 +191,14 @@ describe("card action buttons are gated by thread type", () => {
 		expect(anchored_card.annotation_thread.querySelector("[aria-label='Delete thread']")).not.toBeNull();
 		expect(comment_card.annotation_thread.querySelector("[aria-label='Accept changes']")).toBeNull();
 		expect(anchored_card.annotation_thread.querySelector("[aria-label='Reject changes']")).toBeNull();
+
+		// EXPL: action buttons carry Obsidian's own `clickable-icon` class so they inherit the
+		//       app's native icon-button treatment (transparent at rest, flat hover tint) instead
+		//       of a bespoke shadow/outline style.
+		const resolve_button = anchored_card.annotation_thread.querySelector("[aria-label='Resolve thread']")!;
+		const delete_button = anchored_card.annotation_thread.querySelector("[aria-label='Delete thread']")!;
+		expect(resolve_button.classList.contains("clickable-icon")).toBe(true);
+		expect(delete_button.classList.contains("clickable-icon")).toBe(true);
 	});
 
 	test("suggestion cards render Accept/Reject actions, not Resolve/Delete (standalone or with replies)", () => {
@@ -202,10 +210,16 @@ describe("card action buttons are gated by thread type", () => {
 		const substitution = mountThread(view, ranges.find((r) => r.type === SuggestionType.SUBSTITUTION)!).marker;
 
 		for (const card of [standalone_addition, deletion_with_reply, substitution]) {
-			expect(card.annotation_thread.querySelector("[aria-label='Accept changes']")).not.toBeNull();
-			expect(card.annotation_thread.querySelector("[aria-label='Reject changes']")).not.toBeNull();
+			const accept_button = card.annotation_thread.querySelector("[aria-label='Accept changes']");
+			const reject_button = card.annotation_thread.querySelector("[aria-label='Reject changes']");
+			expect(accept_button).not.toBeNull();
+			expect(reject_button).not.toBeNull();
 			expect(card.annotation_thread.querySelector("[aria-label='Resolve thread']")).toBeNull();
 			expect(card.annotation_thread.querySelector("[aria-label='Delete thread']")).toBeNull();
+
+			// EXPL: same Obsidian-native `clickable-icon` treatment applies to Accept/Reject.
+			expect(accept_button!.classList.contains("clickable-icon")).toBe(true);
+			expect(reject_button!.classList.contains("clickable-icon")).toBe(true);
 		}
 	});
 });

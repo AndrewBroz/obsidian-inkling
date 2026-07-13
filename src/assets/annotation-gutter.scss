@@ -145,27 +145,29 @@
   opacity: 1;
 }
 
+// EXPL: These buttons carry Obsidian's own `.clickable-icon` class (added in marker.ts) so
+//       they inherit the app's real icon-button idiom instead of a bespoke shadow/outline
+//       treatment — confirmed from the shipped app.css: `.clickable-icon` is transparent at
+//       rest (`background-color: transparent`, no border/box-shadow), and only gains a flat
+//       tint on hover (`background-color: var(--background-modifier-hover)`, plus
+//       `color: var(--icon-color-hover)`), radius `var(--clickable-icon-radius)` (=
+//       `var(--radius-s)`), and icon-opacity fade (`--icon-opacity` / `--icon-opacity-hover`).
+//       This rule only overrides GEOMETRY (padding) to fit the compact hover-row instead of
+//       `.clickable-icon`'s default `padding: var(--size-2-2) var(--size-2-3)`; everything else
+//       (background/color/radius/opacity/transition) is inherited from `.clickable-icon` so the
+//       buttons stay visually consistent with the rest of Obsidian's chrome across themes.
 .cmtr-anno-gutter-thread-action {
-  display: flex;
-  align-items: center;
-  height: auto;
   padding: var(--size-2-1);
-
-  background-color: var(--background-primary-alt);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  box-shadow: none;
-  color: var(--text-muted);
   cursor: pointer;
 }
 
-.cmtr-anno-gutter-thread-action:hover {
-  color: var(--text-normal);
-  background-color: var(--background-secondary);
-}
-
+// EXPL: Obsidian's generic `button:focus-visible` rule (`box-shadow: 0 0 0 3px
+//       var(--background-modifier-border-focus)`) already applies to these real `<button>`
+//       elements inside the app, but this explicit rule guarantees the same visible ring
+//       (using the same token, for native consistency) even if that generic rule is ever
+//       shadowed — keyboard-focus visibility must not depend on selector-specificity luck.
 .cmtr-anno-gutter-thread-action:focus-visible {
-  box-shadow: 0 0 0 2px var(--interactive-accent);
+  box-shadow: 0 0 0 3px var(--background-modifier-border-focus);
 }
 
 .cmtr-anno-gutter-thread-action svg {
