@@ -30,17 +30,25 @@
 //        CriticMarkup Main Suggestion Styles
 // ================================================
 
-// EXPL: `.cmtr-focused` is an ANCESTOR of the type spans, never a descendant — verified by rendering
-//       the real decorations (focus-renderer marks `full_range_front .. full_range_back`, the WHOLE
-//       thread, while markup-renderer marks only a range's inner content, so CodeMirror nests the
-//       bigger range OUTSIDE):
+// EXPL: `.cmtr-focused` can nest EITHER WAY relative to a type span, so every focus rule below is
+//       written in both forms. Do not "simplify" one away.
 //
-//         <span class="cmtr-focused">{==<span class="cmtr-highlight">anchor</span>==}{>>note<<}</span>
+//       In the real pipeline it is usually a DESCENDANT:
+//         <span class="cmtr-addition"><span class="cmtr-focused">added</span></span>
+//       The focus mark covers the whole range (brackets included), but the brackets are hidden by
+//       replace decorations, so it collapses onto exactly the same VISIBLE text as the type mark.
+//       When two marks cover identical text, CodeMirror nests them by decoration-source PRECEDENCE
+//       (`Prec.highest(focusRenderer)` vs `Prec.low(livepreviewRenderer)` in main.ts), not by range
+//       size — and the focus mark lands inside.
 //
-//       Every focus rule in this file used to be written as `.cmtr-addition .cmtr-focused` (and
-//       `.cmtr-deletion:has(.cmtr-focused)`), i.e. focus as a DESCENDANT. Those selectors matched
-//       nothing, ever — which is the real reason a selected range looked identical to an unselected
-//       one. The ancestor form below is what actually applies.
+//       It is not always so: when a focus range genuinely spans two sibling spans that both render
+//       (e.g. a highlight and its inline comment under `comment_style: "inline"`), the focus mark has
+//       to wrap them and becomes the ANCESTOR.
+//
+//       0.9.3 rewrote every rule here to the ancestor form ALONE, on the strength of a synthetic
+//       reproduction that put both marks in one RangeSet — where containment decides nesting. That is
+//       not how the real system composes them, and the result was that selection stopped doing
+//       anything at all. Both forms, always.
 // EXPL: Selection changes the WEIGHT of a mark, never its presence or its kind. A suggestion is
 //       always underlined/struck through (thin), and the one you have selected is the same mark drawn
 //       heavy. Google Docs does exactly this, and it is the only version that survives contact with a
@@ -69,8 +77,14 @@
   text-decoration-thickness: 1px;
 }
 
+// EXPL: `:has()` covers the descendant nesting (the usual one) and the descendant selectors cover the
+//       ancestor nesting. Thickness must be set on the element that OWNS the decoration — the type
+//       span — which is why the `:has()` form targets the parent rather than the focused child: a
+//       child cannot thicken a line its parent drew.
 .cmtr-focused .cmtr-addition,
-.cmtr-focused .cmtr-deletion {
+.cmtr-focused .cmtr-deletion,
+.cmtr-addition:has(.cmtr-focused),
+.cmtr-deletion:has(.cmtr-focused) {
   text-decoration-thickness: 3px;
 }
 
@@ -98,7 +112,11 @@
   transition: background-color 120ms ease-in-out;
 }
 
-.cmtr-focused .cmtr-highlight {
+// EXPL: Both nestings, as above. The colour is always set on `.cmtr-highlight` itself — never on the
+//       focused child — so exactly one element paints, and the two translucent values can never
+//       composite into the "additive highlight" bug.
+.cmtr-focused .cmtr-highlight,
+.cmtr-highlight:has(.cmtr-focused) {
   background-color: var(--highlight-color-alt);
 }
 

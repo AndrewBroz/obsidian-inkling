@@ -389,7 +389,14 @@ export const editorEditorField = StateField.define<{ cm?: unknown }>({
 	create: () => ({}),
 	update: (value) => value,
 });
-export const editorLivePreviewField = {};
+// EXPL: A real StateField, not `{}`. `livepreviewRenderer` reads it with `state.field(...)`, which
+//       THROWS on a plain object ("Field is not present in this state") — so the entire live-preview
+//       decoration pipeline was untestable, and the focus/markup nesting it produces could only be
+//       guessed at. Defaults to true (live preview on), which is the mode the plugin renders in.
+export const editorLivePreviewField = StateField.define<boolean>({
+	create: () => true,
+	update: (value) => value,
+});
 
 export class App {
 	workspace: any = {};
