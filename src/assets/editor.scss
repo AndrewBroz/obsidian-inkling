@@ -41,20 +41,37 @@
 //       `.cmtr-deletion:has(.cmtr-focused)`), i.e. focus as a DESCENDANT. Those selectors matched
 //       nothing, ever — which is the real reason a selected range looked identical to an unselected
 //       one. The ancestor form below is what actually applies.
+// EXPL: Selection changes the WEIGHT of a mark, never its presence or its kind. A suggestion is
+//       always underlined/struck through (thin), and the one you have selected is the same mark drawn
+//       heavy. Google Docs does exactly this, and it is the only version that survives contact with a
+//       real document: the marks stay legible at a glance when nothing is selected, and the selected
+//       one is unmistakable without the text jumping around.
+//
+//       What was here before got both halves wrong:
+//         - An addition carried NO decoration at rest — only green COLOUR — so a 3px underline
+//           appeared out of nothing on focus. Colour alone is also the one cue a red/green colour
+//           deficiency cannot resolve, which left additions and deletions indistinguishable at rest.
+//         - A focused deletion switched to DASHED, and dashed reads lighter and more provisional than
+//           solid — so SELECTING a deletion actually de-emphasised it. Exactly backwards. (Both bugs
+//           were invisible until 0.9.3 made these selectors match anything at all.)
+//
+//       Only `text-decoration-thickness` changes between the two states, so the mark's kind, colour,
+//       and position are identical and nothing reflows.
 .cmtr-addition {
   color: var(--addition-color);
-}
-
-.cmtr-focused .cmtr-addition {
-  text-decoration: underline 3px solid var(--addition-color);
+  text-decoration: underline solid var(--addition-color);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 .cmtr-deletion {
-  text-decoration: var(--deletion-color) 2px line-through;
+  text-decoration: line-through solid var(--deletion-color);
+  text-decoration-thickness: 1px;
 }
 
+.cmtr-focused .cmtr-addition,
 .cmtr-focused .cmtr-deletion {
-  text-decoration: var(--deletion-color) 2px line-through dashed;
+  text-decoration-thickness: 3px;
 }
 
 // EXPL: A suggestion that happens to carry comments is still just a suggestion — its appearance must
