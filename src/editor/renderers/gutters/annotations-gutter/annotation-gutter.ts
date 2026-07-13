@@ -704,6 +704,18 @@ class AnnotationSingleGutterView extends SingleGutterView {
 		this.fold_button_el?.remove();
 		this.resize_handle_el?.remove();
 
+		// EXPL: `preventUnload` is latched on markers that are merely MOVING between GutterElements, and
+		//       GutterElement.setMarkers honours it by SKIPPING destroy() (base.ts:181-183). On teardown
+		//       there is no move to survive: this is the end of the gutter. A marker still latched here
+		//       would never get destroy()'d, so its Component never unloads — and for the pending card
+		//       that Component owns a ReplyBox holding a live EmbeddableMarkdownEditor (a real CM6
+		//       EditorView), which would outlive the closed note/pane. Unlatch first so the elements
+		//       below are genuinely destroyed.
+		for (const element of this.elements) {
+			for (const marker of element.markers)
+				(marker as GutterMarker & { preventUnload?: boolean }).preventUnload = false;
+		}
+
 		super.destroy();
 	}
 }

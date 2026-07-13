@@ -77,10 +77,17 @@ export class Component {
 	_loaded = false;
 	_children: Component[] = [];
 	load() {
+		this._loaded = true;
 		this.onload();
 	}
 	onload() {}
+	// EXPL: Unloading cascades, as it does in Obsidian — a component owns its children's lifetimes.
+	//       Without the cascade a component could "unload" while its children stayed live, and a test
+	//       could not tell a properly torn-down card from one leaking a loaded editor.
 	unload() {
+		this._loaded = false;
+		for (const child of this._children.splice(0))
+			child.unload();
 		this.onunload();
 	}
 	onunload() {}
@@ -88,7 +95,17 @@ export class Component {
 		this._children.push(child);
 		return child;
 	}
+	// EXPL: Detaches the child (and unloads it, as Obsidian does for a loaded child) rather than
+	//       handing it straight back. The old no-op made component-teardown bugs INVISIBLE to tests:
+	//       a stale child stayed on `_children` forever, so an assertion could never tell a component
+	//       that had released its old child from one still holding both — which is exactly the leak
+	//       `PendingAnnotationMarker.toDOM`'s `hideReplyBox()` call exists to prevent
+	//       (tests/pending_card.test.ts, "toDOM twice…").
 	removeChild<T extends Component>(child: T): T {
+		const idx = this._children.indexOf(child);
+		if (idx !== -1)
+			this._children.splice(idx, 1);
+		child.unload();
 		return child;
 	}
 	register(_cb: () => any) {}

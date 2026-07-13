@@ -6,7 +6,11 @@ import { CriticMarkupRange, SuggestionType } from "../ranges";
 import { rangeParser } from "../edit-util";
 import { create_range } from "../edit-util/range-create";
 
-import { annotationGutterFocusAnnotation } from "../../renderers/gutters/annotations-gutter";
+import {
+	annotationGutterFocusAnnotation,
+	annotationGutterFoldAnnotation,
+} from "../../renderers/gutters/annotations-gutter";
+import { pendingAnnotationMarkers } from "../../renderers/gutters/annotations-gutter/pending-marker";
 import { pluginSettingsField } from "../../uix";
 import { clearCommentDraft, commentDraftField, setCommentDraft } from "../../uix/extensions/comment-draft";
 import { commentModeAnnotation } from "../../uix/extensions/editing-modes";
@@ -28,9 +32,51 @@ export function addCommentToView(
 	if (!range && !selection.empty) {
 		const ranges = editor.state.field(rangeParser).ranges;
 		if (ranges.ranges_in_interval(selection.from, selection.to).length === 0) {
-			editor.dispatch({
-				effects: setCommentDraft.of({ from: selection.from, to: selection.to }),
+			// EXPL: The draft path is only viable where the provisional card can actually be RENDERED,
+			//       i.e. where the annotation gutter is installed. It is not always: `annotation_gutter`
+			//       is a user-facing toggle (GutterSettings.svelte) that leaves the gutter extension —
+			//       and with it `pendingAnnotationMarkers` — out of the state entirely, and
+			//       AnnotationGutterView's constructor reconfigures the gutter away in embeds/hover
+			//       popovers. With no card there is no ReplyBox, hence no Escape/blur/Enter, hence no
+			//       way to ever clear the draft — and a stuck draft makes `pill_eligible` false for
+			//       every subsequent selection, bricking the pill, the "Add comment" command and the
+			//       context menu item for the rest of the session. So probe for the card machinery and,
+			//       when it is absent, keep doing what this plugin did before drafts existed: write
+			//       `{==sel==}{>>@@<<}` immediately and focus it. Immediate-write is the only thing that
+			//       can work without a gutter.
+			if (editor.state.field(pendingAnnotationMarkers, false) !== undefined) {
+				editor.dispatch({
+					effects: setCommentDraft.of({ from: selection.from, to: selection.to }),
+					// EXPL: A folded gutter is one click away and is persisted across sessions. The card
+					//       would render into it at width 0 while its ReplyBox still takes focus, so the
+					//       user would type into an invisible editor (and Enter would still commit).
+					//       Opening a draft unfolds the gutter; `false` (not `null`) means "unfold",
+					//       never "toggle".
+					annotations: [annotationGutterFoldAnnotation.of(false)],
+					scrollIntoView: scroll,
+				});
+				return;
+			}
+
+			const anchor_text = editor.state.sliceDoc(selection.from, selection.to);
+			const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
+				create_range(settings, SuggestionType.COMMENT, "");
+			editor.dispatch(editor.state.update({
+				changes: { from: selection.from, to: selection.to, insert },
+				selection: EditorSelection.cursor(selection.from + insert.length - 3),
 				scrollIntoView: scroll,
+				annotations: [commentModeAnnotation.of(true)],
+			}));
+			activeWindow.setTimeout(() => {
+				editor.dispatch(editor.state.update({
+					annotations: [
+						annotationGutterFocusAnnotation.of({
+							from: selection.from,
+							to: selection.from,
+							index: 1,
+						}),
+					],
+				}));
 			});
 			return;
 		}

@@ -114,6 +114,14 @@ export class PendingAnnotationMarker extends GutterMarker {
  *       any edit *before* the anchor maps the draft's from/to, so eq reports "changed" and the card
  *       is rebuilt — exactly the "type `abc`, fix a typo in the paragraph above, lose `abc`" bug.
  *       Instance identity has no such hole. (tests/pending_card.test.ts pins it.)
+ *
+ * EXPL: Reusing the instance means `update` MUTATES `annotation.from/to` in place, which is a
+ *       StateField purity violation (the value held by `startState` changes under it) — tolerated
+ *       because no consumer can observe the old value: nothing anywhere reads
+ *       `startState.field(pendingAnnotationMarkers)`, and the one place CodeMirror compares old
+ *       against new (`RangeSet.eq`, from SingleGutterView.update) compares the positions STORED in
+ *       the range set's chunks plus point IDENTITY — never the marker's own fields.
+ *       `annotationGutterMarkers` mutates its markers the same way, for the same reason.
  */
 export const pendingAnnotationMarkers = StateField.define<RangeSet<PendingAnnotationMarker>>({
 	create: () => RangeSet.empty,

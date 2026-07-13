@@ -5,12 +5,14 @@ import { App, editorEditorField, editorInfoField } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
+import { addCommentToView } from "../src/editor/base/edit-logic/add-comment";
 import { annotation_gutter } from "../src/editor/renderers/gutters/annotations-gutter/annotation-gutter";
 import { annotationGutterMarkers } from "../src/editor/renderers/gutters/annotations-gutter/marker";
 import {
 	PendingAnnotationMarker,
 	pendingAnnotationMarkers,
 } from "../src/editor/renderers/gutters/annotations-gutter/pending-marker";
+import { GutterElement } from "../src/editor/renderers/gutters/base";
 import { annotationGutterIncludedTypesState } from "../src/editor/settings";
 import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
 import { clearCommentDraft, commentDraftField, setCommentDraft } from "../src/editor/uix/extensions/comment-draft";
@@ -101,13 +103,13 @@ function stubApp() {
  * GutterView/GutterElement/GutterMarker machinery — which is where the provisional card's one
  * genuinely dangerous behaviour lives (see the "survives an unrelated edit" test).
  */
-function setup(doc: string, { hideOnEmpty = false } = {}) {
+function setup(doc: string, { hideOnEmpty = false, foldState = false } = {}) {
 	const app = stubApp();
 
 	const { extension } = annotation_gutter({
 		class: "cmtr-anno-gutter",
 		markers: v => [v.state.field(annotationGutterMarkers), v.state.field(pendingAnnotationMarkers)],
-		foldState: false,
+		foldState,
 		width: 300,
 		hideOnEmpty,
 		includeFoldButton: true,
@@ -245,6 +247,12 @@ describe("provisional comment card", () => {
 	//       same marker instance without a destroy() in between (that is what `preventUnload` is for
 	//       — see its FIXME). A second card must not orphan the first card's ReplyBox on the shared
 	//       Component.
+	// EXPL: Asserted on the marker's COMPONENT, not on the fresh card's DOM. The DOM assertion is
+	//       vacuous: a second toDOM() builds its own `thread` element and parents its own ReplyBox
+	//       container inside it, so that subtree holds exactly one reply box whether or not the first
+	//       box was released. The orphan being hunted here lives on the shared Component — an unloaded
+	//       box left as a child of it, still holding a live editor on a detached DOM tree — so that is
+	//       what has to be counted. (Deleting `hideReplyBox()` from toDOM() leaves 2 children here.)
 	test("toDOM twice on one marker instance leaves exactly one live reply box", () => {
 		const { view } = setup("hello world");
 		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
@@ -258,20 +266,107 @@ describe("provisional comment card", () => {
 		expect(marker.reply_box).not.toBe(first_box);
 		expect(marker.reply_box).not.toBeNull();
 
+		// EXPL: `_children` is Obsidian's own (undocumented) child list on Component, which the jest
+		//       stand-in mirrors; the cast is only needed because it is absent from the public typings.
+		const children = (marker.component as unknown as { _children: unknown[] })._children;
+		expect(children).toHaveLength(1);
+		expect(children[0]).not.toBe(first_box);
+		expect(children[0]).toBe(marker.reply_box);
+
 		view.destroy();
 	});
 
-	test("Escape discards the draft: the card disappears and the note is untouched", () => {
+	// EXPL: Pins `preventUnload`. AnnotationUpdateContext builds NEW GutterElements (toDOM'ing their
+	//       markers) BEFORE finish() destroys the stale ones, so a marker re-homed between elements is
+	//       toDOM'd for the new element and only then handed to the old element's teardown. Without
+	//       the latch, that teardown calls destroy() on the marker — unloading the Component the
+	//       fresh card's ReplyBox was just added to, leaving a dead input on screen. Nothing else in
+	//       this file notices: flipping both `preventUnload = true` to `false` leaves every other
+	//       test green.
+	test("a re-homed marker keeps the reply box its new card just created", () => {
 		const { view } = setup("hello world");
 		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
 
+		const marker = pendingMarker(view)!;
+		// The element the marker currently lives in, and the one it is being re-homed into (built
+		// first, exactly as the update context does it)
+		const stale = new GutterElement(view, 0, 0, [marker]);
+		new GutterElement(view, 0, 0, [marker]);
+
+		const live_box = marker.reply_box;
+		expect(live_box).not.toBeNull();
+
+		// ...and only now does the stale element get torn down
+		stale.destroy();
+
+		expect(marker.reply_box).toBe(live_box);
+
+		view.destroy();
+	});
+
+	// EXPL: The mirror image of the test above: on genuine TEARDOWN (note closed, pane closed, gutter
+	//       setting turned off) the latch must NOT save the marker, or `destroy()` never runs, the
+	//       Component never unloads, and the ReplyBox's EmbeddableMarkdownEditor — a real CM6
+	//       EditorView in production — outlives the view it belonged to.
+	test("destroying the view destroys the pending card's reply box", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
 		const editor = openEditor(view);
-		editor.set("never mind");
-		editor.pressEscape();
+		expect(marker.reply_box).not.toBeNull();
+
+		view.destroy();
+
+		expect(marker.reply_box).toBeNull();
+		expect(editor.destroyed).toBe(true);
+	});
+
+	// EXPL: A folded gutter is a one-click, PERSISTED setting, so a draft can perfectly well open
+	//       into one. The card renders at width 0 while its ReplyBox still takes focus (`focus: true`),
+	//       so the user's keystrokes disappear into an invisible editor — and Enter still commits.
+	//       Opening a draft therefore unfolds the gutter.
+	test("opening a draft unfolds a folded gutter", () => {
+		const { view } = setup("hello world", { foldState: true });
+		const gutter = view.dom.querySelector<HTMLElement>(".cmtr-anno-gutter")!;
+		const width = () => parseInt(gutter.style.width) || 0;
+		expect(width()).toBe(0);
+
+		view.dispatch({ selection: { anchor: 6, head: 11 } });
+		addCommentToView(view, undefined);
+
+		expect(view.state.field(commentDraftField)).toEqual({ from: 6, to: 11 });
+		expect(pendingCards(view)).toHaveLength(1);
+		expect(width()).toBe(300);
+
+		view.destroy();
+	});
+
+	// EXPL: Both ways out of a draft that ISN'T a commit. The note must come out byte-identical from
+	//       either: that is the whole promise of draft-then-insert (the old flow wrote the markup up
+	//       front, so abandoning a comment left an empty range behind and needed a cleanup).
+	//       Escape discards whatever has been typed; blur only discards an EMPTY box (blurring with
+	//       text in it leaves the card standing, so clicking into the note to check a word cannot
+	//       silently throw the draft away — reply-box.ts).
+	test.each([
+		["Escape", (editor: MockEditor) => {
+			editor.set("never mind");
+			editor.pressEscape();
+		}],
+		["blurring an empty box", (editor: MockEditor) => {
+			editor.set("");
+			editor.triggerBlur();
+		}],
+	])("%s discards the draft: the card disappears and the note is untouched", (_name, abandon) => {
+		const DOC = "hello world";
+		const { view } = setup(DOC);
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		abandon(openEditor(view));
 
 		expect(view.state.field(commentDraftField)).toBeNull();
 		expect(pendingCards(view)).toHaveLength(0);
-		expect(view.state.doc.toString()).toBe("hello world");
+		expect(view.state.doc.toString()).toBe(DOC);
 
 		view.destroy();
 	});
