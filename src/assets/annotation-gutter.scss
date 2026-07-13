@@ -341,9 +341,16 @@
   border-top: 1px solid var(--background-modifier-border);
 }
 
+// EXPL: `--background-modifier-form-field` is the surface Obsidian paints its own text inputs with,
+//       so the reply box reads as an input rather than as another comment. It must differ from the
+//       card's `--background-secondary` in BOTH themes to be legible: it does (form-field resolves
+//       to the primary surface, which is darker than secondary in dark mode and lighter in light
+//       mode — either way it separates). The fallback matters: a theme that leaves the token
+//       undefined would otherwise give the input `background-color: transparent`, i.e. an invisible
+//       field sitting on the card.
 .cmtr-anno-gutter-reply-editor.cm-editor {
   min-height: auto;
-  background-color: var(--background-primary);
+  background-color: var(--background-modifier-form-field, var(--background-primary));
   border-radius: var(--radius-s);
   padding: var(--size-2-1) var(--size-2-2);
 }
