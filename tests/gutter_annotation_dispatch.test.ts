@@ -162,6 +162,33 @@ describe("annotation gutter blur-path dispatches are synchronous", () => {
 		expect(view.state.doc.toString()).toBe("xy");
 	});
 
+	// EXPL: The card's comment editor is a `create_range` sink exactly like the reply box, and it was
+	//       the unguarded one: CriticMarkup has no escapes, so saving `see a<<}b` into an existing
+	//       comment wrote `{>>see a<<}b<<}` — the inner `<<}` closes the comment early, `b<<}` is
+	//       orphaned as plain text and a bare `<<}` is left DANGLING in the note. Refuse the write,
+	//       keep the editor open (still in source mode, text intact in the DOM) so the user can fix
+	//       it, and leave the note untouched.
+	test("a comment body containing a closing delimiter is refused, not written", () => {
+		const { view, ranges } = setup("x{>>old<<}y");
+		const { node } = mountThread(view, ranges[0]);
+
+		node.currentMode = "source";
+		node.new_text = "see a<<}b";
+		node.renderPreview();
+
+		expect(view.state.doc.toString()).toBe("x{>>old<<}y");
+		// EXPL: the editor is still open — renderPreview did not switch the card back to preview
+		expect(node.currentMode).toBe("source");
+
+		jest.advanceTimersByTime(1000);
+		expect(view.state.doc.toString()).toBe("x{>>old<<}y");
+
+		// EXPL: ...and the same editor, once fixed, still saves normally.
+		node.new_text = "see a b";
+		node.renderPreview();
+		expect(view.state.doc.toString()).toBe("x{>>see a b<<}y");
+	});
+
 	test("cancelling the only empty reply of an anchored thread unwraps the anchor synchronously", () => {
 		const { view, ranges } = setup("x{==sel==}{>><<}y");
 		const highlight = ranges[0];

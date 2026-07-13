@@ -9,6 +9,7 @@ import {
 	acceptSuggestions,
 	addCommentToView,
 	cancel_empty_comment,
+	comment_text_rejected,
 	type CommentRange,
 	commitReply,
 	create_range,
@@ -136,6 +137,17 @@ class AnnotationNode extends Component {
 
 	renderPreview() {
 		if (this.currentMode === "preview") return;
+
+		// EXPL: The card's comment editor is a `create_range` sink like any other: `<<}` typed into
+		//       an existing comment truncates it and strands a dangling `<<}` in the note, `@@` eats
+		//       the comment's own metadata. Refuse the write and stay in source mode — the editor
+		//       still holds the user's text, so they can fix it (the Notice names the sequence).
+		//       `new_text` is dropped so a straggler blur does not re-run the write with the same
+		//       rejected content; the DOM, not this field, is the editor's source of truth.
+		if (this.new_text !== null && comment_text_rejected(this.new_text)) {
+			this.new_text = null;
+			return;
+		}
 
 		// EXPL: On accepting a new comment (on mod+enter), this function gets called twice:
 		//       once for the immediate user event, and again when the write dispatch below rebuilds

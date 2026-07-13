@@ -65,31 +65,52 @@ export function addCommentToView(
 				return;
 			}
 
+			// EXPL: Same guard as the draft's commit-time re-validation, for the same reason: this
+			//       path wraps an ARBITRARY selection in `{==…==}`, and CriticMarkup has no escapes,
+			//       so a `==}` in the selection closes the highlight early (orphaning the rest of the
+			//       anchor and leaving a dangling `==}` in the note) and an `@@` is eaten as the
+			//       highlight's own metadata terminator. Degrade exactly as the draft path does —
+			//       fall through to the unanchored at-cursor comment, which still carries the user's
+			//       words — rather than wrapping something the parser cannot read back.
 			const anchor_text = editor.state.sliceDoc(selection.from, selection.to);
-			const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
-				create_range(settings, SuggestionType.COMMENT, "");
-			editor.dispatch(editor.state.update({
-				changes: { from: selection.from, to: selection.to, insert },
-				selection: EditorSelection.cursor(selection.from + insert.length - 3),
-				scrollIntoView: scroll,
-				annotations: [commentModeAnnotation.of(true)],
-			}));
-			activeWindow.setTimeout(() => {
+			const unsafe_anchor = unsafe_sequence(anchor_text, ["==}"]);
+			if (!unsafe_anchor) {
+				const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
+					create_range(settings, SuggestionType.COMMENT, "");
 				editor.dispatch(editor.state.update({
-					annotations: [
-						annotationGutterFocusAnnotation.of({
-							from: selection.from,
-							to: selection.from,
-							index: 1,
-						}),
-					],
+					changes: { from: selection.from, to: selection.to, insert },
+					selection: EditorSelection.cursor(selection.from + insert.length - 3),
+					scrollIntoView: scroll,
+					annotations: [commentModeAnnotation.of(true)],
 				}));
-			});
-			return;
+				activeWindow.setTimeout(() => {
+					editor.dispatch(editor.state.update({
+						annotations: [
+							annotationGutterFocusAnnotation.of({
+								from: selection.from,
+								to: selection.from,
+								index: 1,
+							}),
+						],
+					}));
+				});
+				return;
+			}
+
+			new Notice(
+				`Inkling: added the comment without an anchor — the selected text contains "${unsafe_anchor}".`,
+			);
 		}
 	}
 
-	const cursor = range ? range.full_range_back : editor.state.selection.main.head;
+	// EXPL: NEVER splice at a raw cursor: `selection.main.head` can sit INSIDE existing markup (a
+	//       forward drag over `he{++llo++}` leaves the head at index 7; a cursor parked inside a
+	//       comment body is the same story), and inserting `{>><<}` there cuts the range in half —
+	//       `he{++ll{>><<}o++}` demotes the addition to inert text, `{>>he{>><<}llo<<}` truncates the
+	//       comment and strands `llo<<}` plus a dangling `<<}`. Snapping to `full_range_back` — the
+	//       same always-a-range-boundary position `commitReply` uses — is the only insertion point
+	//       inside a range's span that is guaranteed to be well-formed.
+	const cursor = range ? range.full_range_back : safe_insert_position(editor.state, selection.head);
 	const reply_idx = range ? range.full_thread.length : -1;
 
 	editor.dispatch(editor.state.update({
@@ -137,6 +158,22 @@ function unsafe_sequence(text: string, delimiters: string[]): string | undefined
 }
 
 /**
+ * `pos`, or — if `pos` falls strictly INSIDE a range's markup — the end of that range's thread.
+ *
+ * EXPL: The one position related to a range that is always safe to insert a comment at is
+ *       `full_range_back`: it is a range boundary (never between brackets and body, never between a
+ *       base and its replies), and the parser's adjacency rule turns a comment written there into a
+ *       reply on that thread rather than junk spliced through someone else's delimiters. Every other
+ *       offset in `[range.from, range.to]` cuts the range in half. Positions that merely TOUCH a
+ *       range (`pos === range.from` / `pos === range.to`) are already boundaries and are left alone.
+ */
+function safe_insert_position(state: EditorState, pos: number): number {
+	const ranges = state.field(rangeParser).ranges;
+	const covering = ranges.ranges_in_interval(pos, pos).find(range => range.from < pos && pos < range.to);
+	return covering ? covering.full_range_back : pos;
+}
+
+/**
  * Why the draft's anchor cannot be safely wrapped in `{==…==}` right now, or undefined if it can.
  *
  * EXPL: This RE-RUNS a check `addCommentToView` already made when it opened the draft, and that is
@@ -153,7 +190,16 @@ function unsafe_sequence(text: string, delimiters: string[]): string | undefined
  */
 function anchor_rejection(state: EditorState, draft: CommentDraft): string | undefined {
 	const ranges = state.field(rangeParser).ranges;
-	if (ranges.ranges_in_interval(draft.from, draft.to).length !== 0)
+	// EXPL: STRICT overlap, not the closed-interval `ranges_in_interval` search used at open time. A
+	//       range that merely ABUTS the anchor (ends exactly at `draft.from`, or starts exactly at
+	//       `draft.to`) is matched by the closed search but wraps perfectly well —
+	//       `aaa {++x++}{==bbb==}{>>note<<}` parses exactly as it reads — so degrading there would
+	//       drop the user's anchor and tell them the selection "contains tracked changes" when it
+	//       does not. Only a range that actually shares text with the anchor can be swallowed by the
+	//       wrap. (Eligibility checks — `pill_eligible`, the open-time guard — keep the closed
+	//       semantics on purpose: they gate a NEW selection, where touching markup is a fine reason
+	//       to stay out of the way.)
+	if (ranges.ranges_in_interval(draft.from, draft.to).some(range => range.from < draft.to && draft.from < range.to))
 		return "the selected text now contains tracked changes or comments";
 
 	// EXPL: `==}` would close the wrapping highlight early; `@@` would be eaten as this highlight's
@@ -171,8 +217,13 @@ function anchor_rejection(state: EditorState, draft: CommentDraft): string | und
  *       second, quieter kind of data loss; the box stays open with the text intact so they can edit
  *       it. (The anchor, by contrast, DEGRADES rather than refusing — the user did not type it, so
  *       there is nothing for them to fix, and an unanchored comment still carries their words.)
+ * EXPL: Exported because EVERY sink that feeds user-typed text to `create_range` needs it, not just
+ *       the two in this file: the gutter card's comment editor (annotations-gutter/marker.ts) and
+ *       the live-preview tooltip's comment/reply editors (live-preview/comment-widget.ts) write the
+ *       same unescapable markup from the same free text. One function, one definition — a
+ *       copy-pasted delimiter list is a hole waiting for the next delimiter.
  */
-function text_rejected(text: string): boolean {
+export function comment_text_rejected(text: string): boolean {
 	const sequence = unsafe_sequence(text, CLOSING_DELIMITERS);
 	if (!sequence)
 		return false;
@@ -194,7 +245,7 @@ export function commitReply(editor: EditorView, range: CriticMarkupRange, text: 
 	// EXPL: CodeMirror's `readOnly` facet only blocks USER input — it does not stop a programmatic
 	//       dispatch, and every write in this file is one. The reply box is reachable in a read-only
 	//       editor (clicking a thread card opens it), so the refusal has to live here.
-	if (editor.state.readOnly || !text.trim() || text_rejected(text))
+	if (editor.state.readOnly || !text.trim() || comment_text_rejected(text))
 		return false;
 
 	const settings = editor.state.field(pluginSettingsField);
@@ -218,7 +269,7 @@ export function commitReply(editor: EditorView, range: CriticMarkupRange, text: 
  */
 export function commitCommentDraft(editor: EditorView, text: string): boolean {
 	const draft = editor.state.field(commentDraftField);
-	if (editor.state.readOnly || !draft || !text.trim() || text_rejected(text))
+	if (editor.state.readOnly || !draft || !text.trim() || comment_text_rejected(text))
 		return false;
 
 	const settings = editor.state.field(pluginSettingsField);
@@ -232,8 +283,15 @@ export function commitCommentDraft(editor: EditorView, text: string): boolean {
 	//       user is never quietly given something other than what they asked for.
 	const rejection = anchor_rejection(editor.state, draft);
 	if (rejection) {
+		// EXPL: `draft.to` is NOT automatically a safe place to write. This branch runs precisely
+		//       BECAUSE markup is in or around the anchor, and the anchor's own end can sit inside
+		//       it: type `{--` inside the anchor and the unterminated deletion swallows `draft.to`,
+		//       so inserting there yields `alpha be{--ta{>>note<<} gamma` — one deletion with the
+		//       user's comment buried inside it as inert text. Snap to the covering range's thread
+		//       end, the same boundary `commitReply` writes at.
+		const cursor = safe_insert_position(editor.state, draft.to);
 		editor.dispatch(editor.state.update({
-			changes: { from: draft.to, to: draft.to, insert: comment },
+			changes: { from: cursor, to: cursor, insert: comment },
 			effects: [clearCommentDraft.of(null)],
 			annotations: [commentModeAnnotation.of(true)],
 		}));

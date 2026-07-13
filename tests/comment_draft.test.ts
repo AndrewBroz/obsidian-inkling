@@ -149,6 +149,21 @@ describe("commitCommentDraft cannot corrupt the note", () => {
 			return sum + delimiter_counts(text).reduce((a, b) => a + b, 0);
 		}, 0);
 		expect(accounted).toBe(delimiter_counts(doc).reduce((a, b) => a + b, 0));
+
+		// EXPL: ...and "every delimiter belongs to some range" is STILL not enough, because
+		//       CriticMarkup cannot nest: the delimiters of a range spliced INSIDE another range are
+		//       accounted for by the outer range and sail through the check above. Every corruption
+		//       this file exists to prevent looks like that — `the quick {--brown{>>note<<} fo--}x`,
+		//       `he{++ll{>><<}o++}`, `{==a{>>x<<}b==}` are all "balanced" and all fully "accounted
+		//       for", and all three bury a comment inside a range as inert text. So pin the real
+		//       invariant: delimiters may appear only at a range's BOUNDARIES, never in its body.
+		for (const range of ranges) {
+			const body = doc.slice(range.from + 3, range.to - 3);
+			expect({ type: range.type, body }).toEqual({
+				type: range.type,
+				body: expect.not.stringMatching(/\{==|==\}|\{>>|<<\}|\{\+\+|\+\+\}|\{--|--\}/),
+			});
+		}
 	}
 
 	// EXPL: The open-time guard in addCommentToView ("selection contains no CriticMarkup") CANNOT
@@ -200,6 +215,113 @@ describe("commitCommentDraft cannot corrupt the note", () => {
 		expect(ranges[0].replies[0].unwrap()).toBe("c");
 		// EXPL: ...and the degraded comment is a real, parseable comment, not junk.
 		expect(ranges[2].unwrap()).toBe("outer");
+	});
+
+	// EXPL: The RANGE re-check, pinned on its own. The other "swallowed" tests above have anchors that
+	//       happen to contain `==}` too, so the STRING guard catches them first and they stay green
+	//       even with the range re-check deleted. Here the anchor gains a whole comment thread and
+	//       still contains no `==}` and no `@@` — only the re-check stands between the user and
+	//       `{==aaa b{>>c<<}bb ccc==}{>>outer<<}`, whose inner `<<}` … `==}` the parser reads as one
+	//       comment followed by junk.
+	test("an anchor that gains a range but no unsafe text still degrades (the range re-check alone)", () => {
+		const view = viewWith("aaa bbb ccc");
+		view.dispatch({ effects: setCommentDraft.of({ from: 0, to: 11 }) });
+		view.dispatch({ changes: { from: 5, to: 5, insert: "{>>c<<}" } });
+
+		// EXPL: the anchor now reads `aaa b{>>c<<}bb ccc` — no `==}`, no `@@`, nothing the string
+		//       guard can see.
+		expect(view.state.sliceDoc(0, 18)).toBe("aaa b{>>c<<}bb ccc");
+
+		expect(commitCommentDraft(view, "outer")).toBe(true);
+		expect(view.state.doc.toString()).toBe("aaa b{>>c<<}bb ccc{>>outer<<}");
+		assertBalanced(view);
+		expect(view.state.doc.toString()).not.toContain("{==");
+	});
+
+	// EXPL: FIX 1. The degrade branch runs BECAUSE there is markup in or around the anchor, so
+	//       `draft.to` — the anchor's own end — is exactly the position most likely to be inside it.
+	//       Typing `{--` inside the anchor makes an (unterminated) deletion swallow the anchor's end;
+	//       writing the comment at `draft.to` gives `alpha be{--ta{>>note<<} gamma`, which the parser
+	//       reads as ONE deletion with the user's comment buried in it as inert text. Snap to the
+	//       covering range's thread end instead.
+	//       (The user's own stray `{--` still runs to the end of their note — that is their text, and
+	//       no write can escape an unterminated opener. What this pins is that WE never add a second
+	//       break by splicing through the middle of a range.)
+	test("the degraded comment is never spliced inside a range that covers the anchor's end", () => {
+		const view = viewWith("alpha beta gamma");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 10 }) }); // "beta"
+		view.dispatch({ changes: { from: 8, to: 8, insert: "{--" } });
+
+		expect(commitCommentDraft(view, "note")).toBe(true);
+		expect(view.state.doc.toString()).toBe("alpha be{--ta gamma{>>note<<}");
+		expect(view.state.doc.toString()).not.toContain("{--ta{>>note<<}");
+		expect(view.state.field(commentDraftField)).toBeNull();
+	});
+
+	// EXPL: FIX 1, with a WELL-FORMED range straddling the anchor's end — the case where a good
+	//       insertion point genuinely exists. `{--` typed inside the anchor and `--}` typed past it
+	//       leaves `draft.to` in the middle of a complete deletion; inserting there yields
+	//       `the quick {--brown{>>note<<} fo--}x` (comment nested inside a deletion, inert). At the
+	//       deletion's `full_range_back` the same comment is a real, parseable comment on it.
+	test("the degraded comment lands at the covering range's thread end, not mid-range", () => {
+		const view = viewWith("the quick brown fox");
+		view.dispatch({ effects: setCommentDraft.of({ from: 4, to: 15 }) }); // "quick brown"
+		view.dispatch({ changes: { from: 10, to: 10, insert: "{--" } });
+		view.dispatch({ changes: { from: 21, to: 21, insert: "--}" } });
+		expect(view.state.doc.toString()).toBe("the quick {--brown fo--}x");
+
+		expect(commitCommentDraft(view, "note")).toBe(true);
+		expect(view.state.doc.toString()).toBe("the quick {--brown fo--}{>>note<<}x");
+		assertBalanced(view);
+
+		const ranges = view.state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(range => range.type)).toEqual([SuggestionType.DELETION, SuggestionType.COMMENT]);
+		// EXPL: the deletion is still a real tracked change, and the comment a real comment on it
+		expect(ranges[0].unwrap()).toBe("brown fo");
+		expect(ranges[1].unwrap()).toBe("note");
+	});
+
+	// EXPL: FIX 4. `ranges_in_interval` is a CLOSED-interval search, so a range that merely ABUTS the
+	//       anchor matches it — and degrading there would drop a perfectly good anchor and tell the
+	//       user their selection "contains tracked changes" when it does not: `{++x++}{==bbb==}{>>note<<}`
+	//       parses exactly as it reads. The commit-time re-validation therefore uses STRICT overlap.
+	test("a range that merely ABUTS the anchor does not force a degrade", () => {
+		const view = viewWith("aaa {++x++}bbb");
+		view.dispatch({ effects: setCommentDraft.of({ from: 11, to: 14 }) }); // "bbb", starting at the addition's end
+
+		expect(commitCommentDraft(view, "note")).toBe(true);
+		expect(view.state.doc.toString()).toBe("aaa {++x++}{==bbb==}{>>note<<}");
+		assertBalanced(view);
+
+		const ranges = view.state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(range => range.type)).toEqual([
+			SuggestionType.ADDITION,
+			SuggestionType.HIGHLIGHT,
+			SuggestionType.COMMENT,
+		]);
+		expect(ranges[1].replies).toHaveLength(1);
+	});
+
+	test("a range ending exactly at the anchor's start does not force a degrade", () => {
+		const view = viewWith("{++x++}bbb ccc");
+		view.dispatch({ effects: setCommentDraft.of({ from: 7, to: 10 }) }); // "bbb"
+
+		expect(commitCommentDraft(view, "note")).toBe(true);
+		expect(view.state.doc.toString()).toBe("{++x++}{==bbb==}{>>note<<} ccc");
+		assertBalanced(view);
+	});
+
+	// EXPL: ...while a range that actually SHARES text with the anchor still degrades — the strict
+	//       overlap must not be loosened into "ignore ranges near the anchor".
+	test("a range OVERLAPPING the anchor still degrades", () => {
+		const view = viewWith("aaa bbb ccc");
+		view.dispatch({ effects: setCommentDraft.of({ from: 0, to: 11 }) });
+		view.dispatch({ changes: { from: 5, to: 5, insert: "{++x++}" } });
+
+		expect(commitCommentDraft(view, "note")).toBe(true);
+		expect(view.state.doc.toString()).toBe("aaa b{++x++}bb ccc{>>note<<}");
+		assertBalanced(view);
+		expect(view.state.doc.toString()).not.toContain("{==");
 	});
 
 	// EXPL: CriticMarkup has no escapes. A `==}` inside the text being wrapped closes the highlight

@@ -6,6 +6,7 @@ import {
 	addCommentToView,
 	cancel_empty_comment,
 	CM_All_Brackets,
+	comment_text_rejected,
 	CommentRange,
 	create_range,
 	CriticMarkupRange,
@@ -98,6 +99,13 @@ export class CommentIconWidget extends WidgetType {
 		editorComponent: PreviewEditor,
 	) {
 		if (content.trim()) {
+			// EXPL: Same `create_range` hazard as every other comment sink — a `<<}`/`@@` typed into
+			//       the body cannot be written back verbatim. Refuse (Notice names the sequence) and
+			//       leave the editor mounted with the text intact rather than truncating the comment
+			//       and leaving a dangling delimiter in the note.
+			if (comment_text_rejected(content))
+				return;
+
 			this.view.dispatch(this.view.state.update({
 				changes: {
 					from: range.from,
@@ -212,6 +220,11 @@ export class CommentIconWidget extends WidgetType {
 								filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
 
 								onSubmit: (editor) => {
+									// EXPL: Refuse a body that cannot be written verbatim, keeping the reply box open
+									//       with the text intact (see comment_text_rejected).
+									if (comment_text_rejected(editor.get()))
+										return;
+
 									this.view.dispatch(this.view.state.update({
 										changes: {
 											from: range.full_range_back,
@@ -228,6 +241,10 @@ export class CommentIconWidget extends WidgetType {
 								onBlur: (editor) => {
 									// Save reply on blur if there's content
 									const content = editor.get();
+									// EXPL: An unwritable body keeps the box open (text intact) instead of being
+									//       silently mangled into the note on the way out.
+									if (comment_text_rejected(content))
+										return;
 									if (content.trim()) {
 										this.view.dispatch(this.view.state.update({
 											changes: {
