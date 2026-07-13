@@ -350,7 +350,10 @@
 //       field sitting on the card.
 .cmtr-anno-gutter-reply-editor.cm-editor {
   min-height: auto;
-  background-color: var(--background-modifier-form-field, var(--background-primary));
+  background-color: var(
+    --background-modifier-form-field,
+    var(--background-primary)
+  );
   border-radius: var(--radius-s);
   padding: var(--size-2-1) var(--size-2-2);
 }
