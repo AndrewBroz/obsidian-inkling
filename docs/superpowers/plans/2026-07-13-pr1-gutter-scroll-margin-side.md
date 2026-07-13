@@ -48,7 +48,7 @@
 Create `tests/gutter_scroll_margin.test.ts`:
 
 ```ts
-import { GutterView, type GutterSide, gutterScrollMargin } from "../src/editor/renderers/gutters/base";
+import { GutterView, gutterScrollMargin } from "../src/editor/renderers/gutters/base";
 import { AnnotationGutterView } from "../src/editor/renderers/gutters/annotations-gutter/annotation-gutter";
 import { DiffGutterView } from "../src/editor/renderers/gutters/diffs-gutter/diff-gutter";
 
@@ -75,15 +75,15 @@ describe("declared gutter sides", () => {
 	// EXPL: `side` must agree with the class's `insertGutters` override, which is what actually
 	//       decides where the DOM lands. These two assertions are the guard against that drift.
 	test("the base gutter defaults to `before` (inserted before contentDOM)", () => {
-		expect(GutterView.side).toBe<GutterSide>("before");
+		expect(GutterView.side).toBe("before");
 	});
 
 	test("the diff gutter inherits `before`", () => {
-		expect(DiffGutterView.side).toBe<GutterSide>("before");
+		expect(DiffGutterView.side).toBe("before");
 	});
 
 	test("the annotations gutter declares `after` (inserted after contentDOM)", () => {
-		expect(AnnotationGutterView.side).toBe<GutterSide>("after");
+		expect(AnnotationGutterView.side).toBe("after");
 	});
 });
 ```
