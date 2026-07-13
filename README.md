@@ -52,7 +52,7 @@ inkling-authors: [Alice]   # optional: these authors are exempt from enforcement
 The legacy `commentator:` / `commentator-authors:` keys still work (checked when no `inkling` key is present),
 so existing notes from before the rename don't need to be updated.
 
-Note that this is not hard technical enforecement! This tool is for high-trust teams.
+Note that this is not hard technical enforcement! This tool is only appropriate for high-trust teams.
 
 ## Developing
 
