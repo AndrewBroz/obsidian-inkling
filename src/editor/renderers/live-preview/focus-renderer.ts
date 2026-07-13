@@ -45,7 +45,11 @@ export const focusRenderer = StateField.define<DecorationSet>({
 				return Decoration.none;
 			}
 		} else {
-			return oldSet;
+			// EXPL: Map through the changes rather than returning the set verbatim. A transaction that
+			//       edits the document without moving the selection leaves the focus decoration's
+			//       from/to pointing at pre-change offsets, so the focused span drifts off the range it
+			//       is meant to be marking (and, once positions land outside the doc, CodeMirror throws).
+			return tr.docChanged ? oldSet.map(tr.changes) : oldSet;
 		}
 	},
 

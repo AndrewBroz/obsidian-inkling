@@ -49,6 +49,14 @@
   --comment-color: #bacff4;
   --comment-border-color: #679af4;
   --comment-inverse-color: #445f8f;
+
+  // EXPL: Obsidian's own --shadow-s/--shadow-l are multi-layer stacks with a ZERO x-offset, so they
+  //       fall straight down and travel a long way — on a comment card that read as a smudge bleeding
+  //       onto the card below rather than a lift. These imply a light source up and to the left (the
+  //       conventional direction), so the shadow falls down AND right, and they are kept short enough
+  //       to stay inside the 12px gap between cards.
+  --cmtr-card-shadow: 1px 1px 3px rgba(0, 0, 0, 0.08);
+  --cmtr-card-shadow-focused: 2px 3px 6px rgba(0, 0, 0, 0.16);
 }
 
 .theme-dark {
@@ -84,6 +92,11 @@
   --comment-color: #445f8f;
   --comment-border-color: #679af4;
   --comment-inverse-color: #bacff4;
+
+  // EXPL: See the light-theme note. Dark surfaces need a deeper shadow to read at all, since there is
+  //       far less contrast between a shadow and the background it falls on.
+  --cmtr-card-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
+  --cmtr-card-shadow-focused: 2px 3px 7px rgba(0, 0, 0, 0.45);
 }
 
 .cmtr-fail > button {

@@ -39,7 +39,7 @@
   border-radius: var(--radius-m);
 
   background-color: var(--background-secondary);
-  box-shadow: var(--shadow-s);
+  box-shadow: var(--cmtr-card-shadow);
 
   color: var(--text-muted);
 
@@ -63,7 +63,7 @@
     var(--background-modifier-hover),
     var(--background-modifier-hover)
   );
-  box-shadow: var(--shadow-l);
+  box-shadow: var(--cmtr-card-shadow-focused);
 }
 
 // EXPL: The container tint above is fully OCCLUDED — every pixel of the thread is covered by a

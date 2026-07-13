@@ -30,97 +30,73 @@
 //        CriticMarkup Main Suggestion Styles
 // ================================================
 
+// EXPL: `.cmtr-focused` is an ANCESTOR of the type spans, never a descendant — verified by rendering
+//       the real decorations (focus-renderer marks `full_range_front .. full_range_back`, the WHOLE
+//       thread, while markup-renderer marks only a range's inner content, so CodeMirror nests the
+//       bigger range OUTSIDE):
+//
+//         <span class="cmtr-focused">{==<span class="cmtr-highlight">anchor</span>==}{>>note<<}</span>
+//
+//       Every focus rule in this file used to be written as `.cmtr-addition .cmtr-focused` (and
+//       `.cmtr-deletion:has(.cmtr-focused)`), i.e. focus as a DESCENDANT. Those selectors matched
+//       nothing, ever — which is the real reason a selected range looked identical to an unselected
+//       one. The ancestor form below is what actually applies.
 .cmtr-addition {
   color: var(--addition-color);
-  .cmtr-focused {
-    text-decoration: underline 3px solid var(--addition-color);
-  }
 }
 
-.cmtr-has-reply .cmtr-addition,
-.cmtr-has-reply.cmtr-addition {
-  color: var(--text-on-accent) !important;
-  background-color: var(--addition-color);
-  box-shadow: 0 0 0 2px var(--addition-color);
-  transition:
-    background-color 200ms ease-in-out 0ms,
-    box-shadow 200ms ease-in-out 0ms;
-
-  .cmtr-focused {
-    text-decoration: unset;
-    background-color: var(--addition-color-alt);
-  }
-
-  &:hover {
-    box-shadow: 0 0 0 2px var(--addition-color-alt);
-    background-color: var(--addition-color-alt);
-  }
+.cmtr-focused .cmtr-addition {
+  text-decoration: underline 3px solid var(--addition-color);
 }
 
 .cmtr-deletion {
   text-decoration: var(--deletion-color) 2px line-through;
-
-  &:has(.cmtr-focused) {
-    text-decoration: var(--deletion-color) 2px line-through dashed;
-  }
 }
 
-.cmtr-has-reply .cmtr-deletion,
-.cmtr-has-reply.cmtr-deletion {
-  color: var(--text-on-accent);
-  background-color: var(--deletion-color);
-  box-shadow: 0 0 0 2px var(--deletion-color);
-  transition: background-color 200ms ease-in-out 0ms;
-  text-decoration: unset;
-
-  .cmtr-focused {
-    background-color: var(--deletion-color-alt);
-  }
-
-  &:hover {
-    box-shadow: 0 0 0 2px var(--deletion-color-alt);
-    background-color: var(--deletion-color-alt);
-  }
+.cmtr-focused .cmtr-deletion {
+  text-decoration: var(--deletion-color) 2px line-through dashed;
 }
 
-.cmtr-has-reply .cmtr-substitution,
-.cmtr-has-reply.cmtr-substitution {
-  color: var(--text-on-accent);
-  background-color: var(--substitution-color);
-  box-shadow: 0 0 0 2px var(--substitution-color);
-  transition: background-color 200ms ease-in-out 0ms;
-
-  .cmtr-focused {
-    background-color: var(--substitution-color-alt);
-  }
-
-  &:hover {
-    box-shadow: 0 0 0 2px var(--substitution-color-alt);
-    background-color: var(--substitution-color-alt);
-  }
+// EXPL: A suggestion that happens to carry comments is still just a suggestion — its appearance must
+//       not change. `.cmtr-has-reply` used to repaint additions/deletions/substitutions as a SOLID
+//       block of their accent colour with `--text-on-accent` text and a 2px ring, so the moment you
+//       commented on an edit it turned into a loud filled chip that read like a different kind of
+//       object entirely (see the solid green `quia` in the 0.9.2 screenshots). The class is still
+//       emitted by markup-renderer and left here as a hook for themes, but it no longer restyles
+//       anything on its own.
+.cmtr-has-reply {
 }
 
-// EXPL: Pale at rest, full strength when selected. `--highlight-color` is now a diluted wash and
+// EXPL: Pale at rest, full strength when selected. `--highlight-color` is a diluted wash and
 //       `--highlight-color-alt` is Obsidian's full `--text-highlight-bg` (see main.scss).
 //
-//       The `:has()` is load-bearing, and so is zeroing the child. `.cmtr-focused` is a span NESTED
-//       INSIDE `.cmtr-highlight`, and BOTH colours are translucent — so the old rule (wash on the
-//       parent, stronger wash on the child) STACKED the two, compositing to something darker than
-//       either. It also only repainted the focused sub-span, not the whole anchor. Selecting now
-//       repaints the entire highlight from the parent, and the child paints nothing, so the
-//       composite is exactly one layer at the intended alpha.
+//       Selection is expressed on the SAME element (`.cmtr-highlight`), just with a different value,
+//       so the two states can never composite on top of one another. Both colours are translucent,
+//       so any arrangement that paints them on two nested elements STACKS them into something darker
+//       than either — which is exactly the "highlights are additive, and go solid after a few clicks"
+//       bug. One painter, one layer, by construction.
 .cmtr-highlight {
   background-color: var(--highlight-color);
   border-radius: var(--radius-s);
   transition: background-color 120ms ease-in-out;
 }
 
-.cmtr-highlight:has(.cmtr-focused) {
+.cmtr-focused .cmtr-highlight {
   background-color: var(--highlight-color-alt);
 }
 
-.cmtr-highlight .cmtr-focused {
-  background-color: transparent;
+// EXPL: Defence in depth against the additive bug, independent of WHY a second layer appears.
+//       `{==x==}` also parses as a NATIVE Obsidian highlight (`==x==` → `span.cm-highlight`,
+//       `--text-highlight-bg` at ~0.4 alpha), so there are two potential painters over the same text
+//       and their nesting order shifts once a focus span is introduced around the thread. Rather than
+//       enumerate every nesting the renderer can produce, forbid the second layer outright: a
+//       highlight nested inside a highlight, and any native highlight span anywhere in our markup,
+//       paint nothing. Whatever the DOM ends up looking like, exactly one element carries the colour.
+.cmtr-highlight .cmtr-highlight,
+.cmtr-focused span.cm-highlight,
+span.cm-highlight:has([data-type="cmtr-highlight"]),
+[data-type="cmtr-highlight"] span.cm-highlight {
+  background-color: unset;
 }
 
 // EXPL: An anchored highlight's attached comment thread renders inline directly after the
@@ -284,20 +260,12 @@ span.cm-strikethrough:has([data-type="cmtr-substitution"]) {
   text-decoration: unset;
 }
 
-// EXPL: `{==text==}` also parses as a NATIVE Obsidian highlight (`==text==`), so the visible text
-//       carries two spans: the plugin's mark (`[data-type="cmtr-highlight"]`, --highlight-color)
-//       and Obsidian's token span (`span.cm-highlight`, --text-highlight-bg). Both default to the
-//       same 0.4-alpha yellow — left unneutralized they stack into a darker, more saturated box
-//       that paints square over the plugin span's border-radius (pixel-verified from the bug
-//       screenshot: uniform fill ~rgb(255,218,88) vs the ~rgb(255,236,153) a single wash gives).
-//       The first selector covers the native span wrapping the plugin mark; the second covers the
-//       observed present-day nesting where the native span renders INSIDE the plugin mark — the
-//       original ancestor-only `:has()` rule silently stopped matching there, which is what
-//       produced the "dirty" squared highlight box.
-span.cm-highlight:has([data-type="cmtr-highlight"]),
-[data-type="cmtr-highlight"] span.cm-highlight {
-  background-color: unset;
-}
+// EXPL: The native-highlight neutralisation lives with the `.cmtr-highlight` rules above, not here.
+//       It was previously two separate rules written months apart, each enumerating the nesting the
+//       renderer produced AT THE TIME (native-wraps-plugin, then plugin-wraps-native) — and each was
+//       silently defeated the next time the DOM shape changed. Introducing the focus span moved it a
+//       third time. Enumerating nestings is a losing game; the rule above forbids a second painter
+//       outright instead.
 
 //
 //.cm-line:has(>.cmtr-inline) ~ .cm-line.cm-strikethrough {
