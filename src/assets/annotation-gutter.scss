@@ -31,6 +31,14 @@
 //       previous 2px border clashed with every theme, and state (focus) was expressed by
 //       swapping the border's COLOR, which is invisible to anyone who reads shape before hue.
 //       State now rides on the surface itself.
+// EXPL: At rest a card is INERT: flat, recessed, no shadow, no buttons, no reply box — it is
+//       something to read, not something to act on. Everything actionable belongs to the SELECTED
+//       card, which lifts onto its own surface (see `-thread-highlight` below). This is the Google
+//       Docs model, and it is what makes a column of twenty comments legible: exactly one card at a
+//       time asks for attention.
+//
+//       Previously every card carried a shadow and revealed its buttons on hover, so the column read
+//       as twenty equally-important floating objects and selection was nearly invisible.
 .cmtr-anno-gutter-thread {
   width: 100%;
   position: relative;
@@ -39,9 +47,13 @@
   border-radius: var(--radius-m);
 
   background-color: var(--background-secondary);
-  box-shadow: var(--cmtr-card-shadow);
+  box-shadow: none;
 
   color: var(--text-muted);
+
+  transition:
+    background-color 120ms ease-in-out,
+    box-shadow 120ms ease-in-out;
 
   // EXPL: Cards used to sit flush against each other and read as one undifferentiated slab. This
   //       margin is what separates them — and it is only measured correctly because of the
@@ -49,39 +61,20 @@
   margin-bottom: var(--size-4-3);
 }
 
-// EXPL: `--background-modifier-hover` is a translucent overlay token (alpha well below 1), not an
-//       opaque surface — see the pill's write-up in editor.scss. Painting it as `background-color`
-//       would make the card translucent and let the note's text show through. Layering it as a
-//       `background-image` over the opaque base keeps the composite opaque, and lets the focused
-//       card read as "lifted" without a stroke.
-// EXPL: The focused thread LIFTS, the way Google Docs' selected comment card does — a heavier
-//       shadow reads as "this one is active" far more legibly than a 7%-alpha tint, which is nearly
-//       invisible against `--background-secondary`. The tint stays as a secondary cue (and is what
-//       the entries below repaint, since children occlude the container's background).
+// EXPL: The selected card LIFTS onto its own surface: it steps up from the recessed
+//       `--background-secondary` of a resting card to `--background-primary` (the note's own paper),
+//       and takes the only shadow in the column. Google Docs does exactly this, and it is why one
+//       selected card reads instantly among twenty.
+//
+//       Selection is a `background-color` change, NOT the `background-image` tint this used to be —
+//       and that distinction is the whole reason this now works. Entries inside the card paint an
+//       opaque `background-color: inherit`, which OCCLUDES a parent's background-image (that bug ate
+//       two rounds of fixes). `inherit` resolves to the parent's computed COLOUR, so switching the
+//       colour instead means every child adopts the selected surface for free and the card changes
+//       as one object. The old descendant rule that had to repaint each entry is gone with it.
 .cmtr-anno-gutter-thread-highlight {
-  background-image: linear-gradient(
-    var(--background-modifier-hover),
-    var(--background-modifier-hover)
-  );
+  background-color: var(--background-primary);
   box-shadow: var(--cmtr-card-shadow-focused);
-}
-
-// EXPL: The container tint above is fully OCCLUDED — every pixel of the thread is covered by a
-//       `.cmtr-anno-gutter-annotation` child painting its own opaque `background-color: inherit`,
-//       so a rest card and a focused card composited to identical pixels. This state is set on
-//       card click and on markup focus (marker.ts), so without this rule, clicking a card did
-//       nothing visible. Repainting each entry directly (rather than only the container) fixes
-//       that.
-//       ORDER IS LOAD-BEARING: this selector's specificity (0,2,0) is the same as
-//       `.cmtr-anno-gutter-annotation:hover` and the editing rule below, so this rule MUST come
-//       BEFORE both of them in source order. If it moved after either, a highlighted thread's
-//       tint would beat the hover/editing tint on conflicting entries, and hovering or editing an
-//       entry inside a focused thread would show no change.
-.cmtr-anno-gutter-thread-highlight .cmtr-anno-gutter-annotation {
-  background-image: linear-gradient(
-    var(--background-modifier-hover),
-    var(--background-modifier-hover)
-  );
 }
 
 .cmtr-anno-gutter-annotation {
@@ -218,7 +211,14 @@
   transition: opacity 100ms ease-in-out;
 }
 
-.cmtr-anno-gutter-thread:hover .cmtr-anno-gutter-thread-actions,
+// EXPL: Actions belong to the SELECTED card, not the hovered one. Revealing Accept/Reject/Resolve on
+//       hover meant that merely sweeping the mouse down the gutter armed a different destructive
+//       control under the pointer on every card it crossed — and it made all twenty cards look
+//       equally actionable. Selecting a card is a deliberate act; hovering one is not.
+//
+//       `:has(:focus-visible)` is retained so the row is still reachable by keyboard when a button
+//       inside it is tabbed to, independent of mouse selection.
+.cmtr-anno-gutter-thread-highlight .cmtr-anno-gutter-thread-actions,
 .cmtr-anno-gutter-thread-actions:has(:focus-visible) {
   opacity: 1;
 }
