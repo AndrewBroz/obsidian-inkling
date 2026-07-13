@@ -1,4 +1,5 @@
 import type CommentatorPlugin from "../../main";
+import { EditMode, PreviewMode } from "../../types";
 import { editModeValueState, previewModeState } from "../settings";
 import { MetadataStatusBarButton } from "./metadata-status-bar-button";
 import { StatusBarButton } from "./status-bar-button";
@@ -6,9 +7,9 @@ import { StatusBarButton } from "./status-bar-button";
 export const previewModeStatusBarButton = (plugin: CommentatorPlugin, render: boolean) =>
 	new StatusBarButton(
 		[
-			{ icon: "message-square", text: "Showing all suggestions" },
-			{ icon: "check", text: "Previewing \"accept all\"" },
-			{ icon: "cross", text: "Previewing \"reject all\"" },
+			{ value: PreviewMode.ALL, icon: "message-square", text: "Showing all suggestions" },
+			{ value: PreviewMode.ACCEPT, icon: "check", text: "Previewing \"accept all\"" },
+			{ value: PreviewMode.REJECT, icon: "cross", text: "Previewing \"reject all\"" },
 		],
 		plugin.setPreviewMode.bind(plugin),
 		(editor) => {
@@ -21,10 +22,9 @@ export const previewModeStatusBarButton = (plugin: CommentatorPlugin, render: bo
 export const suggestionModeStatusBarButton = (plugin: CommentatorPlugin, render: boolean) =>
 	new StatusBarButton(
 		[
-			{ icon: "pencil", text: "Editing (Regular)" },
-			{ icon: "edit", text: "Editing (Corrected)" },
-			{ icon: "file-edit", text: "Suggesting" },
-			{ icon: "message-square", text: "Commenting" },
+			{ value: EditMode.CORRECTED, icon: "edit", text: "Editing" },
+			{ value: EditMode.SUGGEST, icon: "file-edit", text: "Suggesting" },
+			{ value: EditMode.COMMENT, icon: "message-square", text: "Commenting" },
 		],
 		plugin.setEditMode.bind(plugin),
 		(editor) => {

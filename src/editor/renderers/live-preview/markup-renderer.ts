@@ -2,7 +2,7 @@ import { type EditorSelection, type Extension, Range, RangeSet, StateField, Tran
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 import { editorEditorField, editorLivePreviewField } from "obsidian";
 
-import { EditMode, type PluginSettings, PreviewMode } from "../../../types";
+import { EditMode, type FocusModeSettings, type PluginSettings, PreviewMode } from "../../../types";
 import {
 	CriticMarkupRange,
 	rangeParser,
@@ -105,6 +105,23 @@ function hideSyntax(
 	hideBracket(decorations, range, 1);
 }
 
+/**
+ * The focus profile actually applied to ranges the cursor is inside.
+ *
+ * EXPL: Each edit mode owns a `markup_focus` profile. The `reveal_syntax_on_focus` setting ORs
+ *       syntax + metadata revelation on top of that profile for every mode — this is what the
+ *       removed `EditMode.OFF` used to provide (via its own profile), minus that mode's total lack
+ *       of syntax protection. Computed at the read site rather than by mutating the stored profiles,
+ *       so toggling the setting off restores each mode's own behaviour exactly. `show_comment` and
+ *       `show_styling` stay mode-owned.
+ */
+export function resolveFocusSettings(settings: PluginSettings, edit_mode: EditMode): FocusModeSettings {
+	const profile = settings.markup_focus[edit_mode];
+	if (!settings.reveal_syntax_on_focus)
+		return profile;
+	return { ...profile, show_syntax: true, show_metadata: true };
+}
+
 export function constructDecorations(
 	view: EditorView,
 	ranges: CriticMarkupRange[],
@@ -114,7 +131,7 @@ export function constructDecorations(
 	settings: PluginSettings,
 ) {
 	const decorations: Range<Decoration>[] = [];
-	const { show_styling, show_syntax, show_metadata, show_comment } = settings.markup_focus[edit_mode];
+	const { show_styling, show_syntax, show_metadata, show_comment } = resolveFocusSettings(settings, edit_mode);
 
 	for (const range of ranges) {
 		// TODO: Check if 'in focus' status should also be applicable when in some kind of preview mode

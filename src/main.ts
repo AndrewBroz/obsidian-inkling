@@ -65,6 +65,7 @@ import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/v
 import {
 	backfillLegacyMetadataFlags,
 	backfillMarkupFocus,
+	clampRetiredEditMode,
 	DATABASE_VERSION,
 	DEFAULT_SETTINGS,
 	disableDiffGutterOnce,
@@ -110,8 +111,6 @@ export default class CommentatorPlugin extends Plugin {
 	previewModeStatusBarButton!: StatusBarButton;
 	editModeStatusBarButton!: StatusBarButton;
 	metadataStatusBarButton!: MetadataStatusBarButton;
-
-	defaultEditModeExtension: Extension[] = [];
 
 	settings_tab = "general";
 
@@ -290,8 +289,6 @@ export default class CommentatorPlugin extends Plugin {
 			localforage.dropInstance({ name: "commentator/cache/" + this.app.appId }).catch(() => {});
 		});
 
-		this.defaultEditModeExtension = getEditMode(this.settings.default_edit_mode, this.settings);
-
 		this.addSettingTab(new CommentatorSettings(this.app, this));
 		this.loadEditorExtensions();
 		this.registerEditorExtension(this.editorExtensions);
@@ -357,6 +354,10 @@ export default class CommentatorPlugin extends Plugin {
 		//       attribution defaults. See backfillLegacyMetadataFlags in constants.ts.
 		backfillLegacyMetadataFlags(this.settings, new_settings);
 		backfillMarkupFocus(this.settings);
+		// EXPL: Must run on every load (not just the version-gated migration branch below): a save
+		//       made while the removed EditMode.OFF was selected would otherwise leave
+		//       default_edit_mode pointing at a mode that no longer exists. See constants.ts.
+		clampRetiredEditMode(this.settings);
 		this.previous_settings = Object.assign({}, original_settings, this.settings);
 
 		// EXPL: Do not migrate new installs, immediately save settings

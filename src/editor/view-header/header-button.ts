@@ -11,7 +11,12 @@ export class HeaderButton {
 	changeEvent: EventRef | null = null;
 
 	constructor(
-		private states: { icon: string; tooltip: string; text: string }[],
+		// EXPL: States carry their own mode `value` rather than being indexed by array position:
+		//       the EditMode enum no longer starts at 0 (the unprotected `OFF = 0` mode was removed,
+		//       its value retired rather than renumbered, since modes are persisted in data.json).
+		//       The button cycles through `states` in ARRAY order, so the cycle can never land on a
+		//       retired value — there is no dead slot to skip.
+		private states: { value: number; icon: string; tooltip: string; text: string }[],
 		private has_label: boolean,
 		private cls: string,
 		private onchange: (view: MarkdownView, value: number) => void,
@@ -20,6 +25,20 @@ export class HeaderButton {
 		render = false,
 	) {
 		this.setRendering(render);
+	}
+
+	/**
+	 * Position of a mode value in `states`, or -1 if the value is not a live mode (e.g. a stale
+	 * value persisted for a mode that no longer exists).
+	 */
+	private stateIndex(value: number) {
+		return this.states.findIndex(state => state.value === value);
+	}
+
+	/** The state following `value` in the cycle (the first state if `value` is not a live mode). */
+	private nextState(value: number) {
+		const index = this.stateIndex(value);
+		return index === -1 ? this.states[0] : this.states[(index + 1) % this.states.length];
 	}
 
 	setRendering(render?: boolean) {
@@ -36,7 +55,9 @@ export class HeaderButton {
 			if (!(leaf.view instanceof MarkdownView)) continue;
 			const { view } = leaf;
 
-			const { text } = this.states[this.getvalue(view)];
+			const index = this.stateIndex(this.getvalue(view));
+			if (index === -1) continue;
+			const { text } = this.states[index];
 			const elements = this.active_mapping.get(view);
 			if (!elements) continue;
 
@@ -56,9 +77,10 @@ export class HeaderButton {
 	updateButton(view: MarkdownView, value: number) {
 		const elements = this.active_mapping.get(view);
 		if (elements) {
-			if (this.states[value]) {
-				const { tooltip, text } = this.states[value];
-				setIcon(elements.button, this.states[(value + 1) % this.states.length].icon);
+			const index = this.stateIndex(value);
+			if (index !== -1) {
+				const { tooltip, text } = this.states[index];
+				setIcon(elements.button, this.nextState(value).icon);
 				elements.button.setAttribute("aria-label", tooltip);
 				elements.button.style.display = "";
 				if (this.has_label)
@@ -93,10 +115,9 @@ export class HeaderButton {
 				return;
 			}
 
-			const { tooltip, text } = this.states[value];
-			const button = view.addAction(this.states[(value + 1) % this.states.length].icon, tooltip, async () => {
-				const value = (this.getvalue(view) + 1) % this.states.length;
-				this.onchange(view, value);
+			const { tooltip, text } = this.states[Math.max(this.stateIndex(value), 0)];
+			const button = view.addAction(this.nextState(value).icon, tooltip, async () => {
+				this.onchange(view, this.nextState(this.getvalue(view)).value);
 			});
 			const status = this.has_label ? button.createSpan({ text, cls: this.cls }) : null;
 
@@ -108,13 +129,13 @@ export class HeaderButton {
 			button.oncontextmenu = (e: MouseEvent) => {
 				const menu = new Menu();
 				const current_value = this.getvalue(view);
-				for (const [i, { icon, text }] of this.states.entries()) {
+				for (const { value, icon, text } of this.states) {
 					menu.addItem((item) => {
 						item.setIcon(icon)
 							.setTitle(text)
-							.setChecked(i === current_value)
+							.setChecked(value === current_value)
 							.onClick(() => {
-								this.onchange(view, i);
+								this.onchange(view, value);
 							});
 					});
 				}

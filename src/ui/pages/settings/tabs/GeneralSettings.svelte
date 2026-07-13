@@ -35,10 +35,9 @@ const preview_mode_notices = {
 	{#snippet control()}
 		<Dropdown
 			options={[
-				{ value: EditMode.OFF.toString(), text: "Regular Edit Mode" },
-				{ value: EditMode.CORRECTED.toString(), text: "Corrected Edit Mode" },
-				{ value: EditMode.SUGGEST.toString(), text: "Suggestion Mode" },
-				{ value: EditMode.COMMENT.toString(), text: "Comment Mode" },
+				{ value: EditMode.CORRECTED.toString(), text: "Editing" },
+				{ value: EditMode.SUGGEST.toString(), text: "Suggesting" },
+				{ value: EditMode.COMMENT.toString(), text: "Commenting" },
 			]}
 			value={plugin.settings.default_edit_mode.toString()}
 			onChange={(value) => {

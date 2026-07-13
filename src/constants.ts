@@ -5,6 +5,7 @@ import {
 	PreviewMode,
 	RANGE_BRACKET_MOVEMENT_OPTION,
 	RANGE_CURSOR_MOVEMENT_OPTION,
+	RETIRED_EDIT_MODE,
 } from "./types";
 
 export const PLUGIN_VERSION = "0.2.3";
@@ -18,13 +19,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	comment_style: "icon",
 	editor_styling: false,
 	markup_focus: {
-		[EditMode.OFF]: {
-			show_styling: true,
-			show_syntax: true,
-			show_metadata: true,
-			focus_annotation: true,
-			show_comment: true,
-		},
 		[EditMode.CORRECTED]: {
 			show_styling: true,
 			show_syntax: false,
@@ -47,6 +41,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 			show_comment: true,
 		},
 	},
+	reveal_syntax_on_focus: false,
 
 	diff_gutter: false,
 	diff_gutter_hide_empty: true,
@@ -173,6 +168,18 @@ export function backfillMarkupFocus(settings: PluginSettings): void {
 		settings.markup_focus[EditMode.COMMENT] = DEFAULT_SETTINGS.markup_focus[EditMode.COMMENT];
 }
 
+// EXPL: `EditMode.OFF` (value 0) was removed: it installed no editor extensions, so nothing stopped
+//       an edit from corrupting CriticMarkup syntax. Settings saved while it was selected still hold
+//       `default_edit_mode: 0`, which now maps to no mode at all (dead button state, no extensions).
+//       Like disableDiffGutterOnce, this must run on EVERY load rather than from the version-gated
+//       migration branch in migrateSettings — DEFAULT_SETTINGS.version is a hardcoded schema constant
+//       that existing saves already match, so that branch never fires for them. Idempotent: a no-op
+//       once the value is a live mode.
+export function clampRetiredEditMode(settings: PluginSettings): void {
+	if ((settings.default_edit_mode as number) === RETIRED_EDIT_MODE)
+		settings.default_edit_mode = EditMode.CORRECTED;
+}
+
 export const REQUIRES_FULL_RELOAD: Set<string> = new Set([
 	"live_preview",
 	"diff_gutter",
@@ -185,6 +192,10 @@ export const REQUIRES_FULL_RELOAD: Set<string> = new Set([
 
 export const REQUIRES_EDITOR_RELOAD: Set<string> = new Set([
 	"enable_metadata",
+	// EXPL: The live-preview renderer reads markup_focus (and its reveal_syntax_on_focus override)
+	//       lazily; a fullReloadEffect makes the toggle visible immediately instead of at the next
+	//       selection/document change.
+	"reveal_syntax_on_focus",
 ]);
 
 export const REQUIRES_DATABASE_REINDEX: Set<string> = new Set([

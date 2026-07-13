@@ -10,10 +10,13 @@ import { EditMode } from "../../types";
 export const FRONTMATTER_MODE_KEYS = ["inkling", "commentator"];
 export const FRONTMATTER_AUTHORS_KEYS = ["inkling-authors", "commentator-authors"];
 
+// EXPL: `off` means "no suggest/comment enforcement" — plain editing — NOT "no syntax protection".
+//       It used to map to the removed EditMode.OFF, which installed no editor extensions at all and
+//       therefore let ordinary typing corrupt the note's CriticMarkup; it now maps to CORRECTED.
 const MODE_NAMES: Record<string, EditMode> = {
 	suggest: EditMode.SUGGEST,
 	comment: EditMode.COMMENT,
-	off: EditMode.OFF,
+	off: EditMode.CORRECTED,
 };
 
 /**

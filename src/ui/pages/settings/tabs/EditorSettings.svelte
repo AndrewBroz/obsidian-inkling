@@ -112,6 +112,30 @@ let comment_rendering_mode_notices = {
 	{/snippet}
 </SettingItem>
 
+<SettingItem
+	name="Reveal CriticMarkup syntax under the cursor"
+	description="Show brackets and metadata for the range your cursor is inside — useful for repairing malformed markup"
+	notices={[
+		{
+			type: "info",
+			text:
+				"Placing the cursor inside <code>{++text++}</code> reveals the <code>{++</code> and <code>++}</code> brackets, in any editing mode",
+		},
+	]}
+	type="toggle"
+>
+	{#snippet control()}
+		<Toggle
+			value={plugin.settings.reveal_syntax_on_focus}
+			onChange={() => {
+				plugin.settings.reveal_syntax_on_focus = !plugin.settings
+					.reveal_syntax_on_focus;
+				plugin.saveSettings();
+			}}
+		/>
+	{/snippet}
+</SettingItem>
+
 <SettingItem name="Comments Rendering" type="heading" />
 
 <SettingItem

@@ -34,9 +34,25 @@ All credit for the plugin's foundation belongs to them.
 - **Comments anchored to selections** — Select text → _Add comment_ → `{==highlight==}{>>comment<<}` thread.
 - **Comment mode** — A reviewer-friendly mode where text edits are blocked (with feedback) but commenting works
 - **Frontmatter-enforced modes** — A note can force `suggest`/`comment`/`off` for everyone except listed authors (see [Frontmatter](#frontmatter))
+- **No unprotected mode** — Every editing mode guards the CriticMarkup syntax (see [Editing modes](#editing-modes))
 - **Attribution on by default** — New installs stamp author + timestamp metadata and prompt once for your display name. The vault-wide Suggestion View can filter by author and recency.
 
 **Maintenance:** Modernized toolchain (ESLint 10 with Svelte linting, dprint, vendored dependencies), repaired release CI, and a large regression-test suite.
+
+## Editing modes
+
+The editor toggle (status bar / note header) cycles through three modes:
+
+| Mode           | Behaviour                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| **Editing**    | Ordinary editing, with edits guarded so they cannot corrupt the CriticMarkup syntax (the default) |
+| **Suggesting** | Edits are converted into suggestion ranges instead of changing the text directly                  |
+| **Commenting** | Document edits are blocked (with feedback); comments and replies still work                       |
+
+Upstream Commentator also had a "Regular" mode that installed no protection at all, so ordinary typing
+could silently corrupt a note's markup (backspacing `{++` into `{+`, deleting half of a range). It has been
+removed. Its one useful property — seeing the raw brackets and metadata of the range under the cursor — is
+now the **Reveal CriticMarkup syntax under the cursor** setting (Editor settings), which works in every mode.
 
 ## Frontmatter
 
@@ -48,6 +64,9 @@ inkling: suggest   # or: comment, off
 inkling-authors: [Alice]   # optional: these authors are exempt from enforcement
 ---
 ```
+
+`off` enforces plain **Editing** mode (nothing beyond the usual syntax protection): use it to override a
+reader's own default of suggesting or commenting.
 
 The legacy `commentator:` / `commentator-authors:` keys still work (checked when no `inkling` key is present),
 so existing notes from before the rename don't need to be updated.

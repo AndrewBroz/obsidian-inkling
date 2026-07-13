@@ -309,3 +309,51 @@ Submodules vendored (byte-verified). Tests: shared `createRangeState` helper in 
   `commentator-authors`, but a present (even empty-effect) `inkling-authors` entry is authoritative
   once `inkling` is the matched key. Covered by new TDD cases in `tests/frontmatter_mode.test.ts`
   (the 5 pre-existing legacy-key cases still pass unmodified).
+
+## Mode simplification
+
+Removal of the vestigial `EditMode.OFF`, and the promotion of its one good feature to a setting.
+
+- **Why OFF existed**: an upstream (2024) refactor promoted the "off" state of an old boolean
+  suggestion-mode setting into a first-class member of the new `EditMode` enum. Nothing in the plugin
+  ever defended it as a mode: `getEditMode` returned `[]` for it, i.e. it installed ZERO editor
+  extensions. So in OFF there was no `editMode` transaction filter, no cursor-movement correction, no
+  bracket protection — ordinary typing could silently corrupt a note's CriticMarkup (typing between
+  brackets, backspacing `{++` into `{+`, deleting half of a range). CORRECTED is the default, every
+  command's "home" mode, and the only thing standing between the user and that corruption; the cycle
+  passing through OFF meant two header-button clicks could land a user in an unprotected editor
+  without any indication that the safety net was gone.
+- **What was removed**: the `OFF = 0` enum member (`src/types.ts`), its `getEditMode` branch, its
+  `markup_focus` profile (`src/constants.ts`), its status-bar/header button states, and the "Regular
+  Edit Mode" settings-dropdown entry. `main.ts`'s `defaultEditModeExtension` field (assigned in
+  `onload`, never read) went with it.
+- **Values are NOT renumbered**: `CORRECTED = 1, SUGGEST = 2, COMMENT = 3` stay as they are, because
+  edit modes are persisted in `data.json`. Value `0` is retired, exported as `RETIRED_EDIT_MODE` for
+  the clamp below.
+- **Button indexing**: the two mode buttons used to index their state arrays BY ENUM VALUE
+  (`states[value]`, cycle `(value + 1) % states.length`), which only worked because the enum happened
+  to start at 0 and be contiguous. Rather than keep a dead placeholder at index 0, each state now
+  carries its own `value` (`{ value, icon, text }` / `{ value, icon, tooltip, text }`), and
+  `StatusBarButton`/`HeaderButton` map value → position via `stateIndex()`. The header button cycles
+  in ARRAY order (`nextState()`), so the 3-cycle is Editing → Suggesting → Commenting → Editing and can
+  never land on a retired value — there is no dead slot to skip. Preview-mode buttons were converted
+  the same way (their values still coincide with their indices). An unknown/stale value now hides the
+  header button and is ignored by the status-bar button, instead of dereferencing a hole in the array.
+- **Migration/remap**: `clampRetiredEditMode(settings)` (constants.ts, beside `disableDiffGutterOnce`)
+  rewrites a persisted `default_edit_mode: 0` to `EditMode.CORRECTED`. Called from `migrateSettings` on
+  EVERY load, not from the version-gated branch — `DEFAULT_SETTINGS.version` is a hardcoded schema
+  constant that existing saves already match, so that branch never fires for them (same reasoning as
+  the `disableDiffGutterOnce` EXPL). Per-editor modes are not persisted (they are seeded from
+  `default_edit_mode` or frontmatter on every view), so no other clamp site is needed.
+- **Frontmatter `off`**: remapped from `EditMode.OFF` to `EditMode.CORRECTED`. The intent of `off` was
+  always "this note enforces no suggest/comment discipline", never "this note may be corrupted".
+- **New setting `reveal_syntax_on_focus`** (default `false`, Editor settings, "Reveal CriticMarkup
+  syntax under the cursor"): OFF's `markup_focus` profile was the only thing it did well — it revealed
+  brackets and metadata for the range the cursor is inside. That is now a mode-independent setting.
+  Wired at the read site: `resolveFocusSettings(settings, edit_mode)`
+  (`src/editor/renderers/live-preview/markup-renderer.ts`) returns the mode's stored profile with
+  `show_syntax`/`show_metadata` ORed to true when the setting is on; `show_comment`/`show_styling`/
+  `focus_annotation` remain mode-owned, and the stored profiles are never mutated. Added to
+  `REQUIRES_EDITOR_RELOAD` so toggling it repaints via `fullReloadEffect` immediately.
+- **Net effect**: the 3-cycle no longer passes through an unprotected state; the "see the raw syntax"
+  affordance survives, decoupled from the hazard it was accidentally bundled with.

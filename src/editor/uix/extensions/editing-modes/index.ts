@@ -6,9 +6,7 @@ import { type Extension } from "@codemirror/state";
 import { EditMode, type PluginSettings } from "../../../../types";
 
 export function getEditMode(edit_mode: EditMode, settings: PluginSettings): Extension[] {
-	if (edit_mode === EditMode.OFF)
-		return [];
-	else if (edit_mode === EditMode.CORRECTED)
+	if (edit_mode === EditMode.CORRECTED)
 		return [editMode(settings)];
 	else if (edit_mode === EditMode.SUGGEST)
 		return [suggestionMode(settings)];

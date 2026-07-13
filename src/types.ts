@@ -11,11 +11,21 @@ export enum PreviewMode {
 }
 
 export enum EditMode {
-	OFF = 0,
+	// EXPL: Value 0 is RETIRED. It used to be `OFF`, a mode that installed no editor extensions at
+	//       all, i.e. no protection against corrupting CriticMarkup syntax (typing between brackets,
+	//       backspacing `{++` into `{+`, deleting half a range). Its only virtue — revealing the raw
+	//       syntax of the range under the cursor — is now the `reveal_syntax_on_focus` setting.
+	//       The remaining values are NOT renumbered: they are persisted in data.json.
 	CORRECTED = 1,
 	SUGGEST = 2,
 	COMMENT = 3,
 }
+
+/**
+ * The retired `EditMode.OFF` value; persisted settings may still carry it and are clamped to
+ * `EditMode.CORRECTED` on load (see `clampRetiredEditMode` in constants.ts).
+ */
+export const RETIRED_EDIT_MODE = 0;
 
 /**
  * How to move through a suggestion range when moving the cursor
@@ -83,9 +93,9 @@ export interface PluginSettings {
 
 	/**
 	 * When opening a new view, determine how the editor should behave by default
-	 * - 0: Regular (default) editing mode
-	 * - 1: Corrected mode (ensure that edits do not break the syntax)
-	 * - 2: Suggestion mode (convert edit operations into suggestion ranges)
+	 * - 1: Editing (ensure that edits do not break the CriticMarkup syntax)
+	 * - 2: Suggesting (convert edit operations into suggestion ranges)
+	 * - 3: Commenting (block document edits, allow comments)
 	 */
 	default_edit_mode: EditMode;
 	/**
@@ -110,6 +120,11 @@ export interface PluginSettings {
 	 * Settings for every edit mode determining how a range should be displayed when it is focused in the editor
 	 */
 	markup_focus: Record<EditMode, FocusModeSettings>;
+	/**
+	 * Reveal the raw CriticMarkup syntax (brackets) and metadata of the range the cursor is inside,
+	 * regardless of the current edit mode. Useful for inspecting/repairing malformed markup.
+	 */
+	reveal_syntax_on_focus: boolean;
 
 	/**
 	 * Render a gutter marking locations of ranges in the document

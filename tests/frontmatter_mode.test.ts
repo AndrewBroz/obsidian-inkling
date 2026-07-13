@@ -9,8 +9,10 @@ describe("resolveFrontmatterMode", () => {
 		expect(resolveFrontmatterMode({ commentator: "Comment" }, "")).toBe(
 			EditMode.COMMENT,
 		);
+		// EXPL: `off` means "plain editing, nothing enforced beyond syntax protection" — it maps to
+		//       CORRECTED now that the unprotected EditMode.OFF is gone.
 		expect(resolveFrontmatterMode({ commentator: "off" }, "")).toBe(
-			EditMode.OFF,
+			EditMode.CORRECTED,
 		);
 	});
 
@@ -41,7 +43,7 @@ describe("resolveFrontmatterMode", () => {
 				"commentator": "off",
 				"commentator-authors": "Alice",
 			}, "Alice"),
-		).toBe(EditMode.OFF);
+		).toBe(EditMode.CORRECTED);
 	});
 
 	test("the inkling key works the same as the legacy commentator key", () => {
@@ -52,7 +54,7 @@ describe("resolveFrontmatterMode", () => {
 			EditMode.COMMENT,
 		);
 		expect(resolveFrontmatterMode({ inkling: "off" }, "")).toBe(
-			EditMode.OFF,
+			EditMode.CORRECTED,
 		);
 	});
 
