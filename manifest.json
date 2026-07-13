@@ -1,7 +1,7 @@
 {
 	"id": "inkling",
 	"name": "Inkling",
-	"version": "0.9.2",
+	"version": "0.9.3",
 	"minAppVersion": "1.7.5",
 	"description": "Suggest edits, add comments, and annotate your notes using CriticMarkup syntax.",
 	"author": "Andrew Brož",
