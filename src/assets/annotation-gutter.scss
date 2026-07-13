@@ -329,3 +329,35 @@
 .cmtr-anno-gutter-button a.cmtr-anno-gutter-button-folded {
   rotate: -180deg;
 }
+
+// ================================================
+// 	     Editor Comment Gutter Reply Box
+// ================================================
+
+// EXPL: Separated from the entries above by the same hairline the entries use between themselves,
+//       so the box reads as the next item in the thread rather than a detached widget.
+.cmtr-anno-gutter-reply {
+  padding: var(--size-2-2);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.cmtr-anno-gutter-reply-editor.cm-editor {
+  min-height: auto;
+  background-color: var(--background-primary);
+  border-radius: var(--radius-s);
+  padding: var(--size-2-1) var(--size-2-2);
+}
+
+// EXPL: The provisional card has no markup in the note behind it yet, so it quotes the text it is
+//       about — the user needs to see what they are commenting on. Same muted-quote language the
+//       Annotations View uses for anchored highlights (`.cmtr-view-range-anchor-quote`, view.scss).
+.cmtr-anno-gutter-pending-quote {
+  font-size: var(--font-smaller);
+  color: var(--text-muted);
+  padding: var(--size-2-2) var(--size-2-2) 0;
+
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}

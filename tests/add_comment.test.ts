@@ -1,55 +1,113 @@
+import { type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
-import { rangeParser, SuggestionType } from "../src/editor/base";
+import { editorEditorField } from "obsidian";
+
 import { addCommentToView } from "../src/editor/base/edit-logic/add-comment";
+import { pendingAnnotationMarkers } from "../src/editor/renderers/gutters/annotations-gutter/pending-marker";
+import { commentDraftField } from "../src/editor/uix/extensions/comment-draft";
 import { createRangeState } from "./helpers";
 
 // EXPL: add_metadata false keeps outputs deterministic (no timestamps in the markup)
 const NO_META = { add_metadata: false };
 
-function viewWith(doc: string, anchor: number, head: number) {
-	const state = createRangeState(doc, NO_META);
+// EXPL: `pendingAnnotationMarkers` is what actually RENDERS a draft (it ships inside the annotation
+//       gutter extension), and addCommentToView probes for it before taking the draft path — so a
+//       state that wants the draft behaviour has to carry it, exactly like the real editor does when
+//       the `annotation_gutter` setting is on.
+const WITH_GUTTER: Extension[] = [commentDraftField, pendingAnnotationMarkers, editorEditorField];
+
+function viewWith(doc: string, anchor: number, head: number, extra: Extension[] = WITH_GUTTER) {
+	const state = createRangeState(doc, NO_META, extra);
 	const view = new EditorView({ state });
 	view.dispatch({ selection: { anchor, head } });
 	return view;
 }
 
 describe("addCommentToView with a selection", () => {
-	test("wraps a clean selection in a highlight with an attached comment", () => {
+	// EXPL: This used to assert the doc immediately became "{==hello==}{>><<}". That flow is gone:
+	//       a clean selection now opens a DRAFT and writes nothing until the user submits, so an
+	//       abandoned comment leaves no empty range in the note and no junk in the undo stack.
+	//       The write itself is covered by tests/comment_draft.test.ts (commitCommentDraft).
+	test("a clean selection opens a draft and writes nothing to the document", () => {
 		const view = viewWith("hello world", 0, 5);
 		addCommentToView(view, undefined);
-		expect(view.state.doc.toString()).toBe("{==hello==}{>><<} world");
+		expect(view.state.doc.toString()).toBe("hello world");
+		expect(view.state.field(commentDraftField)).toEqual({ from: 0, to: 5 });
+	});
 
-		const ranges = view.state.field(rangeParser).ranges.ranges;
-		expect(ranges[0].type).toBe(SuggestionType.HIGHLIGHT);
-		expect(ranges[0].replies).toHaveLength(1);
-		expect(ranges[0].replies[0].type).toBe(SuggestionType.COMMENT);
+	// EXPL: The annotation gutter is a user-facing toggle (and is reconfigured away entirely in
+	//       embeds/hover popovers), so `pendingAnnotationMarkers` — the provisional card — is NOT
+	//       always in the state. Opening a draft there would render nothing, and nothing could then
+	//       clear it (Escape/blur live in the card that does not exist), which makes `pill_eligible`
+	//       false for every later selection: the pill, the "Add comment" command and the context menu
+	//       item would all be dead for the rest of the session. Without a gutter the legacy
+	//       immediate-write is the ONLY thing that can work, so it must survive.
+	test("a clean selection writes markup immediately when the gutter (and its card) is absent", () => {
+		const view = viewWith("hello world", 0, 5, [commentDraftField]);
+		addCommentToView(view, undefined);
+
+		expect(view.state.doc.toString()).toBe("{==hello==}{>><<} world");
+		// ...and no draft was left behind that nothing could ever clear
+		expect(view.state.field(commentDraftField)).toBeNull();
+	});
+
+	// EXPL: The legacy no-gutter path wraps the selection in `{==…==}`, and CriticMarkup has no
+	//       escapes: a `==}` in the selected text closes that highlight the instant it is written,
+	//       stranding `text==}` as plain text and leaving a DANGLING `==}` in the user's note (with
+	//       metadata on, an `@@` truncates the highlight's own metadata the same way). The selection
+	//       carries no markup, so the overlap guard above waves it through — only a check of the
+	//       anchor TEXT catches it. Degrade to the unanchored comment, exactly as the draft path's
+	//       commit-time re-validation does.
+	test("a no-gutter selection containing a closing delimiter is never wrapped", () => {
+		const view = viewWith("weird ==} text", 0, 14, [commentDraftField]);
+		addCommentToView(view, undefined);
+
+		expect(view.state.doc.toString()).toBe("weird ==} text{>><<}");
+		expect(view.state.doc.toString()).not.toContain("{==");
 	});
 
 	test("selection overlapping existing markup falls back to cursor behavior", () => {
 		const doc = "he{++llo++} world";
-		// EXPL: anchor=7, head=0 — a backward drag. The selection [0,7) still overlaps
-		//       the addition range at [2,11), but `selection.main.head` (0) lands outside
-		//       it, so the at-cursor fallback (bullet 2: "comment inserted at
-		//       selection.main.head") can't land mid-range and corrupt its markup. A
-		//       forward drag (anchor=0, head=7) would put head at index 7, inside
-		//       "{++llo++}", and splicing raw text there breaks the range apart — that's
-		//       a genuine hazard of "insert at raw head" but is orthogonal to what this
-		//       test is verifying (that overlap detection correctly skips the wrap path).
+		// EXPL: anchor=7, head=0 — a backward drag. The selection [0,7) still overlaps the addition
+		//       range at [2,11), so the wrap path is correctly skipped and a bare comment is written
+		//       at the head (0), outside the range.
 		const view = viewWith(doc, 7, 0); // overlaps the addition range
 		addCommentToView(view, undefined);
 		const result = view.state.doc.toString();
 		// EXPL: no wrapping happened — no highlight bracket anywhere
 		expect(result).not.toContain("{==");
-		// a bare comment was inserted at the selection head
-		expect(result).toContain("{>><<}");
-		// the addition range is intact
-		expect(result).toContain("{++llo++}");
+		expect(result).toBe("{>><<}he{++llo++} world");
+	});
+
+	// EXPL: The mirror image of the test above, and the hazard its comment used to merely DOCUMENT: a
+	//       FORWARD drag (anchor=0, head=7) leaves the head at index 7 — strictly inside `{++llo++}` —
+	//       and the at-cursor fallback splices there, giving `he{++ll{>><<}o++}`: the addition is
+	//       demoted to inert text and the comment is buried inside it. A raw head is never a safe
+	//       insertion point; snap to the covering range's thread end, the one position inside a
+	//       range's span that is always a boundary.
+	test("a forward drag whose head lands inside a range never splices the comment into it", () => {
+		const view = viewWith("he{++llo++} world", 0, 7);
+		addCommentToView(view, undefined);
+
+		expect(view.state.doc.toString()).toBe("he{++llo++}{>><<} world");
+		expect(view.state.doc.toString()).not.toContain("{++ll{>>");
 	});
 
 	test("empty selection keeps existing at-cursor behavior", () => {
 		const view = viewWith("hello", 3, 3);
 		addCommentToView(view, undefined);
 		expect(view.state.doc.toString()).toBe("hel{>><<}lo");
+	});
+
+	// EXPL: "Add comment" with the cursor parked inside an existing comment body used to write
+	//       `{>>he{>><<}llo<<}` — the inner `<<}` closes the outer comment early, `llo<<}` is orphaned
+	//       as plain text and a bare `<<}` is left behind. The same snap-to-boundary rule turns it
+	//       into a reply on that comment's thread, which is what the user asked for anyway.
+	test("a cursor parked inside an existing comment appends to its thread instead of splitting it", () => {
+		const view = viewWith("{>>hello<<}", 5, 5);
+		addCommentToView(view, undefined);
+
+		expect(view.state.doc.toString()).toBe("{>>hello<<}{>><<}");
 	});
 });

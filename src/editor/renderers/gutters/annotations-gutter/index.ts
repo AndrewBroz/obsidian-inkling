@@ -13,6 +13,7 @@ import {
 	annotationGutterWidthAnnotation,
 } from "./annotation-gutter";
 import { annotationGutterMarkers, AnnotationMarker } from "./marker";
+import { PendingAnnotationMarker, pendingAnnotationMarkers } from "./pending-marker";
 
 export {
 	annotationGutterFocusAnnotation,
@@ -26,6 +27,8 @@ export {
 	annotationGutterView,
 	annotationGutterWidthAnnotation,
 	AnnotationMarker,
+	PendingAnnotationMarker,
+	pendingAnnotationMarkers,
 };
 
 // NOTE: Keep the gutter here, as Obsidian *really* does not like the circular reference
@@ -33,14 +36,16 @@ export {
 export const annotationGutter = (plugin: CommentatorPlugin) => {
 	const { extension, config } = annotation_gutter({
 		class: "cmtr-anno-gutter " + (plugin.app.vault.getConfig("cssTheme") === "Minimal" ? " is-minimal" : ""),
-		markers: v => v.state.field(annotationGutterMarkers),
+		// EXPL: Two RangeSets: the annotations the document actually holds, plus the at most one
+		//       PROVISIONAL card for a comment the user is composing but has not submitted.
+		markers: v => [v.state.field(annotationGutterMarkers), v.state.field(pendingAnnotationMarkers)],
 		foldState: plugin.settings.annotation_gutter_default_fold_state,
 		width: plugin.settings.annotation_gutter_width,
 		hideOnEmpty: plugin.settings.annotation_gutter_hide_empty,
 		includeFoldButton: plugin.settings.annotation_gutter_fold_button,
 		includeResizeHandle: plugin.settings.annotation_gutter_resize_handle,
 	});
-	return { extension: [annotationGutterMarkers, extension], config };
+	return { extension: [annotationGutterMarkers, pendingAnnotationMarkers, extension], config };
 };
 
 export const annotationGutterCompartment = new Compartment();

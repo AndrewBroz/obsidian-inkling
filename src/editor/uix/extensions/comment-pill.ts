@@ -4,6 +4,8 @@ import { EditorView, showTooltip, type Tooltip, type TooltipView } from "@codemi
 import { setIcon, setTooltip } from "obsidian";
 
 import { addCommentToView, rangeParser } from "../../base";
+import { pendingAnnotationMarkers } from "../../renderers/gutters/annotations-gutter/pending-marker";
+import { commentDraftField } from "./comment-draft";
 
 // EXPL: CM6 places an `above: true` tooltip flush against the anchor line (0px gap by
 //       default: `top = pos.top - height - offset.y`, offset.y unset == 0) — confirmed by
@@ -22,6 +24,21 @@ const PILL_GAP = 8;
 //       rather than offering an action that would fall back to a plain at-cursor comment.
 export function pill_eligible(state: EditorState): boolean {
 	if (state.readOnly)
+		return false;
+
+	// EXPL: A draft already has a card and a focused input in the gutter; leaving the pill floating
+	//       over the same selection would offer to start a second comment on it.
+	// EXPL: ...but ONLY while that card can actually exist. `annotation_gutter` is a live user
+	//       toggle: switching it off mid-draft reconfigures `pendingAnnotationMarkers` out of the
+	//       state, destroying the card — and with it the only ReplyBox that could ever fire
+	//       Escape/blur/Enter and clear the draft. A draft with no card is unreachable, not blocking;
+	//       treating it as blocking would brick the pill (and the "Add comment" command, and the
+	//       context-menu item) for the rest of the session. Same failure this probe already guards
+	//       against in `addCommentToView`, reached by a different route.
+	// EXPL: `false` as the second argument (returns undefined instead of throwing) so the pill still
+	//       works in states where the draft field was never installed — the unit tests construct
+	//       exactly such bare states.
+	if (state.field(commentDraftField, false) && state.field(pendingAnnotationMarkers, false) !== undefined)
 		return false;
 
 	const selection = state.selection.main;

@@ -1,4 +1,5 @@
 import { bracketMatcher } from "./bracket-matcher";
+import { clearCommentDraft, commentDraftField, setCommentDraft } from "./comment-draft";
 import { commentPill, pill_eligible } from "./comment-pill";
 import { editMode, getEditMode, suggestionMode } from "./editing-modes";
 import { focusAnnotation } from "./focus-annotation";
@@ -8,6 +9,8 @@ import { rangeCorrecter } from "./range-correcter";
 
 export {
 	bracketMatcher,
+	clearCommentDraft,
+	commentDraftField,
 	commentPill,
 	editMode,
 	editorKeypressCatcher,
@@ -18,5 +21,6 @@ export {
 	providePluginSettings,
 	providePluginSettingsExtension,
 	rangeCorrecter,
+	setCommentDraft,
 	suggestionMode,
 };

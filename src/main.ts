@@ -48,6 +48,7 @@ import {
 import { cmenuGlobalCommands, cmenuViewportCommands, commands } from "./editor/uix";
 import {
 	bracketMatcher,
+	commentDraftField,
 	commentPill,
 	editorKeypressCatcher,
 	focusAnnotation,
@@ -153,6 +154,12 @@ export default class CommentatorPlugin extends Plugin {
 		this.editorExtensions.push(editMode.of(getEditMode(this.settings.default_edit_mode, this.settings)));
 
 		this.editorExtensions.push(rangeParser);
+		// EXPL: Holds a pending comment's anchor and writes NOTHING to the note; the pill dispatches
+		//       into it, the annotation gutter renders a provisional card for it, and commitCommentDraft
+		//       writes highlight+comment in one transaction on submit. Registered unconditionally (like
+		//       commentPill above), and read defensively (`state.field(commentDraftField, false)`) by
+		//       consumers that may run against states without it.
+		this.editorExtensions.push(commentDraftField);
 		this.editorExtensions.push(commentPill);
 
 		if (this.settings.annotation_gutter) {
