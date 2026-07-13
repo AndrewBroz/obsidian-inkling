@@ -13,7 +13,7 @@ Two write paths are added to `add-comment.ts` (`commitReply`, `commitCommentDraf
 ## Global Constraints
 
 - Source in `src/`, tests in `tests/`. Runner: `bun test`. Type-check: `bun run tsc -noEmit -skipLibCheck`. Lint: `bun eslint src/`. Format: `bun dprint fmt` (tabs).
-- **Never hand-edit the repo-root `styles.css` or `main.js`** — both are build artefacts.
+- The repo-root `styles.css` and `main.js` are **gitignored build artefacts**. Never hand-edit them and never `git add` them; only sources are committed.
 - Every comment write must carry `commentModeAnnotation.of(true)`, or the editing-mode guards will reject it when the user is in Comment mode. Copy this from the existing dispatches in `add-comment.ts`.
 - Comments explain *why*, not *what* — match the `// EXPL:` convention.
 - Metadata (author/timestamp) is applied by `create_range(settings, type, text)`; never hand-assemble `{>>…<<}` strings.
@@ -938,7 +938,7 @@ In **both light and dark themes**:
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/assets/annotation-gutter.scss styles.css
+git add src/assets/annotation-gutter.scss
 git commit -m "style: reply box and provisional comment card"
 ```
 
