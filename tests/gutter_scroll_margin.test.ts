@@ -1,5 +1,5 @@
 import { AnnotationGutterView } from "../src/editor/renderers/gutters/annotations-gutter/annotation-gutter";
-import { gutterScrollMargin, GutterView } from "../src/editor/renderers/gutters/base";
+import { gutterScrollMargin, type GutterSide, GutterView } from "../src/editor/renderers/gutters/base";
 import { DiffGutterView } from "../src/editor/renderers/gutters/diffs-gutter/diff-gutter";
 
 // EXPL: Root cause of the "add-comment pill vanishes near the left margin" bug: the gutter
@@ -21,18 +21,40 @@ describe("gutterScrollMargin", () => {
 	});
 });
 
+// EXPL: `side` is a claim; `insertGutters` is the behaviour that actually places the DOM. The
+//       bug this whole file guards against was precisely those two disagreeing — the
+//       annotations gutter inserts itself *after* contentDOM but had declared `side: "before"`,
+//       so the scroll margin above got computed for the wrong edge. Asserting `static side`
+//       against a literal (as this block used to) can never catch that: it doesn't touch
+//       `insertGutters` at all. So instead we run the real `insertGutters` against a stub DOM
+//       tree and derive the OBSERVED side from where the node actually lands, then compare
+//       that to the DECLARED `static side`.
+function observedSide(insertGutters: GutterView["insertGutters"], dom: HTMLElement): GutterSide {
+	const parent = document.createElement("div");
+	const contentDOM = document.createElement("div");
+	parent.appendChild(contentDOM);
+	insertGutters.call(
+		{ dom } as unknown as GutterView,
+		{ contentDOM } as unknown as Parameters<GutterView["insertGutters"]>[0],
+	);
+	// EXPL: DOCUMENT_POSITION_FOLLOWING means contentDOM comes *after* dom in the parent's
+	//       child order, i.e. dom landed before contentDOM.
+	return dom.compareDocumentPosition(contentDOM) & Node.DOCUMENT_POSITION_FOLLOWING ? "before" : "after";
+}
+
 describe("declared gutter sides", () => {
-	// EXPL: `side` must agree with the class's `insertGutters` override, which is what actually
-	//       decides where the DOM lands. These two assertions are the guard against that drift.
-	test("the base gutter defaults to `before` (inserted before contentDOM)", () => {
-		expect(GutterView.side).toBe("before");
+	test("the base gutter's declared side matches where insertGutters places its DOM", () => {
+		const dom = document.createElement("div");
+		expect(observedSide(GutterView.prototype.insertGutters, dom)).toBe(GutterView.side);
 	});
 
-	test("the diff gutter inherits `before`", () => {
-		expect(DiffGutterView.side).toBe("before");
+	test("the diff gutter (inherits insertGutters) declared side matches placement", () => {
+		const dom = document.createElement("div");
+		expect(observedSide(DiffGutterView.prototype.insertGutters, dom)).toBe(DiffGutterView.side);
 	});
 
-	test("the annotations gutter declares `after` (inserted after contentDOM)", () => {
-		expect(AnnotationGutterView.side).toBe("after");
+	test("the annotations gutter's declared side matches where its insertGutters places its DOM", () => {
+		const dom = document.createElement("div");
+		expect(observedSide(AnnotationGutterView.prototype.insertGutters, dom)).toBe(AnnotationGutterView.side);
 	});
 });
