@@ -22,8 +22,9 @@ export enum EditMode {
 }
 
 /**
- * The retired `EditMode.OFF` value; persisted settings may still carry it and are clamped to
- * `EditMode.CORRECTED` on load (see `clampRetiredEditMode` in constants.ts).
+ * The retired `EditMode.OFF` value; persisted settings may still carry it (or any other value
+ * outside the live {CORRECTED, SUGGEST, COMMENT} set) and are clamped to `EditMode.CORRECTED`
+ * on load (see `clampEditMode` in constants.ts).
  */
 export const RETIRED_EDIT_MODE = 0;
 

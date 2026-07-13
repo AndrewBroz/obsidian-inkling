@@ -156,7 +156,13 @@
 //       `.clickable-icon`'s default `padding: var(--size-2-2) var(--size-2-3)`; everything else
 //       (background/color/radius/opacity/transition) is inherited from `.clickable-icon` so the
 //       buttons stay visually consistent with the rest of Obsidian's chrome across themes.
-.cmtr-anno-gutter-thread-action {
+//       Scoped under the parent `.cmtr-anno-gutter-thread-actions` (specificity 0,2,0 instead of
+//       0,1,0) rather than the bare class: Obsidian loads theme CSS AFTER plugin CSS, so a theme
+//       that restyles `.clickable-icon`'s padding at equal (0,1,0) specificity would win by
+//       source order alone. `.cmtr-anno-gutter-thread-action` is always a direct/descendant
+//       child of `.cmtr-anno-gutter-thread-actions` (see marker.ts), so this scoping changes
+//       nothing about which elements match.
+.cmtr-anno-gutter-thread-actions .cmtr-anno-gutter-thread-action {
   padding: var(--size-2-1);
   cursor: pointer;
 }

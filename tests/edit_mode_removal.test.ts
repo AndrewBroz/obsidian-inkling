@@ -1,4 +1,4 @@
-import { clampRetiredEditMode, DEFAULT_SETTINGS } from "../src/constants";
+import { clampEditMode, DEFAULT_SETTINGS } from "../src/constants";
 import { resolveFocusSettings } from "../src/editor/renderers/live-preview/markup-renderer";
 import { EditMode, type PluginSettings, RETIRED_EDIT_MODE } from "../src/types";
 
@@ -17,16 +17,30 @@ describe("retired edit mode (former EditMode.OFF)", () => {
 	test("a persisted default_edit_mode of 0 is clamped to CORRECTED", () => {
 		const saved = { default_edit_mode: RETIRED_EDIT_MODE } as unknown as Partial<PluginSettings>;
 		const merged: PluginSettings = Object.assign({}, DEFAULT_SETTINGS, saved);
-		clampRetiredEditMode(merged);
+		clampEditMode(merged);
 
 		expect(merged.default_edit_mode).toBe(EditMode.CORRECTED);
+	});
+
+	// EXPL: clampEditMode clamps ANY value outside the live set, not just the literal retired 0 —
+	//       a hand-edited data.json, a schema written by another plugin version, or a future mode
+	//       retirement (like OFF's) are all equally dangerous inputs to getEditMode, whose
+	//       fallthrough now fails closed into CORRECTED for the same reason.
+	test("clamping rewrites any out-of-range or garbage value to CORRECTED", () => {
+		const garbageValues: unknown[] = [RETIRED_EDIT_MODE, 4, -1, undefined, null, NaN, "corrected"];
+		for (const value of garbageValues) {
+			const merged: PluginSettings = Object.assign({}, DEFAULT_SETTINGS, { default_edit_mode: value });
+			clampEditMode(merged);
+
+			expect(merged.default_edit_mode).toBe(EditMode.CORRECTED);
+		}
 	});
 
 	test("clamping leaves live modes untouched and is idempotent", () => {
 		for (const mode of LIVE_MODES) {
 			const merged: PluginSettings = Object.assign({}, DEFAULT_SETTINGS, { default_edit_mode: mode });
-			clampRetiredEditMode(merged);
-			clampRetiredEditMode(merged);
+			clampEditMode(merged);
+			clampEditMode(merged);
 
 			expect(merged.default_edit_mode).toBe(mode);
 		}

@@ -1,6 +1,24 @@
 import { type EventRef, MarkdownView, Menu, setIcon, WorkspaceLeaf } from "obsidian";
 import type CommentatorPlugin from "../../main";
 
+/**
+ * Position of `value` in `states`, or -1 if it is not a live mode (e.g. a stale value persisted
+ * for a mode that no longer exists). Exported as a pure, Obsidian-free helper so the cycle
+ * contract (order of `states` -> next value) is directly unit-testable.
+ */
+export function stateIndexOf<T extends { value: number }>(states: readonly T[], value: number): number {
+	return states.findIndex(state => state.value === value);
+}
+
+/**
+ * The state following `value` in the cycle (the first state if `value` is not a live mode).
+ * The cycle walks `states` in ARRAY order, so it can never land on a retired/unknown value.
+ */
+export function nextStateOf<T extends { value: number }>(states: readonly T[], value: number): T {
+	const index = stateIndexOf(states, value);
+	return index === -1 ? states[0] : states[(index + 1) % states.length];
+}
+
 export class HeaderButton {
 	active_mapping: WeakMap<MarkdownView, {
 		button: HTMLElement;
@@ -27,18 +45,12 @@ export class HeaderButton {
 		this.setRendering(render);
 	}
 
-	/**
-	 * Position of a mode value in `states`, or -1 if the value is not a live mode (e.g. a stale
-	 * value persisted for a mode that no longer exists).
-	 */
 	private stateIndex(value: number) {
-		return this.states.findIndex(state => state.value === value);
+		return stateIndexOf(this.states, value);
 	}
 
-	/** The state following `value` in the cycle (the first state if `value` is not a live mode). */
 	private nextState(value: number) {
-		const index = this.stateIndex(value);
-		return index === -1 ? this.states[0] : this.states[(index + 1) % this.states.length];
+		return nextStateOf(this.states, value);
 	}
 
 	setRendering(render?: boolean) {
@@ -115,7 +127,12 @@ export class HeaderButton {
 				return;
 			}
 
-			const { tooltip, text } = this.states[Math.max(this.stateIndex(value), 0)];
+			// EXPL: An unknown `value` (stateIndex === -1, e.g. a stale persisted value for a mode
+			//       that no longer exists) must degrade the same way `updateButton` does — by hiding
+			//       the button — rather than falling back to `states[0]` for display, which would
+			//       silently mislabel the button as the first state.
+			const index = this.stateIndex(value);
+			const { tooltip, text } = this.states[index === -1 ? 0 : index];
 			const button = view.addAction(this.nextState(value).icon, tooltip, async () => {
 				this.onchange(view, this.nextState(this.getvalue(view)).value);
 			});
@@ -125,6 +142,8 @@ export class HeaderButton {
 				// @ts-expect-error Parent element exists
 				button.parentElement.insertBefore(status, button);
 			}
+
+			if (index === -1) button.style.display = "none";
 
 			button.oncontextmenu = (e: MouseEvent) => {
 				const menu = new Menu();

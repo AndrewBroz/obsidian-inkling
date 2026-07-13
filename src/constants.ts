@@ -5,7 +5,6 @@ import {
 	PreviewMode,
 	RANGE_BRACKET_MOVEMENT_OPTION,
 	RANGE_CURSOR_MOVEMENT_OPTION,
-	RETIRED_EDIT_MODE,
 } from "./types";
 
 export const PLUGIN_VERSION = "0.2.3";
@@ -170,13 +169,19 @@ export function backfillMarkupFocus(settings: PluginSettings): void {
 
 // EXPL: `EditMode.OFF` (value 0) was removed: it installed no editor extensions, so nothing stopped
 //       an edit from corrupting CriticMarkup syntax. Settings saved while it was selected still hold
-//       `default_edit_mode: 0`, which now maps to no mode at all (dead button state, no extensions).
-//       Like disableDiffGutterOnce, this must run on EVERY load rather than from the version-gated
-//       migration branch in migrateSettings — DEFAULT_SETTINGS.version is a hardcoded schema constant
-//       that existing saves already match, so that branch never fires for them. Idempotent: a no-op
-//       once the value is a live mode.
-export function clampRetiredEditMode(settings: PluginSettings): void {
-	if ((settings.default_edit_mode as number) === RETIRED_EDIT_MODE)
+//       `default_edit_mode: 0`. Originally this only rewrote that one literal value, but ANY value
+//       outside the live {CORRECTED, SUGGEST, COMMENT} set is equally dangerous — a hand-edited
+//       data.json, a schema written by another plugin version, or a future mode retirement (like
+//       OFF's) — and getEditMode's fallthrough now fails closed into CORRECTED for exactly that
+//       reason. Clamp broadly here too, so a garbage value never reaches getEditMode in the first
+//       place. Like disableDiffGutterOnce, this must run on EVERY load rather than from the
+//       version-gated migration branch in migrateSettings — DEFAULT_SETTINGS.version is a hardcoded
+//       schema constant that existing saves already match, so that branch never fires for them.
+//       Idempotent: a no-op once the value is already a live mode.
+const LIVE_EDIT_MODES: ReadonlySet<number> = new Set([EditMode.CORRECTED, EditMode.SUGGEST, EditMode.COMMENT]);
+
+export function clampEditMode(settings: PluginSettings): void {
+	if (!LIVE_EDIT_MODES.has(settings.default_edit_mode as number))
 		settings.default_edit_mode = EditMode.CORRECTED;
 }
 
