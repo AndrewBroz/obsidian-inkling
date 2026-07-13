@@ -10,6 +10,7 @@ import {
 	addCommentToView,
 	cancel_empty_comment,
 	type CommentRange,
+	commitReply,
 	create_range,
 	CriticMarkupRange,
 	type EditorChange,
@@ -24,6 +25,7 @@ import {
 import { AnnotationInclusionType } from "../../../../constants";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../../../settings";
 import { annotationGutterFocusThreadAnnotation, annotationGutterFoldAnnotation } from "./annotation-gutter";
+import { ReplyBox } from "./reply-box";
 
 import { stickyContextMenuPatch } from "../../../../patches";
 import { createMetadataInfoElement } from "../../../../ui/snippets";
@@ -412,6 +414,7 @@ export class AnnotationMarker extends GutterMarker {
 	annotation_thread!: HTMLElement;
 	component: Component = new Component();
 	preventUnload: boolean = false;
+	reply_box: ReplyBox | null = null;
 
 	constructor(
 		public annotation: CriticMarkupRange,
@@ -442,6 +445,38 @@ export class AnnotationMarker extends GutterMarker {
 		});
 
 		this.annotation_thread.classList.toggle("cmtr-anno-gutter-thread-highlight", true);
+
+		this.showReplyBox();
+	}
+
+	// EXPL: Google-Docs behaviour — focusing a thread reveals its reply input. Idempotent: a second
+	//       click on an already-open card must not stack a second editor onto the card.
+	showReplyBox() {
+		if (this.reply_box)
+			return;
+
+		const { app } = this.view.state.field(editorInfoField);
+		const container = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-reply" });
+
+		this.reply_box = this.component.addChild(
+			new ReplyBox(app, container, {
+				placeholder: "Reply…",
+				onCommit: (text) => commitReply(this.view, this.annotation, text),
+				onDismiss: () => this.hideReplyBox(),
+			}),
+		);
+	}
+
+	// EXPL: Clear the field BEFORE removing the child (never after): removeChild unloads the box,
+	//       which pulls its editor out of the DOM, which makes Chrome fire a native blur that can
+	//       re-enter here through onDismiss. Nulling first makes the re-entrant call a no-op —
+	//       same state-before-teardown ordering as AnnotationNode's `cancelling` latch above.
+	hideReplyBox() {
+		if (!this.reply_box)
+			return;
+		const reply_box = this.reply_box;
+		this.reply_box = null;
+		this.component.removeChild(reply_box);
 	}
 
 	toDOM() {
@@ -544,6 +579,7 @@ export class AnnotationMarker extends GutterMarker {
 	}
 
 	destroy(dom: HTMLElement) {
+		this.hideReplyBox();
 		this.component.unload();
 		this.annotation_thread.remove();
 		super.destroy(dom);
