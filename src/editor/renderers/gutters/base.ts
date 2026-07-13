@@ -38,6 +38,22 @@ declare module "@codemirror/view" {
 	}
 }
 
+/** Which side of the content a gutter renders on. `before` = left in LTR, `after` = right in LTR. */
+export type GutterSide = "before" | "after";
+
+/**
+ * EXPL: A gutter's scroll margin must be declared on the side the gutter actually renders on.
+ *       This used to branch on `textDirection` alone, which silently assumed every gutter was a
+ *       `before` gutter — so the right-hand annotations gutter declared a LEFT margin. CM6 then
+ *       computed `visible.left = scrollDOM.left + margins.left` and hid (top = -10000px) any
+ *       tooltip anchored inside that phantom strip, which is what made the add-comment pill
+ *       disappear for selections near the left edge of the text.
+ */
+export function gutterScrollMargin(side: GutterSide, ltr: boolean, width: number) {
+	const on_left = ltr === (side === "before");
+	return on_left ? { left: width } : { right: width };
+}
+
 export function sameMarkers(a: readonly GutterMarker[], b: readonly GutterMarker[]): boolean {
 	if (a.length != b.length) return false;
 	for (let i = 0; i < a.length; i++) {
@@ -332,6 +348,11 @@ export class SingleGutterView {
 }
 
 export class GutterView {
+	// EXPL: Must agree with `insertGutters` below, which is what actually decides which side of
+	//       contentDOM this gutter's DOM lands on. Subclasses that override `insertGutters` MUST
+	//       override this too (see AnnotationGutterView).
+	static readonly side: GutterSide = "before";
+
 	gutters: SingleGutterView[];
 	dom: HTMLElement;
 	fixed: boolean;
@@ -511,15 +532,15 @@ export class GutterView {
 	}
 }
 
-export function createGutterViewPlugin<T extends GutterView>(cls: { new(view: EditorView): T }) {
+export function createGutterViewPlugin<T extends GutterView>(
+	cls: { new(view: EditorView): T; side: GutterSide },
+) {
 	return ViewPlugin.fromClass(cls, {
 		provide: plugin =>
 			EditorView.scrollMargins.of(view => {
 				const value = view.plugin(plugin);
 				if (!value || value.gutters.length == 0 || !value.fixed) return null;
-				return view.textDirection == Direction.LTR ?
-					{ left: value.dom.offsetWidth /** * view.scaleX*/ } :
-					{ right: value.dom.offsetWidth /** * view.scaleX*/ };
+				return gutterScrollMargin(cls.side, view.textDirection == Direction.LTR, value.dom.offsetWidth);
 			}),
 	});
 }

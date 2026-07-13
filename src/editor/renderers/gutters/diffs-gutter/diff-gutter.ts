@@ -22,7 +22,7 @@ const activeGutters = Facet.define<Required<DiffGutterConfig>>();
 
 export const diffGutterHideEmptyAnnotation = Annotation.define<boolean>();
 
-class DiffGutterView extends GutterView {
+export class DiffGutterView extends GutterView {
 	constructor(view: EditorView) {
 		super(view, unfixGutters, activeGutters);
 
