@@ -47,6 +47,36 @@ describe("commentDraftField", () => {
 		view.dispatch({ changes: { from: 6, to: 11, insert: "" } });
 		expect(view.state.field(commentDraftField)).toBeNull();
 	});
+
+	// EXPL: These three pin the assoc biases in `commentDraftField`'s mapPos pair, which give the
+	//       anchor EXCLUSIVE boundaries. Without them the biases can be inverted (to the
+	//       boundary-INCLUSIVE pair) and every other test in this file still passes — the rest only
+	//       exercise edits far away from the anchor, or deletion of the whole span. The behaviour
+	//       matters: typing immediately before a commented phrase must not silently swallow the new
+	//       words into what the comment claims to be about.
+	test("text typed exactly AT the anchor's start stays outside the anchor", () => {
+		const view = viewWith("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) }); // "world"
+		view.dispatch({ changes: { from: 6, to: 6, insert: "XX" } });
+		// "hello XXworld" — the anchor still covers "world", not "XXworld"
+		expect(view.state.field(commentDraftField)).toEqual({ from: 8, to: 13 });
+	});
+
+	test("text typed exactly AT the anchor's end stays outside the anchor", () => {
+		const view = viewWith("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) }); // "world"
+		view.dispatch({ changes: { from: 11, to: 11, insert: "XX" } });
+		// "hello worldXX" — the anchor still covers "world", not "worldXX"
+		expect(view.state.field(commentDraftField)).toEqual({ from: 6, to: 11 });
+	});
+
+	test("text typed strictly INSIDE the anchor grows it", () => {
+		const view = viewWith("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) }); // "world"
+		view.dispatch({ changes: { from: 8, to: 8, insert: "XX" } });
+		// "hello woXXrld" — still commenting on that word, so the anchor absorbs the insertion
+		expect(view.state.field(commentDraftField)).toEqual({ from: 6, to: 13 });
+	});
 });
 
 describe("commitCommentDraft", () => {
