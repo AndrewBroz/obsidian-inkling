@@ -307,6 +307,27 @@ export const apiVersion = "0.0.0-jest";
 
 export function setIcon(..._args: any[]) {}
 
+// EXPL: Mirrors the real setTooltip's DOM contract (extracted from Obsidian's shipped
+//       app.js: functions Ix/Ox/Nx) closely enough for headless assertions — it sets
+//       aria-label for the accessible name, and only writes data-tooltip-position when the
+//       placement differs from the implicit default ("bottom"), exactly like the real
+//       Nx(): `i && "bottom" !== i && e.setAttribute("data-tooltip-position", i)`.
+export interface TooltipOptions {
+	placement?: "top" | "bottom" | "left" | "right";
+	classes?: string[];
+	gap?: number;
+	delay?: number;
+}
+
+export function setTooltip(el: HTMLElement, tooltip: string, options?: TooltipOptions) {
+	el.setAttribute("aria-label", tooltip);
+	const placement = options?.placement ?? "bottom";
+	if (placement !== "bottom")
+		el.setAttribute("data-tooltip-position", placement);
+	else
+		el.removeAttribute("data-tooltip-position");
+}
+
 export function debounce<T extends (...args: any[]) => any>(
 	fn: T,
 	_timeout?: number,

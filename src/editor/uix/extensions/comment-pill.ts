@@ -1,9 +1,19 @@
 import { EditorState, type Extension, StateField } from "@codemirror/state";
 import { EditorView, showTooltip, type Tooltip, type TooltipView } from "@codemirror/view";
 
-import { setIcon } from "obsidian";
+import { setIcon, setTooltip } from "obsidian";
 
 import { addCommentToView, rangeParser } from "../../base";
+
+// EXPL: CM6 places an `above: true` tooltip flush against the anchor line (0px gap by
+//       default: `top = pos.top - height - offset.y`, offset.y unset == 0) — confirmed by
+//       tracing @codemirror/view's writeMeasure() and by a Playwright repro against a real
+//       EditorView. The pill (icon + padding, ~30px) is taller than a single text line, so a
+//       flush touch reads visually as "sitting on the text". PILL_GAP gives it explicit
+//       clearance instead of relying on incidental 0px contact; 8px matches both Google
+//       Docs' comment-bubble convention and Obsidian's own tooltip gap constant (`bx = 8` in
+//       the shipped app.js, extracted from obsidian.asar and confirmed empirically).
+const PILL_GAP = 8;
 
 // EXPL: GDocs-style floating "add comment" pill. Eligibility mirrors addCommentToView's
 //       wrap path (edit-logic/add-comment.ts): a non-empty selection that touches no
@@ -29,7 +39,15 @@ function createPillDom(view: EditorView): TooltipView {
 	const button = document.createElement("button");
 	button.type = "button";
 	button.className = "cmtr-comment-pill-button";
-	button.setAttribute("aria-label", "Add comment");
+	// EXPL: setTooltip is Obsidian's sanctioned tooltip API (over a raw aria-label) because
+	//       it also gives placement control. Obsidian's tooltip defaults to
+	//       data-tooltip-position="bottom" when no placement is given (confirmed against the
+	//       real Ix()/Ox() tooltip functions extracted from app.js) — since the pill itself
+	//       floats above the selection, a default-bottom tooltip renders *between* the pill
+	//       and the selected text, covering exactly what the user is about to comment on.
+	//       placement: "top" flips it clear, above the pill. setTooltip still sets
+	//       aria-label under the hood, so the button keeps its accessible name.
+	setTooltip(button, "Add comment", { placement: "top" });
 	setIcon(button, "message-square-plus");
 
 	// EXPL: A plain <button> click steals focus from the editor's contentEditable on
@@ -44,7 +62,12 @@ function createPillDom(view: EditorView): TooltipView {
 	});
 
 	dom.appendChild(button);
-	return { dom };
+	// EXPL: `offset.y` is TooltipView's own clearance knob (see @codemirror/view's
+	//       writeMeasure): for an `above` tooltip it's subtracted again after `height`, so it
+	//       pushes the pill's bottom edge PILL_GAP px clear of the anchor line's top instead
+	//       of flush against it. `x: 0` keeps the pill horizontally centered on the anchor
+	//       (the current, correct behavior) — only the vertical clearance was missing.
+	return { dom, offset: { x: 0, y: PILL_GAP } };
 }
 
 function getCommentPillTooltip(state: EditorState): Tooltip | null {

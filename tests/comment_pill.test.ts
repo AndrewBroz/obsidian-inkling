@@ -1,6 +1,7 @@
-import { EditorState, type Extension } from "@codemirror/state";
+import { EditorState, type Extension, StateField } from "@codemirror/state";
+import { EditorView, type Tooltip } from "@codemirror/view";
 
-import { pill_eligible } from "../src/editor/uix/extensions/comment-pill";
+import { commentPill, pill_eligible } from "../src/editor/uix/extensions/comment-pill";
 import { createRangeState } from "./helpers";
 
 // EXPL: add_metadata false keeps outputs deterministic (no timestamps in the markup)
@@ -40,5 +41,90 @@ describe("pill_eligible", () => {
 	test("a non-empty selection in a read-only state is not eligible", () => {
 		const state = stateWithSelection("hello world", 0, 5, [EditorState.readOnly.of(true)]);
 		expect(pill_eligible(state)).toBe(false);
+	});
+});
+
+// EXPL: commentPill's StateField is typed `Extension` at the export boundary (main.ts only
+//       ever needs to register it), but at runtime it *is* the StateField<Tooltip | null> —
+//       casting to read it back with `state.field()` lets these tests exercise the real
+//       production `getCommentPillTooltip`/`createPillDom` instead of reimplementing them.
+const commentPillField = commentPill as unknown as StateField<Tooltip | null>;
+
+function tooltipFor(doc: string, anchor: number, head: number): Tooltip | null {
+	const state = stateWithSelection(doc, anchor, head, [commentPill]);
+	return state.field(commentPillField);
+}
+
+describe("commentPill tooltip placement config", () => {
+	// EXPL: Root cause (confirmed via a Playwright repro against a real EditorView, see
+	//       task-pillhover-report.md): CM6's `above: true` places the tooltip's bottom edge
+	//       flush (0px) against the anchor line's top — @codemirror/view's writeMeasure() does
+	//       `top = pos.top - height - arrowHeight - offset.y`, and offset.y was never set, so
+	//       it defaulted to 0. A pill taller than one text line then reads as "sitting on the
+	//       text". These assertions pin the exact fields that fix it.
+	test("eligible selection produces a Tooltip anchored at the selection head, above, non-strict", () => {
+		const doc = "hello world";
+		const tooltip = tooltipFor(doc, 0, 5);
+		expect(tooltip).not.toBeNull();
+		expect(tooltip!.pos).toBe(5);
+		expect(tooltip!.above).toBe(true);
+		// EXPL: strictSide: false lets CM6 flip the pill below the selection when there's no
+		//       room above (e.g. selection on the first visible line) instead of clipping it.
+		expect(tooltip!.strictSide).toBe(false);
+	});
+
+	test("ineligible selection (empty, or overlapping an existing range) yields no tooltip", () => {
+		expect(tooltipFor("hello world", 3, 3)).toBeNull();
+		const doc = "he{++llo++} world";
+		expect(tooltipFor(doc, 0, 7)).toBeNull();
+	});
+
+	test("the pill's TooltipView requests an explicit 8px vertical gap from the anchor line", () => {
+		const doc = "hello world";
+		const tooltip = tooltipFor(doc, 0, 5)!;
+		const parent = document.createElement("div");
+		document.body.appendChild(parent);
+		const view = new EditorView({ state: stateWithSelection(doc, 0, 5), parent });
+
+		const tooltipView = tooltip.create(view);
+		// EXPL: For an `above` tooltip, @codemirror/view subtracts `offset.y` a second time
+		//       (`pos.top - height - offset.y`), so this is genuine clearance from the anchor
+		//       line's top, not a stylistic nudge — without it the pill was flush (0px) against
+		//       the text. 8px matches both Google Docs' comment-bubble convention and
+		//       Obsidian's own tooltip gap constant (`bx = 8`, extracted from the shipped
+		//       app.js).
+		expect(tooltipView.offset).toEqual({ x: 0, y: 8 });
+
+		view.destroy();
+	});
+});
+
+describe("comment-pill button tooltip (Obsidian setTooltip)", () => {
+	// EXPL: Root cause (confirmed against Obsidian's real tooltip functions, extracted from
+	//       app.js inside obsidian.asar): a bare aria-label with no data-tooltip-position
+	//       defaults to placement "bottom" (Ix(): `var n = "bottom"`), which renders Obsidian's
+	//       black tooltip *below* the button — i.e. between the pill and the selection it's
+	//       floating above, covering the text the user is about to comment on.
+	function buildPillButton(): HTMLButtonElement {
+		const doc = "hello world";
+		const tooltip = tooltipFor(doc, 0, 5)!;
+		const parent = document.createElement("div");
+		document.body.appendChild(parent);
+		const view = new EditorView({ state: stateWithSelection(doc, 0, 5), parent });
+		const tooltipView = tooltip.create(view);
+		const button = tooltipView.dom.querySelector<HTMLButtonElement>(".cmtr-comment-pill-button");
+		expect(button).not.toBeNull();
+		view.destroy();
+		return button!;
+	}
+
+	test("button keeps an accessible name (aria-label) via setTooltip", () => {
+		const button = buildPillButton();
+		expect(button.getAttribute("aria-label")).toBe("Add comment");
+	});
+
+	test("button requests top placement so the tooltip renders above the pill, not over the selection", () => {
+		const button = buildPillButton();
+		expect(button.getAttribute("data-tooltip-position")).toBe("top");
 	});
 });
