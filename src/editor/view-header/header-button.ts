@@ -19,6 +19,16 @@ export function nextStateOf<T extends { value: number }>(states: readonly T[], v
 	return index === -1 ? states[0] : states[(index + 1) % states.length];
 }
 
+/**
+ * The state that `value` itself refers to (falling back to the first state if `value` is not a
+ * live mode, mirroring `nextStateOf`'s fail-safe). Used to render the button's OWN icon/label —
+ * as opposed to `nextStateOf`, which is only for the tooltip/click-target's "what happens next".
+ */
+export function currentStateOf<T extends { value: number }>(states: readonly T[], value: number): T {
+	const index = stateIndexOf(states, value);
+	return states[index === -1 ? 0 : index];
+}
+
 export class HeaderButton {
 	active_mapping: WeakMap<MarkdownView, {
 		button: HTMLElement;
@@ -53,6 +63,28 @@ export class HeaderButton {
 		return nextStateOf(this.states, value);
 	}
 
+	/** Advances `view`'s mode to whatever follows its current value in the cycle. */
+	private cycle(view: MarkdownView) {
+		this.onchange(view, this.nextState(this.getvalue(view)).value);
+	}
+
+	/** Opens the right-click "jump to any state" menu for `view`, anchored at `e`. */
+	private openMenu(view: MarkdownView, e: MouseEvent) {
+		const menu = new Menu();
+		const current_value = this.getvalue(view);
+		for (const { value, icon, text } of this.states) {
+			menu.addItem((item) => {
+				item.setIcon(icon)
+					.setTitle(text)
+					.setChecked(value === current_value)
+					.onClick(() => {
+						this.onchange(view, value);
+					});
+			});
+		}
+		menu.showAtMouseEvent(e);
+	}
+
 	setRendering(render?: boolean) {
 		if (render === undefined || render === !!this.changeEvent) return;
 
@@ -80,6 +112,10 @@ export class HeaderButton {
 				const status = elements.button.createSpan({ text, cls: this.cls });
 				// @ts-expect-error Parent element exists
 				elements.button.parentElement.insertBefore(status, elements.button);
+				// EXPL: see the matching note in `attachButtons` — the label is reparented out of
+				//       `button`, so it needs its own click/contextmenu handlers to stay clickable.
+				status.addEventListener("click", () => this.cycle(view));
+				status.addEventListener("contextmenu", (e: MouseEvent) => this.openMenu(view, e));
 				elements.status = status;
 				// this.active_mapping.set(view, elements);
 			}
@@ -91,8 +127,12 @@ export class HeaderButton {
 		if (elements) {
 			const index = this.stateIndex(value);
 			if (index !== -1) {
-				const { tooltip, text } = this.states[index];
-				setIcon(elements.button, this.nextState(value).icon);
+				const { tooltip, text, icon } = currentStateOf(this.states, value);
+				// EXPL: The icon depicts the mode the button is CURRENTLY in (matching `text`), not the
+				//       mode a click would move to — that "what happens next" is already conveyed by
+				//       `tooltip`. Rendering `nextState(value).icon` here previously showed an icon one
+				//       step ahead of the adjacent label (e.g. label "Editing" with the Suggesting icon).
+				setIcon(elements.button, icon);
 				elements.button.setAttribute("aria-label", tooltip);
 				elements.button.style.display = "";
 				if (this.has_label)
@@ -132,34 +172,29 @@ export class HeaderButton {
 			//       the button — rather than falling back to `states[0]` for display, which would
 			//       silently mislabel the button as the first state.
 			const index = this.stateIndex(value);
-			const { tooltip, text } = this.states[index === -1 ? 0 : index];
-			const button = view.addAction(this.nextState(value).icon, tooltip, async () => {
-				this.onchange(view, this.nextState(this.getvalue(view)).value);
-			});
+			// EXPL: Icon (and label) reflect the CURRENT state, matching `text` — see the identical
+			//       note in `updateButton`. The tooltip is the only place "what a click does" is said.
+			const { tooltip, text, icon } = currentStateOf(this.states, value);
+			const button = view.addAction(icon, tooltip, () => this.cycle(view));
+			// EXPL: `button.createSpan` first appends the span as a CHILD of `button`, but the
+			//       `insertBefore` below immediately reparents it to be a SIBLING before `button` (so
+			//       the label sits to the icon's left instead of being squeezed into Obsidian's
+			//       fixed-size `.clickable-icon` box, which would clip text). That reparenting means
+			//       the label is no longer a descendant of `button`, so `button`'s click listener
+			//       (bound by `view.addAction` on `button` itself, not delegated from its parent) never
+			//       fires for clicks on the label — it has to get its own listener wired up here.
 			const status = this.has_label ? button.createSpan({ text, cls: this.cls }) : null;
 
 			if (this.has_label) {
 				// @ts-expect-error Parent element exists
 				button.parentElement.insertBefore(status, button);
+				status!.addEventListener("click", () => this.cycle(view));
+				status!.addEventListener("contextmenu", (e: MouseEvent) => this.openMenu(view, e));
 			}
 
 			if (index === -1) button.style.display = "none";
 
-			button.oncontextmenu = (e: MouseEvent) => {
-				const menu = new Menu();
-				const current_value = this.getvalue(view);
-				for (const { value, icon, text } of this.states) {
-					menu.addItem((item) => {
-						item.setIcon(icon)
-							.setTitle(text)
-							.setChecked(value === current_value)
-							.onClick(() => {
-								this.onchange(view, value);
-							});
-					});
-				}
-				menu.showAtMouseEvent(e);
-			};
+			button.oncontextmenu = (e: MouseEvent) => this.openMenu(view, e);
 
 			this.active_mapping.set(view, { button, status, event });
 		}

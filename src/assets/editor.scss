@@ -191,6 +191,10 @@
   font-size: var(--font-smallest);
   color: var(--text-faint);
   margin-right: var(--size-2-1);
+  // EXPL: This label is a sibling of its header button (not a descendant — see the DOM notes in
+  //       `HeaderButton.attachButtons`), so nothing marks it as clickable by default. It gets its
+  //       own click listener in JS; `cursor: pointer` here just makes that affordance visible.
+  cursor: pointer;
 }
 
 .cmtr-submenu-nested {
