@@ -26,24 +26,35 @@
   transition: right 50ms ease-out;
 }
 
+// EXPL: Flat by design. Obsidian's own comment-adjacent surfaces (callouts, hover popovers,
+//       menus) carry no outline — they read as tinted surfaces lifted off the background. The
+//       previous 2px border clashed with every theme, and state (focus) was expressed by
+//       swapping the border's COLOR, which is invisible to anyone who reads shape before hue.
+//       State now rides on the surface itself.
 .cmtr-anno-gutter-thread {
   width: 100%;
   position: relative;
 
-  border: 2px solid var(--background-modifier-border);
-  border-radius: var(--radius-l);
+  border: none;
+  border-radius: var(--radius-m);
 
-  background-color: var(--background-primary-alt);
+  background-color: var(--background-secondary);
 
   color: var(--text-muted);
 
-  transition:
-    border-color 100ms ease-in-out 0ms,
-    background-color 100ms ease-in-out 0ms;
+  transition: background-color 100ms ease-in-out 0ms;
 }
 
+// EXPL: `--background-modifier-hover` is a SEMI-TRANSPARENT overlay token, not an opaque surface
+//       (`rgba(var(--mono-rgb-100), 0.075)`) — see the pill's write-up in editor.scss. Painting
+//       it as `background-color` would make the card translucent and let the note's text show
+//       through. Layering it as a `background-image` over the opaque base keeps the composite
+//       opaque, and lets the focused card read as "lifted" without a stroke.
 .cmtr-anno-gutter-thread-highlight {
-  border-color: var(--interactive-accent);
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
 }
 
 .cmtr-anno-gutter-annotation {
@@ -67,19 +78,19 @@
 //       top, rounded bottom only — reported as the card rendering as a "bottom segment"); using
 //       `of S` instead makes the rounding immune to the actions row's position in the DOM.
 .cmtr-anno-gutter-annotation:nth-child(1 of .cmtr-anno-gutter-annotation) {
-  border-top-left-radius: var(--radius-l);
-  border-top-right-radius: var(--radius-l);
+  border-top-left-radius: var(--radius-m);
+  border-top-right-radius: var(--radius-m);
 }
 
 .cmtr-anno-gutter-annotation:nth-last-child(1 of .cmtr-anno-gutter-annotation) {
-  border-bottom-left-radius: var(--radius-l);
-  border-bottom-right-radius: var(--radius-l);
+  border-bottom-left-radius: var(--radius-m);
+  border-bottom-right-radius: var(--radius-m);
 }
 
 .cmtr-anno-gutter-annotation:not(
     :nth-last-child(1 of .cmtr-anno-gutter-annotation)
   ) {
-  border-bottom: 1px dashed var(--background-modifier-border);
+  border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .cmtr-anno-gutter .cm-gutterElement {
@@ -95,16 +106,21 @@
   margin-block-end: 0.25em;
 }
 
+// EXPL: These were `box-shadow: 0 0 0 2px` rings — an outline in all but name, and the reason a
+//       hovered reply grew a hard stroke inside an otherwise flat card. Hover/focus now tint the
+//       entry's own surface. `z-index` is retained: entries scroll within a fixed-height card, and
+//       the sticky metadata row (below) must not paint over the active entry.
 .cmtr-anno-gutter-annotation:hover {
-  box-shadow: 0 0 0 2px var(--interactive-accent);
-  background-color: var(--background-secondary);
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
   z-index: 20;
 }
 
 .cmtr-anno-gutter-annotation:focus,
 .cmtr-anno-gutter-annotation-editing.cmtr-anno-gutter-annotation-editing {
-  box-shadow: 0 0 0 2px var(--comment-border-color);
-  background-color: var(--background-secondary);
+  background-color: var(--background-modifier-active-hover);
   z-index: 25;
 }
 
