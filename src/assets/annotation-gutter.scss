@@ -209,18 +209,27 @@
 
   opacity: 0;
   transition: opacity 100ms ease-in-out;
+
+  // EXPL: `opacity: 0` hides a button; it does NOT disable it. An opacity-0 button still takes the
+  //       click. Revealing these only on selection therefore did not make the gutter safer — it made
+  //       it far MORE dangerous, because Accept/Reject/Resolve stayed live under the pointer while
+  //       invisible, so a click anywhere in a card's top-right corner silently fired one. Visibility
+  //       and clickability must be the SAME state, never two states that merely usually agree.
+  //
+  //       This is why hover-reveal is the right model (and why Google Docs uses it): the control is
+  //       visible in exactly the situation where it can be clicked. `pointer-events` now enforces
+  //       that rather than relying on the two rules staying in sync.
+  pointer-events: none;
 }
 
-// EXPL: Actions belong to the SELECTED card, not the hovered one. Revealing Accept/Reject/Resolve on
-//       hover meant that merely sweeping the mouse down the gutter armed a different destructive
-//       control under the pointer on every card it crossed — and it made all twenty cards look
-//       equally actionable. Selecting a card is a deliberate act; hovering one is not.
-//
-//       `:has(:focus-visible)` is retained so the row is still reachable by keyboard when a button
-//       inside it is tabbed to, independent of mouse selection.
+// EXPL: Shown on hover OR on the selected card. Hover is what makes the affordance discoverable and,
+//       more importantly, HONEST — see the pointer-events note above: whenever these buttons can be
+//       clicked, they are visible. `:has(:focus-visible)` keeps them reachable by keyboard.
+.cmtr-anno-gutter-thread:hover .cmtr-anno-gutter-thread-actions,
 .cmtr-anno-gutter-thread-highlight .cmtr-anno-gutter-thread-actions,
 .cmtr-anno-gutter-thread-actions:has(:focus-visible) {
   opacity: 1;
+  pointer-events: auto;
 }
 
 // EXPL: These buttons carry Obsidian's own `.clickable-icon` class (added in marker.ts) so
