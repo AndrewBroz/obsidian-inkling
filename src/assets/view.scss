@@ -3,10 +3,13 @@
   height: 95%;
 }
 
+// EXPL: Kept in lockstep with `.cmtr-anno-gutter-thread` (annotation-gutter.scss) — the sidebar
+//       and the in-editor gutter show the SAME threads, so a user switching between them should
+//       not see two different card languages.
 .cmtr-view-range {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-l);
-  background: var(--background-primary);
+  border: none;
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
   margin: 2px 8px 8px 2px;
   max-height: 400px;
   overflow-y: scroll;
@@ -41,15 +44,20 @@
   overflow: hidden;
 }
 
+// EXPL: Resolved threads previously signalled themselves with a dashed BORDER; with the card
+//       flattened there is no border to dash. A recessed (rather than raised) surface carries the
+//       same "settled, no longer active" meaning without a stroke, and keeps the muted text.
 .cmtr-view-range-completed {
   background: var(--background-primary-alt);
   color: var(--text-muted);
-  border-style: dashed;
 }
 
 .cmtr-view-range:hover {
   box-shadow: unset;
-  outline: 2px dashed var(--interactive-accent-hover);
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
 }
 
 .cmtr-view-range-selected {
