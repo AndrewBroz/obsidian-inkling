@@ -41,16 +41,32 @@
   background-color: var(--background-secondary);
 
   color: var(--text-muted);
-
-  transition: background-color 100ms ease-in-out 0ms;
 }
 
-// EXPL: `--background-modifier-hover` is a SEMI-TRANSPARENT overlay token, not an opaque surface
-//       (`rgba(var(--mono-rgb-100), 0.075)`) — see the pill's write-up in editor.scss. Painting
-//       it as `background-color` would make the card translucent and let the note's text show
-//       through. Layering it as a `background-image` over the opaque base keeps the composite
-//       opaque, and lets the focused card read as "lifted" without a stroke.
+// EXPL: `--background-modifier-hover` is a translucent overlay token (alpha well below 1), not an
+//       opaque surface — see the pill's write-up in editor.scss. Painting it as `background-color`
+//       would make the card translucent and let the note's text show through. Layering it as a
+//       `background-image` over the opaque base keeps the composite opaque, and lets the focused
+//       card read as "lifted" without a stroke.
 .cmtr-anno-gutter-thread-highlight {
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
+}
+
+// EXPL: The container tint above is fully OCCLUDED — every pixel of the thread is covered by a
+//       `.cmtr-anno-gutter-annotation` child painting its own opaque `background-color: inherit`,
+//       so a rest card and a focused card composited to identical pixels. This state is set on
+//       card click and on markup focus (marker.ts), so without this rule, clicking a card did
+//       nothing visible. Repainting each entry directly (rather than only the container) fixes
+//       that.
+//       ORDER IS LOAD-BEARING: this selector's specificity (0,2,0) is the same as
+//       `.cmtr-anno-gutter-annotation:hover` and the editing rule below, so this rule MUST come
+//       BEFORE both of them in source order. If it moved after either, a highlighted thread's
+//       tint would beat the hover/editing tint on conflicting entries, and hovering or editing an
+//       entry inside a focused thread would show no change.
+.cmtr-anno-gutter-thread-highlight .cmtr-anno-gutter-annotation {
   background-image: linear-gradient(
     var(--background-modifier-hover),
     var(--background-modifier-hover)
@@ -118,14 +134,14 @@
   z-index: 20;
 }
 
-// EXPL: `--background-modifier-active-hover` is `hsla(var(--interactive-accent-hsl), 0.15)` — a
-//       15%-alpha OVERLAY token, not an opaque surface (same family as `--background-modifier-hover`
-//       above; verified against Obsidian's shipped app.css). Assigning it to `background-color`
-//       would REPLACE this entry's opaque paint with a 15%-opaque wash, which is exactly the bug
-//       that made the comment pill see-through (see the write-up in editor.scss). It happens not to
-//       bleed document text today only because this entry always sits inside the opaque
-//       `.cmtr-anno-gutter-thread`. Layering it as a background-image over the inherited opaque base
-//       keeps the composite opaque on its own terms, rather than on an ancestor's good behaviour.
+// EXPL: `--background-modifier-active-hover` is a translucent overlay token (alpha well below 1,
+//       same family as `--background-modifier-hover` above), not an opaque surface. Assigning it
+//       to `background-color` would REPLACE this entry's opaque paint with a translucent wash,
+//       which is exactly the bug that made the comment pill see-through (see the write-up in
+//       editor.scss). It happens not to bleed document text today only because this entry always
+//       sits inside the opaque `.cmtr-anno-gutter-thread`. Layering it as a background-image over
+//       the inherited opaque base keeps the composite opaque on its own terms, rather than on an
+//       ancestor's good behaviour.
 .cmtr-anno-gutter-annotation:focus,
 .cmtr-anno-gutter-annotation-editing.cmtr-anno-gutter-annotation-editing {
   background-image: linear-gradient(

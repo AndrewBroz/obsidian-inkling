@@ -9,13 +9,19 @@
 .cmtr-view-range {
   border: none;
   border-radius: var(--radius-m);
-  background: var(--background-secondary);
+  background-color: var(--background-secondary);
   margin: 2px 8px 8px 2px;
   max-height: 400px;
   overflow-y: scroll;
   word-wrap: break-word;
 }
 
+// EXPL: `background-color: inherit` alone left this row OCCLUDING the card's tint: being
+//       `position: sticky`, it paints its own opaque layer over whatever `.cmtr-view-range`
+//       painted underneath, so a hovered/selected card rendered as a tinted body with an
+//       untinted rectangle across the top. `background-image: inherit` computes to the parent's
+//       current gradient (`none` at rest, the hover/selected gradient otherwise), so this row's
+//       composite now always matches the card it sits on top of.
 .cmtr-view-range-top {
   display: flex;
   align-items: center;
@@ -25,6 +31,7 @@
   z-index: 1;
   top: 0;
   background-color: inherit;
+  background-image: inherit;
 }
 
 .cmtr-view-range-text {
@@ -45,11 +52,17 @@
 }
 
 // EXPL: Resolved threads previously signalled themselves with a dashed BORDER; with the card
-//       flattened there is no border to dash. A recessed (rather than raised) surface carries the
-//       same "settled, no longer active" meaning without a stroke, and keeps the muted text.
+//       flattened there is no border to dash. A background swap (`--background-primary-alt`
+//       against the card's `--background-secondary`) was tried first and abandoned: measured
+//       against Obsidian's real token values the two surfaces differ by ~2/255 in dark mode
+//       (imperceptible) and INVERT in light mode (resolved would render LIGHTER than a normal
+//       card, i.e. more prominent, not less) — the signal was both too weak and theme-inconsistent
+//       to ship. Reduced emphasis (muted text + opacity) reads as "settled/inactive" identically
+//       in both themes, and needs no background at all — the card keeps its normal
+//       `--background-secondary` surface.
 .cmtr-view-range-completed {
-  background: var(--background-primary-alt);
   color: var(--text-muted);
+  opacity: 0.6;
 }
 
 .cmtr-view-range:hover {
