@@ -86,8 +86,4 @@ export class ReplyBox extends Component {
 		this.editor = null;
 		this.container.remove();
 	}
-
-	focus() {
-		this.editor?.editor?.cm.focus();
-	}
 }

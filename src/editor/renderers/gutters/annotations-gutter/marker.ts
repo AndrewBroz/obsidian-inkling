@@ -480,6 +480,15 @@ export class AnnotationMarker extends GutterMarker {
 	}
 
 	toDOM() {
+		// EXPL: toDOM can run a SECOND time on this same instance: GutterElement.setMarkers
+		//       (base.ts:168-190) re-homes a marker between GutterElements without calling
+		//       destroy() when preventUnload is set (see that file's own FIXME at :172-180), then
+		//       builds a fresh `annotation_thread` here. Without this reset, `reply_box` would
+		//       still point at the container from the OLD (now-detached) annotation_thread, so
+		//       showReplyBox()'s `if (this.reply_box) return;` guard would permanently refuse to
+		//       ever open a reply box on the new card again.
+		this.hideReplyBox();
+
 		this.annotation_thread = createDiv({ cls: "cmtr-anno-gutter-thread" });
 		this.annotation_thread.addEventListener("click", this.onCommentThreadClick.bind(this));
 

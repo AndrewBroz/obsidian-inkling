@@ -45,8 +45,10 @@ describe("commitReply", () => {
 	});
 
 	// EXPL: Replying to a REPLY must retarget the thread's base, not nest — threads are flat
-	//       (comment_range.ts:35-43). Appending at the reply's own `to` would be identical here by
-	//       luck; using base_range.full_range_back is what keeps it correct for a mid-thread reply.
+	//       (comment_range.ts:35-43). This pins that a reply to a MID-thread reply still lands at
+	//       the END of the thread: using the passed range's own `to` instead of
+	//       base_range.full_range_back would insert "three" between "one" and "two"
+	//       ({==hi==}{>>one<<}{>>three<<}{>>two<<}), misordering the thread. Verified by mutation.
 	test("replying to a reply appends to the thread's base, not to the reply", () => {
 		const view = viewWith("{==hi==}{>>one<<}{>>two<<}");
 		const reply = view.state.field(rangeParser).ranges.ranges[1];
