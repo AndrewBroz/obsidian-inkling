@@ -151,6 +151,16 @@
   z-index: 25;
 }
 
+// EXPL: `background-image: inherit` for the same reason `.cmtr-view-range-top` needs it (view.scss):
+//       this row is `position: sticky` with an opaque `background-color: inherit`, so it paints its
+//       own opaque layer over whatever the ENTRY painted underneath — and the entry's hover/editing
+//       state is a `background-image` tint. Without this, a hovered or edited entry renders with an
+//       untinted band across its metadata line.
+//
+//       `z-index` does NOT prevent this, despite what the ordering here suggests: a child always
+//       paints above its parent's background, whatever its z-index. z-index orders ELEMENTS, and the
+//       tint is not an element — it is the parent's background. Inheriting the gradient (`none` at
+//       rest, the entry's tint otherwise) is what actually keeps this row flush with its entry.
 .cmtr-anno-gutter-annotation-metadata {
   font-size: var(--font-smallest);
   color: var(--text-faint);
@@ -158,6 +168,7 @@
   position: sticky;
   top: -4px;
   background-color: inherit;
+  background-image: inherit;
   z-index: 10;
   padding: 2px 0;
 }
