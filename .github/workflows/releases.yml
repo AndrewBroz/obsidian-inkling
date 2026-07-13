@@ -3,9 +3,11 @@ name: Build obsidian plugin
 on:
   push:
     tags:
-      - "*"
-  # Fallback: run from a tag ref (gh workflow run releases.yml --ref <tag>) if the
-  # tag-push event fails to trigger (observed 2026-07-12: tag pushes produced no run)
+      # Version tags only. Previously "*", which meant ANY tag — including a
+      # throwaway or diagnostic one — would build and publish a release that
+      # BRAT users would then be offered as "Latest".
+      - "[0-9]+.[0-9]+.[0-9]+*"
+  # Manual fallback: gh workflow run releases.yml --ref <tag>
   workflow_dispatch:
 
 env:

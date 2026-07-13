@@ -1,0 +1,15 @@
+# TEMPORARY — diagnostic only. Delete after the tag-push investigation.
+# Fires on probe-* tags ONLY, and creates no release, so it can test whether a
+# tag push triggers workflows at all without publishing anything.
+name: Tag trigger probe
+
+on:
+  push:
+    tags:
+      - "probe-*"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Tag push DID trigger a workflow for ${GITHUB_REF_NAME}"
