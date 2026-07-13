@@ -100,13 +100,27 @@
   }
 }
 
+// EXPL: Pale at rest, full strength when selected. `--highlight-color` is now a diluted wash and
+//       `--highlight-color-alt` is Obsidian's full `--text-highlight-bg` (see main.scss).
+//
+//       The `:has()` is load-bearing, and so is zeroing the child. `.cmtr-focused` is a span NESTED
+//       INSIDE `.cmtr-highlight`, and BOTH colours are translucent — so the old rule (wash on the
+//       parent, stronger wash on the child) STACKED the two, compositing to something darker than
+//       either. It also only repainted the focused sub-span, not the whole anchor. Selecting now
+//       repaints the entire highlight from the parent, and the child paints nothing, so the
+//       composite is exactly one layer at the intended alpha.
 .cmtr-highlight {
   background-color: var(--highlight-color);
   border-radius: var(--radius-s);
+  transition: background-color 120ms ease-in-out;
+}
 
-  .cmtr-focused {
-    background-color: var(--highlight-color-alt);
-  }
+.cmtr-highlight:has(.cmtr-focused) {
+  background-color: var(--highlight-color-alt);
+}
+
+.cmtr-highlight .cmtr-focused {
+  background-color: transparent;
 }
 
 // EXPL: An anchored highlight's attached comment thread renders inline directly after the

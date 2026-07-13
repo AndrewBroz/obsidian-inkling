@@ -31,12 +31,20 @@
     black 15%
   );
 
-  --highlight-color: var(--text-highlight-bg);
-  --highlight-color-alt: color-mix(
-    in srgb-linear,
+  // EXPL: An anchored highlight is READ far more often than it is selected, so at rest it should sit
+  //       quietly under the text — a wash, not a marker pen. `-alt` (the focused/selected state) is
+  //       the one that gets Obsidian's full `--text-highlight-bg`.
+  //
+  //       These used to be base + base-darkened-15%, which is why selected and unselected were nearly
+  //       indistinguishable: `--text-highlight-bg` is already a ~0.4-alpha wash, and darkening a
+  //       translucent colour by 15% barely moves the composite. Diluting the ALPHA is what actually
+  //       separates the two states.
+  --highlight-color: color-mix(
+    in srgb,
     var(--text-highlight-bg),
-    black 15%
+    transparent 62%
   );
+  --highlight-color-alt: var(--text-highlight-bg);
 
   --comment-color: #bacff4;
   --comment-border-color: #679af4;
@@ -65,12 +73,13 @@
     white 10%
   );
 
-  --highlight-color: var(--text-highlight-bg);
-  --highlight-color-alt: color-mix(
-    in srgb-linear,
+  // EXPL: See the light-theme note above — pale at rest, full strength when selected.
+  --highlight-color: color-mix(
+    in srgb,
     var(--text-highlight-bg),
-    white 10%
+    transparent 62%
   );
+  --highlight-color-alt: var(--text-highlight-bg);
 
   --comment-color: #445f8f;
   --comment-border-color: #679af4;

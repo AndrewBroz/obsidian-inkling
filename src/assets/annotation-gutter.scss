@@ -39,8 +39,14 @@
   border-radius: var(--radius-m);
 
   background-color: var(--background-secondary);
+  box-shadow: var(--shadow-s);
 
   color: var(--text-muted);
+
+  // EXPL: Cards used to sit flush against each other and read as one undifferentiated slab. This
+  //       margin is what separates them — and it is only measured correctly because of the
+  //       `display: flow-root` on `.cm-gutterElement` below. See that rule.
+  margin-bottom: var(--size-4-3);
 }
 
 // EXPL: `--background-modifier-hover` is a translucent overlay token (alpha well below 1), not an
@@ -48,11 +54,16 @@
 //       would make the card translucent and let the note's text show through. Layering it as a
 //       `background-image` over the opaque base keeps the composite opaque, and lets the focused
 //       card read as "lifted" without a stroke.
+// EXPL: The focused thread LIFTS, the way Google Docs' selected comment card does — a heavier
+//       shadow reads as "this one is active" far more legibly than a 7%-alpha tint, which is nearly
+//       invisible against `--background-secondary`. The tint stays as a secondary cue (and is what
+//       the entries below repaint, since children occlude the container's background).
 .cmtr-anno-gutter-thread-highlight {
   background-image: linear-gradient(
     var(--background-modifier-hover),
     var(--background-modifier-hover)
   );
+  box-shadow: var(--shadow-l);
 }
 
 // EXPL: The container tint above is fully OCCLUDED — every pixel of the thread is covered by a
@@ -103,13 +114,26 @@
   border-bottom-right-radius: var(--radius-m);
 }
 
-.cmtr-anno-gutter-annotation:not(
-    :nth-last-child(1 of .cmtr-anno-gutter-annotation)
-  ) {
-  border-bottom: 1px solid var(--background-modifier-border);
+// EXPL: No rule between replies. A thread is ONE utterance by several people, not a list of
+//       records — Google Docs separates replies inside a card with whitespace alone, and a hairline
+//       between every reply reads as a table, which is what made these cards look heavy. The entries
+//       already carry their own padding; this just adds air between adjacent ones. `+` (rather than
+//       a margin on every entry) keeps the card's last entry flush with its bottom padding.
+.cmtr-anno-gutter-annotation + .cmtr-anno-gutter-annotation {
+  padding-top: var(--size-4-2);
 }
 
+// EXPL: `flow-root` is load-bearing, not cosmetic. A GutterElement's height is NOT set by JS —
+//       `AnnotationGutterElement.update` deliberately skips it ("does not forcibly set the height"),
+//       so height is `auto` and the layout algorithm reads it back via `clientHeight`
+//       (annotation-gutter.ts) to decide where the NEXT element starts. The card's `margin-bottom`
+//       would otherwise COLLAPSE straight out of this element — it has no padding, border, or
+//       overflow to contain it — so `clientHeight` would miss the gap, `previous_element_end` would
+//       not reserve it, and tightly-stacked annotations would overlap by exactly the gap.
+//       `flow-root` establishes a block formatting context, containing the margin so it lands in
+//       `clientHeight` and the existing algorithm accounts for it with no JS change.
 .cmtr-anno-gutter .cm-gutterElement {
+  display: flow-root;
   transition: margin 200ms ease-in-out;
 }
 
@@ -336,9 +360,11 @@
 
 // EXPL: Separated from the entries above by the same hairline the entries use between themselves,
 //       so the box reads as the next item in the thread rather than a detached widget.
+// EXPL: No divider above the reply box either — the input has its own surface, which is separation
+//       enough. A rule here read as a footer bolted onto the card rather than the next turn in the
+//       conversation.
 .cmtr-anno-gutter-reply {
-  padding: var(--size-2-2);
-  border-top: 1px solid var(--background-modifier-border);
+  padding: 0 var(--size-2-2) var(--size-2-2);
 }
 
 // EXPL: `--background-modifier-form-field` is the surface Obsidian paints its own text inputs with,
