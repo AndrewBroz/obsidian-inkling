@@ -8,7 +8,7 @@ import { create_range } from "../edit-util/range-create";
 
 import { annotationGutterFocusAnnotation } from "../../renderers/gutters/annotations-gutter";
 import { pluginSettingsField } from "../../uix";
-import { clearCommentDraft, commentDraftField } from "../../uix/extensions/comment-draft";
+import { clearCommentDraft, commentDraftField, setCommentDraft } from "../../uix/extensions/comment-draft";
 import { commentModeAnnotation } from "../../uix/extensions/editing-modes";
 
 export function addCommentToView(
@@ -20,32 +20,17 @@ export function addCommentToView(
 
 	const selection = editor.state.selection.main;
 
-	// EXPL: GDocs-style anchored comment — wrap a clean selection in a highlight range;
-	//       the adjacent comment attaches to it as a thread via the parser's adjacency rule.
-	//       CriticMarkup cannot nest, so any selection touching existing markup falls back
-	//       to the plain at-cursor comment below.
+	// EXPL: GDocs-style anchored comment. A clean selection no longer writes markup here — it opens
+	//       a DRAFT (comment-draft.ts) that the gutter renders a provisional card for, and the note
+	//       is written once, on submit, by commitCommentDraft. CriticMarkup cannot nest, so a
+	//       selection touching existing markup has nowhere clean to wrap and falls through to the
+	//       plain at-cursor comment below.
 	if (!range && !selection.empty) {
 		const ranges = editor.state.field(rangeParser).ranges;
 		if (ranges.ranges_in_interval(selection.from, selection.to).length === 0) {
-			const anchor_text = editor.state.sliceDoc(selection.from, selection.to);
-			const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
-				create_range(settings, SuggestionType.COMMENT, "");
-			editor.dispatch(editor.state.update({
-				changes: { from: selection.from, to: selection.to, insert },
-				selection: EditorSelection.cursor(selection.from + insert.length - 3),
+			editor.dispatch({
+				effects: setCommentDraft.of({ from: selection.from, to: selection.to }),
 				scrollIntoView: scroll,
-				annotations: [commentModeAnnotation.of(true)],
-			}));
-			activeWindow.setTimeout(() => {
-				editor.dispatch(editor.state.update({
-					annotations: [
-						annotationGutterFocusAnnotation.of({
-							from: selection.from,
-							to: selection.from,
-							index: 1,
-						}),
-					],
-				}));
 			});
 			return;
 		}

@@ -1,6 +1,7 @@
 import { EditorState, type Extension, StateField } from "@codemirror/state";
 import { EditorView, type Tooltip } from "@codemirror/view";
 
+import { commentDraftField, setCommentDraft } from "../src/editor/uix/extensions/comment-draft";
 import { commentPill, pill_eligible } from "../src/editor/uix/extensions/comment-pill";
 import { createRangeState } from "./helpers";
 
@@ -41,6 +42,25 @@ describe("pill_eligible", () => {
 	test("a non-empty selection in a read-only state is not eligible", () => {
 		const state = stateWithSelection("hello world", 0, 5, [EditorState.readOnly.of(true)]);
 		expect(pill_eligible(state)).toBe(false);
+	});
+
+	// EXPL: A draft already has a card and a focused input in the gutter; leaving the pill floating
+	//       over the same selection would offer to start a second comment on it.
+	test("no pill while a comment draft is open", () => {
+		const state = stateWithSelection("hello world", 0, 5, [commentDraftField]);
+		expect(pill_eligible(state)).toBe(true);
+
+		const drafting = state.update({ effects: setCommentDraft.of({ from: 0, to: 5 }) }).state;
+		expect(pill_eligible(drafting)).toBe(false);
+	});
+
+	// EXPL: `state.field(commentDraftField, false)` — the pill must keep working in states that
+	//       never installed the draft field (every other test in this file builds exactly such a
+	//       bare state; `state.field(f)` would throw on them).
+	test("still eligible in a state where the draft field was never installed", () => {
+		const state = stateWithSelection("hello world", 0, 5);
+		expect(() => pill_eligible(state)).not.toThrow();
+		expect(pill_eligible(state)).toBe(true);
 	});
 });
 

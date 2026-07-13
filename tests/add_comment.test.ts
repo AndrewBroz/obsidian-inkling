@@ -1,29 +1,29 @@
 import { EditorView } from "@codemirror/view";
 
-import { rangeParser, SuggestionType } from "../src/editor/base";
 import { addCommentToView } from "../src/editor/base/edit-logic/add-comment";
+import { commentDraftField } from "../src/editor/uix/extensions/comment-draft";
 import { createRangeState } from "./helpers";
 
 // EXPL: add_metadata false keeps outputs deterministic (no timestamps in the markup)
 const NO_META = { add_metadata: false };
 
 function viewWith(doc: string, anchor: number, head: number) {
-	const state = createRangeState(doc, NO_META);
+	const state = createRangeState(doc, NO_META, [commentDraftField]);
 	const view = new EditorView({ state });
 	view.dispatch({ selection: { anchor, head } });
 	return view;
 }
 
 describe("addCommentToView with a selection", () => {
-	test("wraps a clean selection in a highlight with an attached comment", () => {
+	// EXPL: This used to assert the doc immediately became "{==hello==}{>><<}". That flow is gone:
+	//       a clean selection now opens a DRAFT and writes nothing until the user submits, so an
+	//       abandoned comment leaves no empty range in the note and no junk in the undo stack.
+	//       The write itself is covered by tests/comment_draft.test.ts (commitCommentDraft).
+	test("a clean selection opens a draft and writes nothing to the document", () => {
 		const view = viewWith("hello world", 0, 5);
 		addCommentToView(view, undefined);
-		expect(view.state.doc.toString()).toBe("{==hello==}{>><<} world");
-
-		const ranges = view.state.field(rangeParser).ranges.ranges;
-		expect(ranges[0].type).toBe(SuggestionType.HIGHLIGHT);
-		expect(ranges[0].replies).toHaveLength(1);
-		expect(ranges[0].replies[0].type).toBe(SuggestionType.COMMENT);
+		expect(view.state.doc.toString()).toBe("hello world");
+		expect(view.state.field(commentDraftField)).toEqual({ from: 0, to: 5 });
 	});
 
 	test("selection overlapping existing markup falls back to cursor behavior", () => {

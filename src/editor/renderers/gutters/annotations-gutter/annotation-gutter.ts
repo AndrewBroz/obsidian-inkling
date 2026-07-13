@@ -7,10 +7,11 @@
  *  4. Added annotation listeners for focusing GutterMarkers
  *  5. Gutter *can* be zero-width if there are no markers in the document
  */
-import { Annotation, type Extension, Facet } from "@codemirror/state";
+import { Annotation, type EditorState, type Extension, Facet } from "@codemirror/state";
 import { BlockInfo, EditorView, GutterMarker, ViewUpdate } from "@codemirror/view";
 
 import { debounce, editorInfoField, setIcon } from "obsidian";
+import { commentDraftField } from "../../../uix/extensions/comment-draft";
 import { markupFocusEffect } from "../../live-preview";
 import {
 	createGutterViewPlugin,
@@ -36,6 +37,24 @@ const FOLDED_FOLD_BUTTON_EDGE_INSET = 6;
 // EXPL: Gap (px) between the unfolded button's right edge and the gutter panel's left edge; the
 //       button then sits inside the ANNOTATION_GUTTER_MARGIN strip, which is also text-free
 const UNFOLDED_FOLD_BUTTON_GUTTER_GAP = 4;
+
+/**
+ * Whether the gutter has anything to show — i.e. whether `hideOnEmpty` should keep it collapsed.
+ *
+ * EXPL: An open comment DRAFT counts as content even though it puts nothing in the document. It has
+ *       no AnnotationMarker (it isn't in the note yet, that is the whole point) — it renders a
+ *       PROVISIONAL card from `pendingAnnotationMarkers`. Counting only annotationGutterMarkers left
+ *       the gutter pinned at width 0 for the FIRST comment in a note (`annotation_gutter_hide_empty`
+ *       defaults to true), which is the single most common case there is: the provisional card would
+ *       render into a zero-width gutter and the user would see nothing happen.
+ * EXPL: Keyed off `commentDraftField` rather than `pendingAnnotationMarkers` — the two are
+ *       equivalent (the pending set is non-empty exactly when a draft is open), and the draft field
+ *       is a leaf module, so this stays clear of the marker/gutter import cycle. `false` as the
+ *       second argument keeps the gutter usable in states that never installed the field.
+ */
+function has_gutter_content(state: EditorState): boolean {
+	return state.field(annotationGutterMarkers).size > 0 || state.field(commentDraftField, false) != null;
+}
 
 const unfixGutters = Facet.define<boolean, boolean>({
 	combine: values => values.some(x => x),
@@ -380,7 +399,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 		this.add_fold_button = config.includeFoldButton;
 		this.add_resize_handle = config.includeResizeHandle;
 
-		if ((this.hide_on_empty && view.state.field(annotationGutterMarkers).size === 0) || this.folded)
+		if ((this.hide_on_empty && !has_gutter_content(view.state)) || this.folded)
 			this.dom.style.width = "0";
 		else
 			this.dom.style.width = this.width + "px";
@@ -398,7 +417,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 		const foldButtonElement = createEl("a", { cls: ["view-action"] });
 		setIcon(foldButtonElement, "arrow-right-from-line");
 		foldButtonElement.setAttribute("data-tooltip-position", "left");
-		foldButtonElement.style.display = this.view.state.field(annotationGutterMarkers).size ? "" : "none";
+		foldButtonElement.style.display = has_gutter_content(this.view.state) ? "" : "none";
 		foldButtonElement.onclick = () => {
 			this.folded = !this.folded;
 			this.view.state.field(editorInfoField).app.workspace.requestSaveLayout();
@@ -420,9 +439,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 	createResizeHandle() {
 		this.resize_handle_el = createEl("hr", { cls: ["cmtr-anno-gutter-resize-handle"] });
-		this.resize_handle_el.style.display = (this.view.state.field(annotationGutterMarkers).size && !this.folded) ?
-			"" :
-			"none";
+		this.resize_handle_el.style.display = (has_gutter_content(this.view.state) && !this.folded) ? "" : "none";
 		this.resize_handle_el.addEventListener("mousedown", (e) => {
 			let initialPosition = e.clientX;
 			let isReadableLineWidth = this.view.state.field(editorInfoField).app.vault.getConfig("readableLineLength");
@@ -599,7 +616,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 	update(update: ViewUpdate) {
 		const result = super.update(update);
-		const widgets = update.state.field(annotationGutterMarkers);
+		const has_content = has_gutter_content(update.state);
 
 		for (const transaction of update.transactions) {
 			const fold_status = transaction.annotation(annotationGutterFoldAnnotation);
@@ -630,7 +647,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			}
 			if (hide_empty !== undefined) {
 				this.hide_on_empty = hide_empty;
-				if (this.hide_on_empty && widgets.size === 0)
+				if (this.hide_on_empty && !has_content)
 					this.dom.style.width = "0";
 				else
 					this.dom.style.width = this.width + "px";
@@ -657,8 +674,12 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			}
 		}
 
-		if (widgets.size !== update.startState.field(annotationGutterMarkers).size) {
-			if (widgets.size === 0) {
+		// EXPL: Compares "has anything to show" rather than the raw marker COUNT, because an open
+		//       draft moves the gutter between empty and non-empty without changing any count (it
+		//       adds no AnnotationMarker — it isn't in the document). The old count comparison also
+		//       re-ran this block on every 1->2 marker change, where both branches are no-ops.
+		if (has_content !== has_gutter_content(update.startState)) {
+			if (!has_content) {
 				if (this.fold_button_el)
 					this.fold_button_el.style.display = "none";
 				if (this.resize_handle_el)
