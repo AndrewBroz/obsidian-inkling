@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Styles live in `src/assets/*.scss` and are bundled into the repo-root `styles.css` by the build. **Never hand-edit `styles.css`** — it is generated.
+- Styles live in `src/assets/*.scss` and are bundled into the repo-root `styles.css` by the build. `styles.css` and `main.js` are **gitignored build artifacts** — never hand-edit them and never `git add` them. Only the `.scss` sources are committed.
 - Use Obsidian's CSS custom properties (`--background-secondary`, `--radius-m`, `--text-muted`, …). Do not introduce hard-coded colours; the plugin must follow the user's theme in both light and dark mode.
 - Keep the existing `// EXPL:` comment conventions. Several rules in `annotation-gutter.scss` carry hard-won explanations (notably the `:nth-child(1 of S)` rounding rule) — **preserve those comments and those selectors**.
 - Format with `bun dprint fmt`.
@@ -160,7 +160,7 @@ specific failure mode `--background-modifier-hover` causes when misused as a `ba
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/assets/annotation-gutter.scss styles.css
+git add src/assets/annotation-gutter.scss
 git commit -m "style: flatten annotation gutter cards to match Obsidian chrome
 
 Obsidian's comment-adjacent surfaces (callouts, popovers, menus) carry no
@@ -253,7 +253,7 @@ dark themes**:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/assets/view.scss styles.css
+git add src/assets/view.scss
 git commit -m "style: flatten Annotations View cards to match the gutter
 
 The sidebar and the in-editor gutter render the same threads, so they now

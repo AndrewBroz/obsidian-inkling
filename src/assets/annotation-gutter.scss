@@ -26,24 +26,51 @@
   transition: right 50ms ease-out;
 }
 
+// EXPL: Flat by design. Obsidian's own comment-adjacent surfaces (callouts, hover popovers,
+//       menus) carry no outline — they read as tinted surfaces lifted off the background. The
+//       previous 2px border clashed with every theme, and state (focus) was expressed by
+//       swapping the border's COLOR, which is invisible to anyone who reads shape before hue.
+//       State now rides on the surface itself.
 .cmtr-anno-gutter-thread {
   width: 100%;
   position: relative;
 
-  border: 2px solid var(--background-modifier-border);
-  border-radius: var(--radius-l);
+  border: none;
+  border-radius: var(--radius-m);
 
-  background-color: var(--background-primary-alt);
+  background-color: var(--background-secondary);
 
   color: var(--text-muted);
-
-  transition:
-    border-color 100ms ease-in-out 0ms,
-    background-color 100ms ease-in-out 0ms;
 }
 
+// EXPL: `--background-modifier-hover` is a translucent overlay token (alpha well below 1), not an
+//       opaque surface — see the pill's write-up in editor.scss. Painting it as `background-color`
+//       would make the card translucent and let the note's text show through. Layering it as a
+//       `background-image` over the opaque base keeps the composite opaque, and lets the focused
+//       card read as "lifted" without a stroke.
 .cmtr-anno-gutter-thread-highlight {
-  border-color: var(--interactive-accent);
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
+}
+
+// EXPL: The container tint above is fully OCCLUDED — every pixel of the thread is covered by a
+//       `.cmtr-anno-gutter-annotation` child painting its own opaque `background-color: inherit`,
+//       so a rest card and a focused card composited to identical pixels. This state is set on
+//       card click and on markup focus (marker.ts), so without this rule, clicking a card did
+//       nothing visible. Repainting each entry directly (rather than only the container) fixes
+//       that.
+//       ORDER IS LOAD-BEARING: this selector's specificity (0,2,0) is the same as
+//       `.cmtr-anno-gutter-annotation:hover` and the editing rule below, so this rule MUST come
+//       BEFORE both of them in source order. If it moved after either, a highlighted thread's
+//       tint would beat the hover/editing tint on conflicting entries, and hovering or editing an
+//       entry inside a focused thread would show no change.
+.cmtr-anno-gutter-thread-highlight .cmtr-anno-gutter-annotation {
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
 }
 
 .cmtr-anno-gutter-annotation {
@@ -67,19 +94,19 @@
 //       top, rounded bottom only — reported as the card rendering as a "bottom segment"); using
 //       `of S` instead makes the rounding immune to the actions row's position in the DOM.
 .cmtr-anno-gutter-annotation:nth-child(1 of .cmtr-anno-gutter-annotation) {
-  border-top-left-radius: var(--radius-l);
-  border-top-right-radius: var(--radius-l);
+  border-top-left-radius: var(--radius-m);
+  border-top-right-radius: var(--radius-m);
 }
 
 .cmtr-anno-gutter-annotation:nth-last-child(1 of .cmtr-anno-gutter-annotation) {
-  border-bottom-left-radius: var(--radius-l);
-  border-bottom-right-radius: var(--radius-l);
+  border-bottom-left-radius: var(--radius-m);
+  border-bottom-right-radius: var(--radius-m);
 }
 
 .cmtr-anno-gutter-annotation:not(
     :nth-last-child(1 of .cmtr-anno-gutter-annotation)
   ) {
-  border-bottom: 1px dashed var(--background-modifier-border);
+  border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .cmtr-anno-gutter .cm-gutterElement {
@@ -95,19 +122,45 @@
   margin-block-end: 0.25em;
 }
 
+// EXPL: These were `box-shadow: 0 0 0 2px` rings — an outline in all but name, and the reason a
+//       hovered reply grew a hard stroke inside an otherwise flat card. Hover/focus now tint the
+//       entry's own surface. `z-index` is retained: entries scroll within a fixed-height card, and
+//       the sticky metadata row (below) must not paint over the active entry.
 .cmtr-anno-gutter-annotation:hover {
-  box-shadow: 0 0 0 2px var(--interactive-accent);
-  background-color: var(--background-secondary);
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
   z-index: 20;
 }
 
+// EXPL: `--background-modifier-active-hover` is a translucent overlay token (alpha well below 1,
+//       same family as `--background-modifier-hover` above), not an opaque surface. Assigning it
+//       to `background-color` would REPLACE this entry's opaque paint with a translucent wash,
+//       which is exactly the bug that made the comment pill see-through (see the write-up in
+//       editor.scss). It happens not to bleed document text today only because this entry always
+//       sits inside the opaque `.cmtr-anno-gutter-thread`. Layering it as a background-image over
+//       the inherited opaque base keeps the composite opaque on its own terms, rather than on an
+//       ancestor's good behaviour.
 .cmtr-anno-gutter-annotation:focus,
 .cmtr-anno-gutter-annotation-editing.cmtr-anno-gutter-annotation-editing {
-  box-shadow: 0 0 0 2px var(--comment-border-color);
-  background-color: var(--background-secondary);
+  background-image: linear-gradient(
+    var(--background-modifier-active-hover),
+    var(--background-modifier-active-hover)
+  );
   z-index: 25;
 }
 
+// EXPL: `background-image: inherit` for the same reason `.cmtr-view-range-top` needs it (view.scss):
+//       this row is `position: sticky` with an opaque `background-color: inherit`, so it paints its
+//       own opaque layer over whatever the ENTRY painted underneath — and the entry's hover/editing
+//       state is a `background-image` tint. Without this, a hovered or edited entry renders with an
+//       untinted band across its metadata line.
+//
+//       `z-index` does NOT prevent this, despite what the ordering here suggests: a child always
+//       paints above its parent's background, whatever its z-index. z-index orders ELEMENTS, and the
+//       tint is not an element — it is the parent's background. Inheriting the gradient (`none` at
+//       rest, the entry's tint otherwise) is what actually keeps this row flush with its entry.
 .cmtr-anno-gutter-annotation-metadata {
   font-size: var(--font-smallest);
   color: var(--text-faint);
@@ -115,6 +168,7 @@
   position: sticky;
   top: -4px;
   background-color: inherit;
+  background-image: inherit;
   z-index: 10;
   padding: 2px 0;
 }

@@ -3,16 +3,25 @@
   height: 95%;
 }
 
+// EXPL: Kept in lockstep with `.cmtr-anno-gutter-thread` (annotation-gutter.scss) — the sidebar
+//       and the in-editor gutter show the SAME threads, so a user switching between them should
+//       not see two different card languages.
 .cmtr-view-range {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-l);
-  background: var(--background-primary);
+  border: none;
+  border-radius: var(--radius-m);
+  background-color: var(--background-secondary);
   margin: 2px 8px 8px 2px;
   max-height: 400px;
   overflow-y: scroll;
   word-wrap: break-word;
 }
 
+// EXPL: `background-color: inherit` alone left this row OCCLUDING the card's tint: being
+//       `position: sticky`, it paints its own opaque layer over whatever `.cmtr-view-range`
+//       painted underneath, so a hovered/selected card rendered as a tinted body with an
+//       untinted rectangle across the top. `background-image: inherit` computes to the parent's
+//       current gradient (`none` at rest, the hover/selected gradient otherwise), so this row's
+//       composite now always matches the card it sits on top of.
 .cmtr-view-range-top {
   display: flex;
   align-items: center;
@@ -22,6 +31,7 @@
   z-index: 1;
   top: 0;
   background-color: inherit;
+  background-image: inherit;
 }
 
 .cmtr-view-range-text {
@@ -41,19 +51,42 @@
   overflow: hidden;
 }
 
+// EXPL: Resolved threads previously signalled themselves with a dashed BORDER; with the card
+//       flattened there is no border to dash. A background swap (`--background-primary-alt`
+//       against the card's `--background-secondary`) was tried first and abandoned: measured
+//       against Obsidian's real token values the two surfaces differ by ~2/255 in dark mode
+//       (imperceptible) and INVERT in light mode (resolved would render LIGHTER than a normal
+//       card, i.e. more prominent, not less) — the signal was both too weak and theme-inconsistent
+//       to ship. Reduced emphasis (muted text + opacity) reads as "settled/inactive" identically
+//       in both themes, and needs no background at all — the card keeps its normal
+//       `--background-secondary` surface.
 .cmtr-view-range-completed {
-  background: var(--background-primary-alt);
   color: var(--text-muted);
-  border-style: dashed;
+  opacity: 0.6;
 }
 
 .cmtr-view-range:hover {
-  box-shadow: unset;
-  outline: 2px dashed var(--interactive-accent-hover);
+  background-image: linear-gradient(
+    var(--background-modifier-hover),
+    var(--background-modifier-hover)
+  );
 }
 
-.cmtr-view-range-selected {
-  box-shadow: 0 0 0 2px var(--interactive-accent);
+// EXPL: Was `box-shadow: 0 0 0 2px var(--interactive-accent)` — a ring, i.e. the outline this PR
+//       set out to remove; left alone it would read as an orphaned stroke on an otherwise
+//       borderless card. Selection now tints, matching `.cmtr-anno-gutter-thread-highlight`.
+//
+//       The class is DOUBLED to raise its specificity to 0,2,0. `.cmtr-view-range:hover` is also
+//       0,2,0 and comes first, so a single `.cmtr-view-range-selected` (0,1,0) would lose to it —
+//       hovering a selected card would repaint it with the neutral hover wash and silently erase
+//       the selected signal. (The old rule dodged this by having hover carry `box-shadow: unset`,
+//       which is why that now-dead declaration was here.) Same doubled-class idiom as
+//       `.cmtr-anno-gutter-annotation-editing` in annotation-gutter.scss.
+.cmtr-view-range-selected.cmtr-view-range-selected {
+  background-image: linear-gradient(
+    var(--background-modifier-active-hover),
+    var(--background-modifier-active-hover)
+  );
 }
 
 .cmtr-view-range-icon {
@@ -68,8 +101,11 @@
   color: var(--text-faint);
 }
 
+// EXPL: Solid, not dashed — kept in lockstep with the gutter's reply separator
+//       (`.cmtr-anno-gutter-annotation:not(:nth-last-child(...))` in annotation-gutter.scss). Dashed
+//       reads as "provisional"; Obsidian uses solid hairlines for menu separators.
 .cmtr-view-range-reply {
-  border-top: 1px dashed var(--background-modifier-border);
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 .cmtr-view-range-reply-top {
