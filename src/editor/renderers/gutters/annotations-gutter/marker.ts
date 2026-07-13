@@ -415,6 +415,10 @@ export class AnnotationMarker extends GutterMarker {
 	component: Component = new Component();
 	preventUnload: boolean = false;
 	reply_box: ReplyBox | null = null;
+	/** In-progress reply text, cached across a card rebuild. @see toDOM */
+	reply_text: string = "";
+	/** Whether a reply box was open when the card was last torn down. @see toDOM */
+	reply_open: boolean = false;
 
 	constructor(
 		public annotation: CriticMarkupRange,
@@ -452,29 +456,63 @@ export class AnnotationMarker extends GutterMarker {
 	// EXPL: Google-Docs behaviour — focusing a thread reveals its reply input. Idempotent: a second
 	//       click on an already-open card must not stack a second editor onto the card.
 	showReplyBox() {
-		if (this.reply_box)
+		// EXPL: `pill_eligible` refuses to offer a NEW comment in a read-only editor, but nothing
+		//       stopped a click on an existing card from opening a writable reply here — and
+		//       `commitReply` dispatches programmatically, which CodeMirror's `readOnly` facet does
+		//       not block. Refuse the box outright rather than showing one that will refuse to send.
+		if (this.reply_box || this.view.state.readOnly)
 			return;
 
 		const { app } = this.view.state.field(editorInfoField);
 		const container = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-reply" });
 
+		this.reply_open = true;
 		this.reply_box = this.component.addChild(
 			new ReplyBox(app, container, {
 				placeholder: "Reply…",
-				onCommit: (text) => commitReply(this.view, this.annotation, text),
-				onDismiss: () => this.hideReplyBox(),
+				value: this.reply_text,
+				onCommit: (text) => {
+					// EXPL: Drop the cache BEFORE dispatching, restore it only if the write was
+					//       refused. commitReply's dispatch is synchronous and rebuilds the gutter
+					//       from inside this call, re-entering toDOM()/hideReplyBox() — with the
+					//       cache still armed, that teardown would stash the text we just WROTE and
+					//       re-open a box pre-filled with a duplicate of the reply.
+					this.reply_text = "";
+					this.reply_open = false;
+					if (commitReply(this.view, this.annotation, text))
+						return true;
+					this.reply_text = text;
+					this.reply_open = true;
+					return false;
+				},
+				onDismiss: () => this.dismissReplyBox(),
 			}),
 		);
+	}
+
+	// EXPL: The user closing the box on purpose (Escape, or blurring it while empty) — unlike a
+	//       structural teardown, this DISCARDS the in-progress text, so the card does not resurrect a
+	//       reply the user just walked away from.
+	dismissReplyBox() {
+		this.reply_text = "";
+		this.reply_open = false;
+		this.hideReplyBox();
 	}
 
 	// EXPL: Clear the field BEFORE removing the child (never after): removeChild unloads the box,
 	//       which pulls its editor out of the DOM, which makes Chrome fire a native blur that can
 	//       re-enter here through onDismiss. Nulling first makes the re-entrant call a no-op —
 	//       same state-before-teardown ordering as AnnotationNode's `cancelling` latch above.
+	// EXPL: This is a TEARDOWN, not a dismissal: it runs when the card is rebuilt under the user
+	//       (toDOM below) as well as when the card dies. So it saves the text on the way out —
+	//       `reply_open` is the flag for "this box was live when we pulled it down", and toDOM uses
+	//       it to put the box (and the words) back.
 	hideReplyBox() {
 		if (!this.reply_box)
 			return;
 		const reply_box = this.reply_box;
+		if (this.reply_open)
+			this.reply_text = reply_box.text();
 		this.reply_box = null;
 		this.component.removeChild(reply_box);
 	}
@@ -487,6 +525,13 @@ export class AnnotationMarker extends GutterMarker {
 		//       still point at the container from the OLD (now-detached) annotation_thread, so
 		//       showReplyBox()'s `if (this.reply_box) return;` guard would permanently refuse to
 		//       ever open a reply box on the new card again.
+		// EXPL: A re-home is INVISIBLE to the user — it fires whenever this marker's GutterElement
+		//       index shifts, i.e. whenever an annotation above it appears or disappears, which is
+		//       exactly what the "blur the box with text in it, go fix a word in the note" flow
+		//       invites. Tearing the box down here is the right safety (it prevents an orphaned
+		//       editor), but doing ONLY that would make a half-written reply vanish with no undo and
+		//       no trace. hideReplyBox() now saves the text; the tail of this method puts it back.
+		const reopen = this.reply_open;
 		this.hideReplyBox();
 
 		this.annotation_thread = createDiv({ cls: "cmtr-anno-gutter-thread" });
@@ -556,6 +601,13 @@ export class AnnotationMarker extends GutterMarker {
 		for (const range of this.annotations)
 			this.component.addChild(new AnnotationNode(range, this));
 		this.component.load();
+
+		// EXPL: After `component.load()`, so addChild auto-loads the box the way it does on the
+		//       ordinary click path (showReplyBox always runs against an already-loaded Component).
+		//       `reply_text` survived the hideReplyBox() above, so the rebuilt box opens holding
+		//       exactly what the user had typed.
+		if (reopen)
+			this.showReplyBox();
 
 		return this.annotation_thread;
 	}

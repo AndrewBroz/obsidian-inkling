@@ -1,5 +1,7 @@
-import { EditorSelection } from "@codemirror/state";
+import { EditorSelection, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+
+import { Notice } from "obsidian";
 
 import { CriticMarkupRange, SuggestionType } from "../ranges";
 
@@ -12,7 +14,12 @@ import {
 } from "../../renderers/gutters/annotations-gutter";
 import { pendingAnnotationMarkers } from "../../renderers/gutters/annotations-gutter/pending-marker";
 import { pluginSettingsField } from "../../uix";
-import { clearCommentDraft, commentDraftField, setCommentDraft } from "../../uix/extensions/comment-draft";
+import {
+	clearCommentDraft,
+	type CommentDraft,
+	commentDraftField,
+	setCommentDraft,
+} from "../../uix/extensions/comment-draft";
 import { commentModeAnnotation } from "../../uix/extensions/editing-modes";
 
 export function addCommentToView(
@@ -113,6 +120,67 @@ export function addCommentToView(
 	});
 }
 
+// EXPL: CriticMarkup has no escape syntax: `create_range` concatenates brackets around raw text, so
+//       any sequence the PARSER treats as a terminator is a live grenade in free text. A `==}` in a
+//       highlight's body closes it early and strands the rest of the anchor plus a bare `==}` in the
+//       note; a `<<}` in a comment's body does the same to the comment; `@@` terminates the metadata
+//       prefix (`{>>{"author":…}@@text<<}`), so with `add_metadata` on — the DEFAULT — an `@@`
+//       anywhere in the body makes the range's own metadata unparseable. None of this mattered while
+//       comment bodies were typed into markup the parser had already delimited; it matters now that
+//       "wrap an ARBITRARY user selection, and take an ARBITRARY typed body" is the default flow.
+const CLOSING_DELIMITERS = ["<<}", "==}", "++}", "--}", "~~}"];
+const METADATA_TERMINATOR = "@@";
+
+/** The first sequence in `text` that cannot survive being written into a CriticMarkup body. */
+function unsafe_sequence(text: string, delimiters: string[]): string | undefined {
+	return [...delimiters, METADATA_TERMINATOR].find(sequence => text.includes(sequence));
+}
+
+/**
+ * Why the draft's anchor cannot be safely wrapped in `{==…==}` right now, or undefined if it can.
+ *
+ * EXPL: This RE-RUNS a check `addCommentToView` already made when it opened the draft, and that is
+ *       the entire point. The draft anchor is LIVE: `commentDraftField` maps it through every
+ *       intervening change and deliberately ABSORBS insertions made strictly inside it, precisely so
+ *       that "blur the reply box, go fix a word, come back" works. So between open and commit the
+ *       user can put markup INSIDE the anchor that was clean when the guard ran — type inside it in
+ *       Suggest mode and CodeMirror writes `{++…++}` there; hit "Add reply" on a thread that lies
+ *       inside it and a `{>>…<<}` lands there. Wrapping then produces nested markup, which cannot
+ *       parse: the inner `==}`/`<<}` closes the outer highlight early, orphaning the rest of the
+ *       anchor and leaving a dangling `==}` in the user's note, and any suggestion swallowed by the
+ *       anchor silently stops being a tracked change. A precondition established at open time must
+ *       be re-established at commit time, immediately before the write.
+ */
+function anchor_rejection(state: EditorState, draft: CommentDraft): string | undefined {
+	const ranges = state.field(rangeParser).ranges;
+	if (ranges.ranges_in_interval(draft.from, draft.to).length !== 0)
+		return "the selected text now contains tracked changes or comments";
+
+	// EXPL: `==}` would close the wrapping highlight early; `@@` would be eaten as this highlight's
+	//       own metadata terminator. Checked unconditionally rather than only when `add_metadata` is
+	//       on: the setting is a toggle, the note is forever, and dropping an anchor is recoverable
+	//       where a mangled note is not.
+	const sequence = unsafe_sequence(state.sliceDoc(draft.from, draft.to), ["==}"]);
+	return sequence && `the selected text contains "${sequence}"`;
+}
+
+/**
+ * Reject a user-typed comment/reply body that cannot be written verbatim.
+ *
+ * EXPL: Refuse, never mangle. Silently stripping or escaping the user's own characters would be a
+ *       second, quieter kind of data loss; the box stays open with the text intact so they can edit
+ *       it. (The anchor, by contrast, DEGRADES rather than refusing — the user did not type it, so
+ *       there is nothing for them to fix, and an unanchored comment still carries their words.)
+ */
+function text_rejected(text: string): boolean {
+	const sequence = unsafe_sequence(text, CLOSING_DELIMITERS);
+	if (!sequence)
+		return false;
+
+	new Notice(`Inkling: a comment cannot contain "${sequence}". Remove it and try again.`);
+	return true;
+}
+
 /**
  * Append a comment to the end of `range`'s thread, in ONE transaction, from text already in hand.
  *
@@ -120,10 +188,13 @@ export function addCommentToView(
  *       are flat (comment_range.ts:35-43), so replying to a mid-thread reply must still land at
  *       the END of the thread. Works for every base type: the parser's adjacency rule is
  *       type-agnostic, which is what makes "comment on a suggestion" fall out for free.
- * @returns false (writing nothing) if the text is blank.
+ * @returns false (writing nothing) if the editor is read-only, or the text is blank or unwritable.
  */
 export function commitReply(editor: EditorView, range: CriticMarkupRange, text: string): boolean {
-	if (!text.trim())
+	// EXPL: CodeMirror's `readOnly` facet only blocks USER input — it does not stop a programmatic
+	//       dispatch, and every write in this file is one. The reply box is reachable in a read-only
+	//       editor (clicking a thread card opens it), so the refusal has to live here.
+	if (editor.state.readOnly || !text.trim() || text_rejected(text))
 		return false;
 
 	const settings = editor.state.field(pluginSettingsField);
@@ -142,17 +213,36 @@ export function commitReply(editor: EditorView, range: CriticMarkupRange, text: 
  * EXPL: Single dispatch on purpose — one Ctrl+Z takes the whole comment back out. The old flow
  *       needed two (insert empty markup, then save the text into it), so undo left the user with a
  *       stray `{>>@@<<}`.
- * @returns false (writing nothing, draft left open) if there is no draft or the text is blank.
+ * @returns false (writing nothing, draft left open) if there is no draft, the editor is read-only,
+ *          or the text is blank or unwritable.
  */
 export function commitCommentDraft(editor: EditorView, text: string): boolean {
 	const draft = editor.state.field(commentDraftField);
-	if (!draft || !text.trim())
+	if (editor.state.readOnly || !draft || !text.trim() || text_rejected(text))
 		return false;
 
 	const settings = editor.state.field(pluginSettingsField);
+	const comment = create_range(settings, SuggestionType.COMMENT, text);
+
+	// EXPL: Degrade, do not corrupt, and do not throw the user's words away either. This mirrors
+	//       `addCommentToView` above, which already answers "this selection cannot be wrapped" with
+	//       a plain at-cursor comment — so an unanchored comment is this codebase's established
+	//       fallback, not a new concept. The comment lands at the anchor's END, where it reads as
+	//       being about the text just before it, and the Notice says why the anchor is missing so the
+	//       user is never quietly given something other than what they asked for.
+	const rejection = anchor_rejection(editor.state, draft);
+	if (rejection) {
+		editor.dispatch(editor.state.update({
+			changes: { from: draft.to, to: draft.to, insert: comment },
+			effects: [clearCommentDraft.of(null)],
+			annotations: [commentModeAnnotation.of(true)],
+		}));
+		new Notice(`Inkling: added the comment without an anchor — ${rejection}.`);
+		return true;
+	}
+
 	const anchor_text = editor.state.sliceDoc(draft.from, draft.to);
-	const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
-		create_range(settings, SuggestionType.COMMENT, text);
+	const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) + comment;
 
 	editor.dispatch(editor.state.update({
 		changes: { from: draft.from, to: draft.to, insert },

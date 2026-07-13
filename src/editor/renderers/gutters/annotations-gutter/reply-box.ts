@@ -4,6 +4,11 @@ import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 
 export interface ReplyBoxOptions {
 	placeholder: string;
+	/**
+	 * Text to open with. Non-empty when a card is REBUILT around an in-progress reply (see
+	 * AnnotationMarker.toDOM) — the box is a fresh object, but the user's words are not.
+	 */
+	value?: string;
 	/** Returns true if the text was accepted and written; false for blank/rejected input. */
 	onCommit: (text: string) => boolean;
 	onDismiss: () => void;
@@ -41,12 +46,23 @@ export class ReplyBox extends Component {
 		super();
 	}
 
+	/**
+	 * The text currently in the box.
+	 *
+	 * EXPL: Read it BEFORE unloading — `onunload` drops the editor, and with it the only copy of
+	 *       whatever the user had typed. AnnotationMarker/PendingAnnotationMarker call this on their
+	 *       way into a rebuild so a gutter re-home cannot swallow an in-progress comment.
+	 */
+	text(): string {
+		return this.editor?.get() ?? "";
+	}
+
 	onload() {
 		super.onload();
 
 		this.editor = this.addChild(
 			new EmbeddableMarkdownEditor(this.app, this.container, {
-				value: "",
+				value: this.options.value ?? "",
 				cls: "cmtr-anno-gutter-reply-editor",
 				placeholder: this.options.placeholder,
 				focus: true,

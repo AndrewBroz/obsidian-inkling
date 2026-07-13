@@ -1,3 +1,4 @@
+import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { rangeParser, SuggestionType } from "../src/editor/base";
@@ -62,5 +63,33 @@ describe("commitReply", () => {
 		const before = view.state.doc.toString();
 		expect(commitReply(view, baseRange(view), "   \n ")).toBe(false);
 		expect(view.state.doc.toString()).toBe(before);
+	});
+
+	// EXPL: CriticMarkup has no escape syntax, so a closing delimiter typed into a reply body ends
+	//       the reply where the user's text merely mentions it — `{>>see a<<}b<<}` — leaving junk in
+	//       the note. Refuse the write (the box stays open, the text intact) rather than mangling
+	//       either the user's words or the document.
+	test.each([
+		["<<}", "see a<<}b"],
+		["==}", "ends ==} here"],
+		["++}", "an ++} addition"],
+		["--}", "a --} deletion"],
+		["~~}", "a ~~} substitution"],
+		["@@", "ping @@ me"],
+	])("refuses a reply body containing %s, writing nothing", (_seq, text) => {
+		const view = viewWith("{==hello==}{>>first<<}");
+		expect(commitReply(view, baseRange(view), text)).toBe(false);
+		expect(view.state.doc.toString()).toBe("{==hello==}{>>first<<}");
+	});
+
+	// EXPL: `readOnly` is a facet over USER input; it does not block the programmatic dispatch
+	//       commitReply makes, and the reply box is reachable in a read-only editor (a click on any
+	//       thread card opens one).
+	test("writes nothing in a read-only editor", () => {
+		const view = new EditorView({
+			state: createRangeState("{==hello==}{>>first<<}", NO_META, [EditorState.readOnly.of(true)]),
+		});
+		expect(commitReply(view, baseRange(view), "second")).toBe(false);
+		expect(view.state.doc.toString()).toBe("{==hello==}{>>first<<}");
 	});
 });

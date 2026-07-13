@@ -29,6 +29,8 @@ export class PendingAnnotationMarker extends GutterMarker {
 	preventUnload = false;
 	thread: HTMLElement | null = null;
 	reply_box: ReplyBox | null = null;
+	/** In-progress comment text, cached across a card rebuild. @see toDOM */
+	draft_text = "";
 
 	constructor(from: number, to: number, public view: EditorView) {
 		super();
@@ -52,6 +54,12 @@ export class PendingAnnotationMarker extends GutterMarker {
 		//       `preventUnload` is set (see that file's FIXME at :172-180). Reset first, or the
 		//       previous card's ReplyBox stays parented to this marker's Component — a loaded editor
 		//       orphaned on a detached DOM tree. Same defence as AnnotationMarker.toDOM.
+		// EXPL: But a rebuild must not COST the user their comment. A re-home fires whenever this
+		//       marker's GutterElement index shifts — an annotation above the draft appearing or
+		//       disappearing is enough — and this card's box is always rebuilt `focus: true`, so
+		//       without the cache the user would watch their half-typed comment blank itself out
+		//       from under a cursor that just jumped back to the start. hideReplyBox() saves the
+		//       text; the new box below opens with it.
 		this.hideReplyBox();
 
 		const { app } = this.view.state.field(editorInfoField);
@@ -69,8 +77,24 @@ export class PendingAnnotationMarker extends GutterMarker {
 		this.reply_box = this.component.addChild(
 			new ReplyBox(app, container, {
 				placeholder: "Comment…",
-				onCommit: (text) => commitCommentDraft(this.view, text),
-				onDismiss: () => this.view.dispatch({ effects: clearCommentDraft.of(null) }),
+				value: this.draft_text,
+				onCommit: (text) => {
+					// EXPL: Drop the cache BEFORE dispatching, restore it only if the write was
+					//       refused. commitCommentDraft's dispatch is synchronous and tears this card
+					//       down from inside this call; with the cache still armed, that teardown
+					//       would stash the text we just WROTE.
+					this.draft_text = "";
+					if (commitCommentDraft(this.view, text))
+						return true;
+					this.draft_text = text;
+					return false;
+				},
+				onDismiss: () => {
+					// EXPL: An intentional close (Escape, or blur while empty) discards the text —
+					//       only a rebuild under the user's feet is allowed to carry it over.
+					this.draft_text = "";
+					this.view.dispatch({ effects: clearCommentDraft.of(null) });
+				},
 			}),
 		);
 		this.component.load();
@@ -83,10 +107,15 @@ export class PendingAnnotationMarker extends GutterMarker {
 	//       which pulls its editor out of the DOM, which makes Chrome fire a native blur that can
 	//       re-enter here through onDismiss. Nulling first makes the re-entrant call a no-op —
 	//       the same ordering as AnnotationMarker.hideReplyBox.
+	// EXPL: Saves the text on the way out (read it BEFORE removeChild unloads the editor that holds
+	//       it) so a rebuild can restore it. Safe on the terminal paths — commit and dismiss both
+	//       clear the cache first and then destroy this marker, so nothing can resurrect text the
+	//       user already sent or abandoned.
 	hideReplyBox() {
 		if (!this.reply_box)
 			return;
 		const reply_box = this.reply_box;
+		this.draft_text = reply_box.text();
 		this.reply_box = null;
 		this.component.removeChild(reply_box);
 	}

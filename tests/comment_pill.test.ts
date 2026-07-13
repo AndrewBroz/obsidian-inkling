@@ -1,6 +1,9 @@
 import { EditorState, type Extension, StateField } from "@codemirror/state";
 import { EditorView, type Tooltip } from "@codemirror/view";
 
+import { editorEditorField } from "obsidian";
+
+import { pendingAnnotationMarkers } from "../src/editor/renderers/gutters/annotations-gutter/pending-marker";
 import { commentDraftField, setCommentDraft } from "../src/editor/uix/extensions/comment-draft";
 import { commentPill, pill_eligible } from "../src/editor/uix/extensions/comment-pill";
 import { createRangeState } from "./helpers";
@@ -47,11 +50,32 @@ describe("pill_eligible", () => {
 	// EXPL: A draft already has a card and a focused input in the gutter; leaving the pill floating
 	//       over the same selection would offer to start a second comment on it.
 	test("no pill while a comment draft is open", () => {
-		const state = stateWithSelection("hello world", 0, 5, [commentDraftField]);
+		const state = stateWithSelection("hello world", 0, 5, [
+			commentDraftField,
+			pendingAnnotationMarkers,
+			editorEditorField,
+		]);
 		expect(pill_eligible(state)).toBe(true);
 
 		const drafting = state.update({ effects: setCommentDraft.of({ from: 0, to: 5 }) }).state;
 		expect(pill_eligible(drafting)).toBe(false);
+	});
+
+	// EXPL: `annotation_gutter` is a live user toggle. Switching it off mid-draft reconfigures
+	//       `pendingAnnotationMarkers` out of the state, taking the provisional card — and the only
+	//       ReplyBox that could ever fire Escape/blur/Enter and clear the draft — with it. The draft
+	//       then sits in `commentDraftField` forever. If that stranded draft still blocked the pill,
+	//       the pill (and the "Add comment" command, and the context-menu item) would be bricked for
+	//       every selection for the rest of the session: exactly the failure the
+	//       `pendingAnnotationMarkers` probe in addCommentToView exists to prevent, reached by
+	//       another route. A draft with no card is unreachable, not blocking.
+	test("a draft stranded by the gutter being toggled off does not brick the pill", () => {
+		const state = stateWithSelection("hello world", 0, 5, [commentDraftField]);
+		const stranded = state.update({ effects: setCommentDraft.of({ from: 0, to: 5 }) }).state;
+
+		expect(stranded.field(commentDraftField)).not.toBeNull();
+		expect(stranded.field(pendingAnnotationMarkers, false)).toBeUndefined();
+		expect(pill_eligible(stranded)).toBe(true);
 	});
 
 	// EXPL: `state.field(commentDraftField, false)` — the pill must keep working in states that

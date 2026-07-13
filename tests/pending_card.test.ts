@@ -276,6 +276,30 @@ describe("provisional comment card", () => {
 		view.destroy();
 	});
 
+	// EXPL: The rebuild above must not COST the user their comment. GutterElement.setMarkers re-runs
+	//       toDOM() on this instance whenever its GutterElement index shifts — an annotation ABOVE the
+	//       draft appearing or disappearing is enough, which is exactly what the "blur the box with
+	//       text in it, go fix a word in the note" flow invites. Before the fix the rebuilt card got a
+	//       FRESH box with `value: ""` and `focus: true`: the user's half-typed comment blanked itself
+	//       out from under a cursor that had jumped back to the start. (jsdom has no layout, so all
+	//       lines collapse into one block and the real re-home cannot be provoked end-to-end here —
+	//       hence driving toDOM() directly, which is precisely what setMarkers does.)
+	test("FIX regression: a re-home does not discard the in-progress comment", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
+		openEditor(view).set("half-typed comment");
+
+		marker.toDOM();
+		marker.reply_box!.load();
+
+		expect(marker.reply_box!.options.value).toBe("half-typed comment");
+		expect(marker.reply_box!.text()).toBe("half-typed comment");
+
+		view.destroy();
+	});
+
 	// EXPL: Pins `preventUnload`. AnnotationUpdateContext builds NEW GutterElements (toDOM'ing their
 	//       markers) BEFORE finish() destroys the stale ones, so a marker re-homed between elements is
 	//       toDOM'd for the new element and only then handed to the old element's teardown. Without

@@ -1,3 +1,4 @@
+import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { rangeParser, SuggestionType } from "../src/editor/base";
@@ -118,6 +119,142 @@ describe("commitCommentDraft", () => {
 
 	test("with no draft open, writes nothing", () => {
 		const view = viewWith("hello world");
+		expect(commitCommentDraft(view, "nice")).toBe(false);
+		expect(view.state.doc.toString()).toBe("hello world");
+	});
+});
+
+// EXPL: The write path is the one place this plugin can destroy a note, so these tests are about
+//       the note, not the feature: every one of them asserts the resulting document still parses
+//       into exactly the ranges it looks like it has, and that no unbalanced/dangling CriticMarkup
+//       delimiter is ever left behind in the user's text.
+describe("commitCommentDraft cannot corrupt the note", () => {
+	/** Every delimiter the parser knows, and how many of each the doc contains. */
+	function delimiter_counts(doc: string) {
+		return ["{==", "==}", "{>>", "<<}", "{++", "++}", "{--", "--}"]
+			.map(d => doc.split(d).length - 1);
+	}
+
+	function assertBalanced(view: EditorView) {
+		const doc = view.state.doc.toString();
+		const [open_h, close_h, open_c, close_c, open_a, close_a, open_d, close_d] = delimiter_counts(doc);
+		expect([open_h, open_c, open_a, open_d]).toEqual([close_h, close_c, close_a, close_d]);
+
+		// EXPL: Balance alone is not enough — `{==a{==X==}b==}` is "balanced" and still garbage. Every
+		//       delimiter in the doc must belong to a range the parser actually recognises, so the
+		//       total markup the parser accounts for must cover every delimiter present.
+		const ranges = view.state.field(rangeParser).ranges.ranges;
+		const accounted = ranges.reduce((sum, range) => {
+			const text = doc.slice(range.from, range.to);
+			return sum + delimiter_counts(text).reduce((a, b) => a + b, 0);
+		}, 0);
+		expect(accounted).toBe(delimiter_counts(doc).reduce((a, b) => a + b, 0));
+	}
+
+	// EXPL: The open-time guard in addCommentToView ("selection contains no CriticMarkup") CANNOT
+	//       stand in for a commit-time one: the anchor is LIVE and deliberately absorbs insertions
+	//       made strictly inside it, and the reply box deliberately stays open on blur so the user
+	//       can go and edit the note. In Suggest mode that edit writes `{++…++}` straight into the
+	//       anchored span. Wrapping it then yields `{==quick{++very++} brown==}{>>hmm<<}` — which the
+	//       parser reads as a highlight whose body happens to contain plus signs, silently demoting a
+	//       tracked change to inert text.
+	test("an addition made INSIDE the live anchor is never swallowed by the highlight", () => {
+		const view = viewWith("the quick brown fox");
+		view.dispatch({ effects: setCommentDraft.of({ from: 4, to: 15 }) }); // "quick brown"
+		view.dispatch({ changes: { from: 9, to: 9, insert: "{++very++}" } });
+
+		expect(commitCommentDraft(view, "hmm")).toBe(true);
+		expect(view.state.doc.toString()).toBe("the quick{++very++} brown{>>hmm<<} fox");
+		assertBalanced(view);
+
+		const ranges = view.state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(range => range.type)).toEqual([SuggestionType.ADDITION, SuggestionType.COMMENT]);
+		// EXPL: The suggestion is still a REAL tracked change, not text that looks like one.
+		expect(ranges[0].unwrap()).toBe("very");
+		expect(ranges[1].unwrap()).toBe("hmm");
+		expect(view.state.field(commentDraftField)).toBeNull();
+	});
+
+	// EXPL: Reachable with no typing at all: open a draft, then hit "Add reply" on a card whose
+	//       thread lies inside the anchor. Wrapping would give
+	//       `{==aaa b{==X==}{>>c<<}bb ccc==}{>>outer<<}` — the inner `==}` closes the outer highlight
+	//       early, `bb ccc==}` is orphaned as plain text, and a bare `==}` is left in the note.
+	test("a thread that lands inside the live anchor is never swallowed by the highlight", () => {
+		const view = viewWith("aaa bbb ccc");
+		view.dispatch({ effects: setCommentDraft.of({ from: 0, to: 11 }) });
+		view.dispatch({ changes: { from: 5, to: 5, insert: "{==X==}{>>c<<}" } });
+
+		expect(commitCommentDraft(view, "outer")).toBe(true);
+		expect(view.state.doc.toString()).toBe("aaa b{==X==}{>>c<<}bb ccc{>>outer<<}");
+		assertBalanced(view);
+		expect(view.state.doc.toString()).not.toContain("{==aaa");
+
+		const ranges = view.state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(range => range.type)).toEqual([
+			SuggestionType.HIGHLIGHT,
+			SuggestionType.COMMENT,
+			SuggestionType.COMMENT,
+		]);
+		// EXPL: The pre-existing thread survives intact — same base, same reply.
+		expect(ranges[0].replies).toHaveLength(1);
+		expect(ranges[0].replies[0].unwrap()).toBe("c");
+		// EXPL: ...and the degraded comment is a real, parseable comment, not junk.
+		expect(ranges[2].unwrap()).toBe("outer");
+	});
+
+	// EXPL: CriticMarkup has no escapes. A `==}` inside the text being wrapped closes the highlight
+	//       the instant it is written, so this selection can never be an anchor — same graceful
+	//       degradation, for the same reason.
+	test("an anchor whose text contains a closing delimiter degrades to an unanchored comment", () => {
+		const view = viewWith("weird ==} text");
+		view.dispatch({ effects: setCommentDraft.of({ from: 0, to: 14 }) });
+
+		expect(commitCommentDraft(view, "huh")).toBe(true);
+		expect(view.state.doc.toString()).toBe("weird ==} text{>>huh<<}");
+
+		const ranges = view.state.field(rangeParser).ranges.ranges;
+		expect(ranges).toHaveLength(1);
+		expect(ranges[0].type).toBe(SuggestionType.COMMENT);
+		expect(ranges[0].unwrap()).toBe("huh");
+	});
+
+	// EXPL: `@@` terminates a range's metadata prefix, so with `add_metadata` ON (the DEFAULT) an
+	//       anchor containing `@@` makes the highlight's own metadata unparseable.
+	test("an anchor whose text contains the metadata terminator degrades to an unanchored comment", () => {
+		const view = viewWith("mail me @@ home");
+		view.dispatch({ effects: setCommentDraft.of({ from: 0, to: 15 }) });
+
+		expect(commitCommentDraft(view, "ok")).toBe(true);
+		expect(view.state.doc.toString()).toBe("mail me @@ home{>>ok<<}");
+		expect(view.state.field(commentDraftField)).toBeNull();
+	});
+
+	// EXPL: The user TYPED this text, so unlike the anchor there is something for them to fix —
+	//       refuse the write and leave the box open rather than mangling their words or the note.
+	test.each([
+		["<<}", "see {>>a<<} here"],
+		["==}", "ends with ==} oops"],
+		["++}", "an ++} addition"],
+		["--}", "a --} deletion"],
+		["~~}", "a ~~} substitution"],
+		["@@", "ping @@ me"],
+	])("refuses a comment body containing %s, writing nothing and keeping the draft", (_seq, text) => {
+		const view = viewWith("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 0, to: 5 }) });
+
+		expect(commitCommentDraft(view, text)).toBe(false);
+		expect(view.state.doc.toString()).toBe("hello world");
+		expect(view.state.field(commentDraftField)).toEqual({ from: 0, to: 5 });
+	});
+
+	// EXPL: `readOnly` is a CodeMirror facet over USER input; it does not block a programmatic
+	//       dispatch, and every write in add-comment.ts is one.
+	test("writes nothing in a read-only editor", () => {
+		const view = new EditorView({
+			state: createRangeState("hello world", NO_META, [commentDraftField, EditorState.readOnly.of(true)]),
+		});
+		view.dispatch({ effects: setCommentDraft.of({ from: 0, to: 5 }) });
+
 		expect(commitCommentDraft(view, "nice")).toBe(false);
 		expect(view.state.doc.toString()).toBe("hello world");
 	});

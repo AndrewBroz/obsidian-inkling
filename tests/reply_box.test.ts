@@ -1,3 +1,4 @@
+import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { App, editorInfoField } from "obsidian";
@@ -197,15 +198,78 @@ describe("AnnotationMarker reply box lifecycle", () => {
 		openReplyBox(marker);
 		expect(marker.reply_box).not.toBeNull();
 
+		const stale_box = marker.reply_box;
 		marker.toDOM();
 
 		// EXPL: Without the fix, `reply_box` would still hold the box bound to the OLD (now
 		// detached) annotation_thread, and showReplyBox()'s `if (this.reply_box) return;` guard
-		// would permanently refuse to ever open a reply box on this card again.
+		// would permanently refuse to ever open a reply box on this card again. The box on the card
+		// now must be a NEW one, parented to the NEW thread.
+		expect(marker.reply_box).not.toBe(stale_box);
+		expect(marker.annotation_thread.querySelectorAll(".cmtr-anno-gutter-reply")).toHaveLength(1);
+	});
+
+	// EXPL: The re-home is invisible to the user — GutterElement.setMarkers re-runs toDOM() on this
+	//       instance whenever its GutterElement index shifts, i.e. whenever an annotation ABOVE it
+	//       appears or disappears. That is precisely what the "blur the box with text in it, go fix a
+	//       word in the note" flow invites. Before the fix, the rebuilt card got NO box at all: an
+	//       open reply with text in it simply vanished, with no undo and no trace. (jsdom has no
+	//       layout, so every line collapses into one block and the real re-home cannot be provoked
+	//       end-to-end here — hence driving toDOM() directly, which is exactly what setMarkers does.)
+	test("FIX regression: a re-home does not discard an in-progress reply", () => {
+		const { view, ranges } = setup("x{>>hi<<}y");
+		const marker = mountThread(view, ranges[0]);
+		openReplyBox(marker);
+		(marker.reply_box!.editor as unknown as MockEditor).set("half-written reply");
+
+		marker.toDOM();
+		marker.reply_box?.load();
+
+		expect(marker.reply_box).not.toBeNull();
+		expect(marker.reply_box!.options.value).toBe("half-written reply");
+		expect(marker.reply_box!.text()).toBe("half-written reply");
+	});
+
+	// EXPL: A closed card must STAY closed through a re-home — reopening one the user never opened
+	//       would steal focus out of the note.
+	test("a re-home does not open a reply box on a card that had none", () => {
+		const { view, ranges } = setup("x{>>hi<<}y");
+		const marker = mountThread(view, ranges[0]);
+
+		marker.toDOM();
+		expect(marker.reply_box).toBeNull();
+	});
+
+	// EXPL: Escape / blur-while-empty is the user closing the box ON PURPOSE. That must discard the
+	//       text, or the next click on the card would resurrect a reply they walked away from.
+	test("dismissing the box discards its text", () => {
+		const { view, ranges } = setup("x{>>hi<<}y");
+		const marker = mountThread(view, ranges[0]);
+		openReplyBox(marker);
+		(marker.reply_box!.editor as unknown as MockEditor).set("abandoned");
+
+		marker.dismissReplyBox();
+		marker.toDOM();
 		expect(marker.reply_box).toBeNull();
 
 		marker.showReplyBox();
-		expect(marker.reply_box).not.toBeNull();
-		expect(marker.annotation_thread.querySelector(".cmtr-anno-gutter-reply")).not.toBeNull();
+		expect(marker.reply_box!.options.value).toBe("");
+	});
+
+	// EXPL: `pill_eligible` refuses to offer a NEW comment in a read-only editor, but nothing stopped
+	//       a click on an existing thread card from opening a writable reply — and commitReply
+	//       dispatches programmatically, which CodeMirror's `readOnly` facet does NOT block.
+	test("no reply box in a read-only editor", () => {
+		const state = createRangeState("x{>>hi<<}y", { add_metadata: false }, [
+			editorInfoField,
+			EditorState.readOnly.of(true),
+		]);
+		const view = new EditorView({ state });
+		(view.state.field(editorInfoField).app as any).plugins = stubPluginManager();
+		const marker = mountThread(view, view.state.field(rangeParser).ranges.ranges[0]);
+
+		marker.showReplyBox();
+		expect(marker.reply_box).toBeNull();
+		expect(marker.annotation_thread.querySelector(".cmtr-anno-gutter-reply")).toBeNull();
 	});
 });
