@@ -114,6 +114,8 @@ export class HeaderButton {
 				elements.button.parentElement.insertBefore(status, elements.button);
 				// EXPL: see the matching note in `attachButtons` — the label is reparented out of
 				//       `button`, so it needs its own click/contextmenu handlers to stay clickable.
+				//       It remains visual-only (no role/tabindex); the icon button is the keyboard
+				//       entry point (see attachButtons for full accessibility explanation).
 				status.addEventListener("click", () => this.cycle(view));
 				status.addEventListener("contextmenu", (e: MouseEvent) => this.openMenu(view, e));
 				elements.status = status;
@@ -190,6 +192,13 @@ export class HeaderButton {
 				button.parentElement.insertBefore(status, button);
 				status!.addEventListener("click", () => this.cycle(view));
 				status!.addEventListener("contextmenu", (e: MouseEvent) => this.openMenu(view, e));
+				// EXPL: The label is visual-only, not keyboard-focusable. The icon button (created
+				//       via view.addAction) is the primary keyboard/screen-reader entry point, already
+				//       with tabindex="0", keyboard handling (Enter/Space), and aria-label set to the
+				//       tooltip. Making the label also focusable would create two tab-order entries for
+				//       the same action, which is awkward UX. The icon button's aria-label (tooltip)
+				//       already announces the current mode and what clicking does; the label just adds
+				//       visual text reinforcement (e.g. "Editing").
 			}
 
 			if (index === -1) button.style.display = "none";
