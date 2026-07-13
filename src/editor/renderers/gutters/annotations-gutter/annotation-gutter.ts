@@ -17,6 +17,7 @@ import {
 	createGutterWithConfig,
 	type GutterConfig,
 	GutterElement,
+	type GutterSide,
 	GutterView,
 	sameMarkers,
 	SingleGutterView,
@@ -85,6 +86,10 @@ export class AnnotationGutterView extends GutterView {
 	createGutters(view: EditorView) {
 		return view.state.facet(activeGutters).map(conf => new AnnotationSingleGutterView(view, conf, this.dom));
 	}
+
+	// EXPL: This gutter is a Google-Docs-style comment column on the RIGHT — `insertGutters`
+	//       below places it *after* contentDOM, unlike the base class which places it before.
+	static readonly side: GutterSide = "after";
 
 	insertGutters(view: EditorView) {
 		view.contentDOM.parentNode!.insertBefore(this.dom, view.contentDOM.nextSibling);
