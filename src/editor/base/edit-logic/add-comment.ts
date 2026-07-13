@@ -80,3 +80,26 @@ export function addCommentToView(
 		}));
 	});
 }
+
+/**
+ * Append a comment to the end of `range`'s thread, in ONE transaction, from text already in hand.
+ *
+ * EXPL: Always targets `base_range.full_range_back`, never the passed range's own `to` — threads
+ *       are flat (comment_range.ts:35-43), so replying to a mid-thread reply must still land at
+ *       the END of the thread. Works for every base type: the parser's adjacency rule is
+ *       type-agnostic, which is what makes "comment on a suggestion" fall out for free.
+ * @returns false (writing nothing) if the text is blank.
+ */
+export function commitReply(editor: EditorView, range: CriticMarkupRange, text: string): boolean {
+	if (!text.trim())
+		return false;
+
+	const settings = editor.state.field(pluginSettingsField);
+	const cursor = range.base_range.full_range_back;
+
+	editor.dispatch(editor.state.update({
+		changes: { from: cursor, to: cursor, insert: create_range(settings, SuggestionType.COMMENT, text) },
+		annotations: [commentModeAnnotation.of(true)],
+	}));
+	return true;
+}
