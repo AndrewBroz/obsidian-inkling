@@ -80,6 +80,22 @@ try {
 			format(`${currentVersion} -> ${newVersion}`, "fg_blue")
 		} | ${format(`[${versionType}]${(isRC ? " [release candidate]" : "")}`, "fg_yellow")}`,
 	);
+
+	// EXPL: Push the version tag BY ITSELF, never via `--follow-tags` or `--tags`. GitHub silently
+	//       skips workflow runs for EVERY tag when more than three tags arrive in one push — no
+	//       error, no skipped run, nothing in the Actions tab. Releases 0.7.1 through 0.9.0 all hit
+	//       this: `--follow-tags` dragged a backlog of never-pushed annotated tags along with the new
+	//       one, tripped the limit, and silently took the release build down with it. Each was then
+	//       published by hand via workflow_dispatch, and the tag-push trigger was written off as
+	//       "broken" — it never was. Confirmed by experiment (2026-07-13): one tag pushed alone
+	//       triggers immediately; four pushed at once trigger nothing.
+	console.log(
+		`\n${format(" Next ", "bg_blue")} | Push the commit and the tag ${format("separately", "fg_yellow")}:\n\n` +
+			`    git push origin main\n` +
+			`    git push origin ${newVersion}\n\n` +
+			`${format("  Do NOT use --follow-tags or --tags.", "fg_red")} GitHub skips workflow runs\n` +
+			`  for all tags when >3 are pushed at once, so the release would never build.\n`,
+	);
 } catch (error) {
 	console.log(`${format(" Error ", "bg_red")} | ${format("Failed when running git commands", "fg_red")}`);
 }

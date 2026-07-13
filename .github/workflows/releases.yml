@@ -8,6 +8,14 @@ on:
       # BRAT users would then be offered as "Latest".
       - "[0-9]+.[0-9]+.[0-9]+*"
   # Manual fallback: gh workflow run releases.yml --ref <tag>
+  #
+  # NOTE: This trigger is NOT broken, despite what releases 0.7.1-0.9.0 suggested.
+  # GitHub silently skips workflow runs for every tag when more than three tags are
+  # pushed at once. Those releases were pushed with `git push --follow-tags`, which
+  # dragged a backlog of never-pushed annotated tags along with the new one, tripped
+  # that limit, and took the release build down with it — with no error anywhere.
+  # Push the version tag on its own (`git push origin <tag>`) and this fires normally.
+  # Verified by experiment 2026-07-13: 1 tag => runs; 4 tags at once => nothing runs.
   workflow_dispatch:
 
 env:
