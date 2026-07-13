@@ -53,15 +53,27 @@
 }
 
 .cmtr-view-range:hover {
-  box-shadow: unset;
   background-image: linear-gradient(
     var(--background-modifier-hover),
     var(--background-modifier-hover)
   );
 }
 
-.cmtr-view-range-selected {
-  box-shadow: 0 0 0 2px var(--interactive-accent);
+// EXPL: Was `box-shadow: 0 0 0 2px var(--interactive-accent)` — a ring, i.e. the outline this PR
+//       set out to remove; left alone it would read as an orphaned stroke on an otherwise
+//       borderless card. Selection now tints, matching `.cmtr-anno-gutter-thread-highlight`.
+//
+//       The class is DOUBLED to raise its specificity to 0,2,0. `.cmtr-view-range:hover` is also
+//       0,2,0 and comes first, so a single `.cmtr-view-range-selected` (0,1,0) would lose to it —
+//       hovering a selected card would repaint it with the neutral hover wash and silently erase
+//       the selected signal. (The old rule dodged this by having hover carry `box-shadow: unset`,
+//       which is why that now-dead declaration was here.) Same doubled-class idiom as
+//       `.cmtr-anno-gutter-annotation-editing` in annotation-gutter.scss.
+.cmtr-view-range-selected.cmtr-view-range-selected {
+  background-image: linear-gradient(
+    var(--background-modifier-active-hover),
+    var(--background-modifier-active-hover)
+  );
 }
 
 .cmtr-view-range-icon {
@@ -76,8 +88,11 @@
   color: var(--text-faint);
 }
 
+// EXPL: Solid, not dashed — kept in lockstep with the gutter's reply separator
+//       (`.cmtr-anno-gutter-annotation:not(:nth-last-child(...))` in annotation-gutter.scss). Dashed
+//       reads as "provisional"; Obsidian uses solid hairlines for menu separators.
 .cmtr-view-range-reply {
-  border-top: 1px dashed var(--background-modifier-border);
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 .cmtr-view-range-reply-top {
