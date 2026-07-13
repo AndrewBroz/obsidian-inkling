@@ -8,6 +8,7 @@ import { create_range } from "../edit-util/range-create";
 
 import { annotationGutterFocusAnnotation } from "../../renderers/gutters/annotations-gutter";
 import { pluginSettingsField } from "../../uix";
+import { clearCommentDraft, commentDraftField } from "../../uix/extensions/comment-draft";
 import { commentModeAnnotation } from "../../uix/extensions/editing-modes";
 
 export function addCommentToView(
@@ -99,6 +100,32 @@ export function commitReply(editor: EditorView, range: CriticMarkupRange, text: 
 
 	editor.dispatch(editor.state.update({
 		changes: { from: cursor, to: cursor, insert: create_range(settings, SuggestionType.COMMENT, text) },
+		annotations: [commentModeAnnotation.of(true)],
+	}));
+	return true;
+}
+
+/**
+ * Write the open comment draft to the note: highlight + comment, in ONE transaction.
+ *
+ * EXPL: Single dispatch on purpose — one Ctrl+Z takes the whole comment back out. The old flow
+ *       needed two (insert empty markup, then save the text into it), so undo left the user with a
+ *       stray `{>>@@<<}`.
+ * @returns false (writing nothing, draft left open) if there is no draft or the text is blank.
+ */
+export function commitCommentDraft(editor: EditorView, text: string): boolean {
+	const draft = editor.state.field(commentDraftField);
+	if (!draft || !text.trim())
+		return false;
+
+	const settings = editor.state.field(pluginSettingsField);
+	const anchor_text = editor.state.sliceDoc(draft.from, draft.to);
+	const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
+		create_range(settings, SuggestionType.COMMENT, text);
+
+	editor.dispatch(editor.state.update({
+		changes: { from: draft.from, to: draft.to, insert },
+		effects: [clearCommentDraft.of(null)],
 		annotations: [commentModeAnnotation.of(true)],
 	}));
 	return true;
