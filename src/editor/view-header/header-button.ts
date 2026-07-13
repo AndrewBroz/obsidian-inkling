@@ -118,6 +118,9 @@ export class HeaderButton {
 				//       entry point (see attachButtons for full accessibility explanation).
 				status.addEventListener("click", () => this.cycle(view));
 				status.addEventListener("contextmenu", (e: MouseEvent) => this.openMenu(view, e));
+				// EXPL: hidden from assistive tech so the mode isn't announced twice (the icon
+				//       button's aria-label already names it); the label is visual reinforcement.
+				status.setAttribute("aria-hidden", "true");
 				elements.status = status;
 				// this.active_mapping.set(view, elements);
 			}
@@ -192,6 +195,7 @@ export class HeaderButton {
 				button.parentElement.insertBefore(status, button);
 				status!.addEventListener("click", () => this.cycle(view));
 				status!.addEventListener("contextmenu", (e: MouseEvent) => this.openMenu(view, e));
+				status!.setAttribute("aria-hidden", "true");
 				// EXPL: The label is visual-only, not keyboard-focusable. The icon button (created
 				//       via view.addAction) is the primary keyboard/screen-reader entry point, already
 				//       with tabindex="0", keyboard handling (Enter/Space), and aria-label set to the
