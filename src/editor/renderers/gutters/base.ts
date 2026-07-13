@@ -540,7 +540,11 @@ export function createGutterViewPlugin<T extends GutterView>(
 			EditorView.scrollMargins.of(view => {
 				const value = view.plugin(plugin);
 				if (!value || value.gutters.length == 0 || !value.fixed) return null;
-				return gutterScrollMargin(cls.side, view.textDirection == Direction.LTR, value.dom.offsetWidth);
+				return gutterScrollMargin(
+					cls.side,
+					view.textDirection == Direction.LTR,
+					value.dom.offsetWidth, /** * view.scaleX*/
+				);
 			}),
 	});
 }
