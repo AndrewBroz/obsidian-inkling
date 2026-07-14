@@ -91,6 +91,29 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 
 		// apply-offsets: 2.72-3.70 ms
 		const nil_node = value.ranges.tree.nil_node;
+		// EXPL: Keys are shifted IN PLACE rather than rebuilding the tree -- a deliberate optimisation, and
+		//       the reason this traversal exists at all. But the tree is an AUGMENTED red-black tree: every
+		//       node caches `max`, the widest interval in its subtree, and `search()` prunes a subtree
+		//       outright when `left.max.high < search.low` (Node.not_intersect_left_subtree). Shifting a key
+		//       without refreshing `max` leaves that cache stale, and a stale `max` makes the tree prune
+		//       subtrees that DO contain matches: `search()` then silently returns INCOMPLETE results, the
+		//       ranges an edit invalidated are never removed (only regenerated), and the document ends up
+		//       with two range objects at one position -- which Accept All composes into overlapping changes
+		//       and corrupts the text with.
+		//
+		//       Two traversal orders are in play here, and they are NOT the same one:
+		//
+		//       - The key shift must run IN-ORDER. `offsets` is a queue consumed in ascending key order, so
+		//         the node's OLD `key.low` has to be read while the queue is still positioned at it.
+		//       - `max` must be recomputed BOTTOM-UP (post-order). A node's max is defined over its own key
+		//         AND both children's maxes, so every child must already be final when the parent is
+		//         computed. Hence `update_max()` sits after BOTH subtree visits -- by which point this
+		//         node's key has been shifted (above) and both children have been recomputed.
+		//
+		//       `Node.update_max()` is the library's own routine and REASSIGNS `node.max`. The hand-rolled
+		//       fixup this replaces wrote to `node.max.low` / `node.max.high` instead -- and `Interval`'s
+		//       `get max()` returns a CLONE, so those writes landed in a throwaway object and were discarded.
+		//       It was a no-op, on top of computing the wrong invariant.
 		function visitNode(node: Node<CriticMarkupRange>) {
 			if (node != null && node != nil_node) {
 				visitNode(node.left);
@@ -100,10 +123,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 				node.item.key.low = node.item.value.from;
 				node.item.key.high = node.item.value.to;
 				visitNode(node.right);
-				if (node.left != nil_node)
-					node.max.low = node.left.max.low;
-				if (node.right != nil_node)
-					node.max.high = node.right.max.high;
+				node.update_max();
 			}
 		}
 		visitNode(value.ranges.tree.root!);
