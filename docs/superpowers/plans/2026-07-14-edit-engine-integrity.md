@@ -1406,3 +1406,63 @@ Every check below needs a real Obsidian vault and a human. They are the reason t
 5. **Thread duplication.** Make a comment thread with two replies. Type in the paragraph next to it for a while. The replies must not multiply.
 6. **The pill.** Select text, click the comment pill. The cursor must land in the draft box, ready to type.
 7. **Undo.** Commit a comment. One Ctrl+Z must remove the whole thing.
+
+---
+
+## Task 3b: Partial overlap of a highlight no longer silently drops the edit
+
+**Added mid-execution**, after Task 3's review found this. Task 3 fixed *strict enclosure* (the operation
+entirely inside a highlight). A **partial** overlap still hits the old ignore-loop and is silently truncated.
+
+**Files:**
+- Modify: `src/editor/base/edit-logic/mark.ts` (the ignore-loop and the Task 3 early-out)
+- Modify: `tests/mark_ranges.test.ts` and `tests/__snapshots__/mark_ranges.test.ts.snap`
+
+**The defect** — all three confirmed live on `main` and still live after Task 3:
+
+```
+mark("x{==here==}y", 1, 11, "", DELETION)    // select EXACTLY the highlight, press Delete
+  -> nothing happens at all. The document is unchanged.
+
+mark("{==here==}rest", 5, 12, "", DELETION)  // select from inside the highlight through the text
+  -> "{==here==}{--re--}st"    // the chars INSIDE the highlight are silently not deleted
+
+mark("ab{==cd==}ef", 0, 12, "", DELETION)    // select everything, press Delete
+  -> "{--ab--}{==cd==}{--ef--}"  // "cd" survives, untouched, inside its highlight
+```
+
+The last is currently PINNED GREEN by the characterization snapshot
+`mark_ranges characterization (snapshot-pinned) deletion across highlight range`. That snapshot records
+what the code does, not what is right. It must be updated, deliberately, with the reason in the commit.
+
+**Root cause (same as everything else this phase):** the ignore-loop's guard `if (last_range_start < range.from)`
+emits an edit for the region *before* an incompatible range, then jumps `last_range_start = range.to`. For a
+partial overlap the region inside the range is never marked by anyone.
+
+**The design.** A HIGHLIGHT partially covered by an operation is **split at the coverage boundary**, exactly as
+Task 3 splits a strictly-enclosing one. The covered part of the highlight's content is marked; the uncovered
+part stays highlighted.
+
+```
+"ab{==cd==}ef", delete [0,12)   ->  "{--ab--}{--cd--}{--ef--}"   (or a single merged {--abcdef--})
+   the whole selection is deleted, and no highlight survives because none of its content survives
+
+"{==here==}rest", delete [5,12) ->  "{==h==}{--ere--}{--rest--}"  (or merged)
+   "h" stays highlighted; "ere" and "rest" are deleted
+```
+
+The exact merging of adjacent same-type ranges is `mark_range`'s existing job — do not reimplement it.
+
+**COMMENTS ARE NOT SPLIT** (same rule as Task 3): a comment's body is prose. A selection partially covering a
+comment must leave the comment's text alone.
+
+**The oracle.** For every case, `reject_all(output)` must equal the original base document, and `accept_all(output)`
+must equal what the user meant. Assert both on every test — the output string is secondary.
+
+- [ ] **Step 1:** Write failing tests for all three cases above, plus the comment case, asserting `reject_all` and
+      `accept_all` alongside the output string.
+- [ ] **Step 2:** Run them; confirm they fail with the *silently-truncated* outputs quoted above.
+- [ ] **Step 3:** Extend the Task 3 early-out (or the ignore-loop) to handle partial coverage of a HIGHLIGHT.
+- [ ] **Step 4:** Run; confirm pass. Update the `deletion across highlight range` snapshot with `-u` and
+      **state in the commit message why the snapshot changed**.
+- [ ] **Step 5:** Full suite. Commit.
