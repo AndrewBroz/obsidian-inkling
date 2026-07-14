@@ -518,10 +518,38 @@ export function mark_ranges(
 	const left_range = in_range.at(0);
 	const right_range = in_range.at(-1);
 
+	// EXPL: THE INJECTED DELIMITER. An operation's boundary can land partway INSIDE a boundary range's
+	//       bracket, and there are FOUR ways for that to happen — only two were snapped. An unsnapped
+	//       boundary left half a delimiter inside the operation, where it was read back as document
+	//       TEXT and re-emitted: "cc{~~r~>s~~}" with a deletion of [1, 4) — ending one character into
+	//       the `{~~` — produced "c{~~c~r~>s~~}", inventing a `~` in the user's note. (Only `{~~`
+	//       corrupts: it is the one delimiter whose interior character survives unwrapping.)
+	//
+	//       All four cases, stated explicitly (bracket bounds per touches_*_bracket, both ends loose):
+	//         from in left's  OPENING bracket [left.from, left.range_start]  -> from = left.from
+	//              The operation already owns the range's opening syntax: swallow the range whole.
+	//         from in left's  CLOSING bracket [left.to - 3, left.to]         -> from = left.to
+	//              Only the closing delimiter is caught; the range's content is untouched. Start after it.
+	//         to   in right's CLOSING bracket [right.to - 3, right.to]       -> to   = right.to
+	//              Swallow the range whole.
+	//         to   in right's OPENING bracket [right.from, right.range_start] -> to  = right.from
+	//              Only the opening delimiter is caught. Stop before the range; never half-swallow it.
+	//
+	//       The closing/opening cases are checked SECOND so an empty range (whose brackets abut) keeps
+	//       its established swallow-whole behaviour. Excluding the range does not defeat merging: the
+	//       operation still ABUTS it, and mark_range re-derives its neighbours with at_cursor, which
+	//       sees an abutting range — so "cc{--r--}" [1, 4) still merges into "c{--cr--}".
+	//       The `<= to` / `>= from` guards keep a boundary that lies wholly inside one bracket from
+	//       inverting the interval.
 	if (left_range?.touches_left_bracket(from, true, true, true))
 		from = left_range.from;
+	else if (left_range?.touches_right_bracket(from, true, true) && left_range.to <= to)
+		from = left_range.to;
+
 	if (right_range?.touches_right_bracket(to, true, true))
 		to = right_range.to;
+	else if (right_range?.touches_left_bracket(to, true, true, true) && right_range.from >= from)
+		to = right_range.from;
 
 	// NOTE: When marking long section as SUBSTITUTION, inserted should only be set for the last range?, all other ranges should be DELETION
 	let last_range_start = from;

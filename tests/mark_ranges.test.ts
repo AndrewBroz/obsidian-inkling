@@ -44,16 +44,32 @@ function reject_all(doc: string): string {
 }
 
 // EXPL: The underlying document text: every suggestion rejected, and highlight markup (an
-//       annotation, not text) removed. THE data-safety invariant for an operation that consumes
-//       highlighted text is base_text(output) === base_text(input): not one character of the
-//       user's text is lost, and not one is resurrected.
+//       annotation, not text) removed. base_text(output) === base_text(input) is a COMPLEMENTARY
+//       REJECT-SIDE CHECK: no character of the user's text was invented or lost on the reject path.
+//       It is not the whole data-safety story, and must not be mistaken for it —
 //
-//       reject_all alone cannot carry that weight here. A deletion that swallows highlighted text
-//       destroys the highlight's brackets, and rejecting the deletion cannot put them back:
-//       CriticMarkup cannot nest, so a pending deletion has nowhere to record "this text used to
-//       be highlighted". (The same is already true of the split in Task 3: reject_all of
-//       "{==h==}{++x++}{==ere==}" is "{==h==}{==ere==}", not "{==here==}".) Every test below
-//       still asserts the exact reject_all string, so any change to that is deliberate.
+//         - it is blind to the ACCEPT-side truncation bug this very task fixed:
+//           base_text("{--ab--}{==cd==}{--ef--}") === "abcdef" === base_text("ab{==cd==}ef"),
+//           yet accepting the left output keeps "cd" — the deletion never covered it. `accept_all`
+//           is what catches truncation, and every test below asserts it too;
+//         - it is blind to comment prose, which reject_all removes entirely.
+//
+//       Why the highlight is not preserved through a deletion: rejecting a deletion that swallowed
+//       highlighted text cannot restore the highlight's brackets. That is a TRADE-OFF, not an
+//       impossibility. A flat encoding does exist —
+//
+//           {--ab{==--}{--cd--}{--==}ef--}     // three flat deletion ranges, no nesting;
+//                                              // reject-all restores "ab{==cd==}ef" exactly
+//
+//       — and we deliberately do NOT use it, because it inverts the model: it encodes the
+//       highlight's brackets as document TEXT rather than syntax. The user would see a literal
+//       "{==" struck through in their note, and accepting or rejecting any ONE of the three
+//       deletions independently (which the UI allows) leaves an orphan "{==" in the document
+//       forever. That is worse corruption than losing the annotation. If a future maintainer finds
+//       an encoding without those two costs, this decision is open to revisiting.
+//       (The split in Task 3 pays the same price: reject_all of "{==h==}{++x++}{==ere==}" is
+//       "{==h==}{==ere==}", not "{==here==}".) Every test below still asserts the exact reject_all
+//       string, so any change to that is deliberate.
 function base_text(doc: string): string {
 	return reject_all(doc).replaceAll("{==", "").replaceAll("==}", "");
 }
@@ -325,5 +341,79 @@ describe("overlap: an operation covering part of a highlight splits it, and neve
 		expect(accept_all(output)).toBe("st");
 		expect(reject_all(output)).toBe("rest");
 		expect(base_text(output)).toBe(base_text("{>>note<<}rest"));
+	});
+
+	// EXPL: MARKING A HIGHLIGHT'S CONTENT AS AN ADDITION DESTROYS THE HIGHLIGHT — deliberately.
+	//       "Mark as Addition" (src/editor/uix/commands.ts) over a span covering a highlight used to
+	//       emit "{++ab++}{==cd==}{++ef++}": "cd" was left UNMARKED, so accepting the suggestion
+	//       silently left it as plain text — the truncation bug wearing a different hat.
+	//
+	//       The highlight cannot survive the correct output. Marking its content as an addition means
+	//       the content is now pending: rejecting the suggestion DELETES "cd" outright, so there is
+	//       nothing left to highlight. Preserving the annotation over content that reject removes is
+	//       incoherent, so the annotation goes and every character of text is accounted for.
+	test("marking a span covering a highlight as an addition destroys the highlight", () => {
+		const output = mark("ab{==cd==}ef", 0, 12, "", SuggestionType.ADDITION);
+		expect(output).toBe("{++abcdef++}");
+		expect(accept_all(output)).toBe("abcdef");
+		// EXPL: reject removes the whole addition — including the once-highlighted "cd". That is what
+		//       "this text is a pending addition" MEANS; the highlight has nowhere to survive.
+		expect(reject_all(output)).toBe("");
+	});
+});
+
+// EXPL: THE INJECTED DELIMITER (document corruption). mark_ranges snapped only two of the four ways an
+//       operation's boundary can land inside a neighbouring range's bracket. An unsnapped boundary left
+//       half a delimiter inside the operation, where it was read back as document TEXT and re-emitted —
+//       INVENTING a character in the user's note. Only "{~~" corrupts: it is the one delimiter with an
+//       interior character that survives unwrapping.
+//
+//       The invariant every case below pins: base_text(output) === base_text(input) — not one character
+//       of the user's text invented, not one lost — plus an explicit check that no "~" leaked into it.
+describe("boundary snapping: an operation never half-swallows a range's delimiter", () => {
+	test("CONTROL (no highlight): a deletion ending inside a following substitution's opening bracket", () => {
+		//  c  c  {  ~  ~  r  ~  >  s  ~  ~  }
+		//  0  1  2  3  4  5  6  7  8  9 10 11   <- [1, 4) ends one character INTO the "{~~"
+		//  Pre-fix: "c{~~c~r~>s~~}" — a stray "~" written into the document ("ccr" became "cc~r").
+		//  This case predates the highlight work entirely: it is the bug in its purest form.
+		const output = mark("cc{~~r~>s~~}", 1, 4, "", SuggestionType.DELETION);
+		expect(output).toBe("c{~~cr~>s~~}");
+		expect(base_text(output)).toBe(base_text("cc{~~r~>s~~}"));
+		expect(base_text(output)).not.toContain("~");
+		expect(accept_all(output)).toBe("cs");
+		expect(reject_all(output)).toBe("ccr");
+	});
+
+	test("a deletion spanning a highlight into a following substitution", () => {
+		//  c  {  =  =  h  =  =  }  {  ~  ~  r  ~  >  s  ~  ~  }
+		//  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17   <- [2, 10) ends inside the "{~~"
+		//  Pre-fix: "c{~~h~r~>s~~}" — "chr" became "ch~r". Reachable only since the highlight is no
+		//  longer ignored (the ignore-loop used to shield this by jumping past the highlight).
+		const output = mark("c{==h==}{~~r~>s~~}", 2, 10, "", SuggestionType.DELETION);
+		expect(output).toBe("c{~~hr~>s~~}");
+		expect(base_text(output)).toBe(base_text("c{==h==}{~~r~>s~~}"));
+		expect(base_text(output)).not.toContain("~");
+		expect(accept_all(output)).toBe("cs");
+		expect(reject_all(output)).toBe("chr");
+	});
+
+	test("SYMMETRIC: a deletion STARTING inside a preceding substitution's closing bracket", () => {
+		//  {  ~  ~  a  ~  >  b  ~  ~  }  c  c
+		//  0  1  2  3  4  5  6  7  8  9 10 11   <- [8, 11) starts inside the "~~}"
+		//  The substitution's content is untouched, so `from` snaps OUT to its end: only "c" is deleted.
+		const output = mark("{~~a~>b~~}cc", 8, 11, "", SuggestionType.DELETION);
+		expect(output).toBe("{~~a~>b~~}{--c--}c");
+		expect(base_text(output)).toBe(base_text("{~~a~>b~~}cc"));
+		expect(base_text(output)).not.toContain("~");
+		expect(accept_all(output)).toBe("bc");
+		expect(reject_all(output)).toBe("acc");
+	});
+
+	test("snapping OUT of a bracket does not defeat merging into an abutting compatible range", () => {
+		// [1, 4) ends inside the "{--": the operation abuts the deletion, and mark_range still merges
+		// with it (at_cursor sees an abutting range), so this stays one range rather than two.
+		const output = mark("cc{--r--}", 1, 4, "", SuggestionType.DELETION);
+		expect(output).toBe("c{--cr--}");
+		expect(base_text(output)).toBe(base_text("cc{--r--}"));
 	});
 });
