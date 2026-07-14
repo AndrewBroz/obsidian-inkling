@@ -24,6 +24,7 @@ import {
 } from "../../../base";
 
 import { AnnotationInclusionType } from "../../../../constants";
+import { pluginEditAnnotation } from "../../../uix/extensions/editing-modes";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../../../settings";
 import { annotationGutterFocusThreadAnnotation, annotationGutterFoldAnnotation } from "./annotation-gutter";
 import { ReplyBox } from "./reply-box";
@@ -176,7 +177,10 @@ class AnnotationNode extends Component {
 					//       before click fires), splicing stale offsets through the fresh transaction.
 					this.cancelling = true;
 					this.new_text = null;
-					this.marker.view.dispatch({ changes: cancel_empty_comment(this.range as CommentRange) });
+					this.marker.view.dispatch({
+						changes: cancel_empty_comment(this.range as CommentRange),
+						annotations: [pluginEditAnnotation.of(true)],
+					});
 				}
 				this.new_text = null;
 				return;
@@ -250,7 +254,7 @@ class AnnotationNode extends Component {
 				insert: create_range(settings, SuggestionType.COMMENT, this.new_text),
 			};
 			this.text = this.new_text;
-			this.marker.view.dispatch({ changes });
+			this.marker.view.dispatch({ changes, annotations: [pluginEditAnnotation.of(true)] });
 		}
 	}
 
@@ -269,6 +273,7 @@ class AnnotationNode extends Component {
 					.onClick(() => {
 						this.marker.view.dispatch({
 							changes: acceptSuggestions(this.marker.view.state, this.range.from, this.range.to),
+							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});
 			});
@@ -279,6 +284,7 @@ class AnnotationNode extends Component {
 					.onClick(() => {
 						this.marker.view.dispatch({
 							changes: rejectSuggestions(this.marker.view.state, this.range.from, this.range.to),
+							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});
 			});
@@ -293,6 +299,7 @@ class AnnotationNode extends Component {
 						.onClick(() => {
 							this.marker.view.dispatch({
 								changes: removeThreadChanges(this.range),
+								annotations: [pluginEditAnnotation.of(true)],
 							});
 						});
 				});
@@ -322,7 +329,10 @@ class AnnotationNode extends Component {
 					.setIcon("cross")
 					.setSection("comment-handling")
 					.onClick(() => {
-						this.marker.view.dispatch({ changes: { from: this.range.from, to: this.range.to, insert: "" } });
+						this.marker.view.dispatch({
+							changes: { from: this.range.from, to: this.range.to, insert: "" },
+							annotations: [pluginEditAnnotation.of(true)],
+						});
 					});
 			});
 		} else if (this.range.type !== SuggestionType.HIGHLIGHT) {
@@ -343,6 +353,7 @@ class AnnotationNode extends Component {
 						.onClick(() => {
 							this.marker.view.dispatch({
 								changes: removeThreadChanges(this.range),
+								annotations: [pluginEditAnnotation.of(true)],
 							});
 						});
 				});
@@ -369,7 +380,10 @@ class AnnotationNode extends Component {
 					.setIcon("check")
 					.setSection("close-annotation")
 					.onClick(() => {
-						this.marker.view.dispatch({ changes: resolve_thread(this.range) });
+						this.marker.view.dispatch({
+							changes: resolve_thread(this.range),
+							annotations: [pluginEditAnnotation.of(true)],
+						});
 					});
 			});
 		}
@@ -575,7 +589,10 @@ export class AnnotationMarker extends GutterMarker {
 			setIcon(resolve_button, "check");
 			resolve_button.addEventListener("click", (e) => {
 				e.stopPropagation();
-				this.view.dispatch({ changes: resolve_thread(this.annotation) });
+				this.view.dispatch({
+					changes: resolve_thread(this.annotation),
+					annotations: [pluginEditAnnotation.of(true)],
+				});
 			});
 		} else if (
 			this.annotation.type === SuggestionType.ADDITION ||
@@ -592,6 +609,7 @@ export class AnnotationMarker extends GutterMarker {
 				e.stopPropagation();
 				this.view.dispatch({
 					changes: acceptSuggestions(this.view.state, this.annotation.from, this.annotation.to),
+					annotations: [pluginEditAnnotation.of(true)],
 				});
 			});
 			const reject_button = actions.createEl("button", {
@@ -603,6 +621,7 @@ export class AnnotationMarker extends GutterMarker {
 				e.stopPropagation();
 				this.view.dispatch({
 					changes: rejectSuggestions(this.view.state, this.annotation.from, this.annotation.to),
+					annotations: [pluginEditAnnotation.of(true)],
 				});
 			});
 		}

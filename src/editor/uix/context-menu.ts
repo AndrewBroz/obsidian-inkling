@@ -15,6 +15,7 @@ import {
 } from "../base";
 
 import { AnnotationInclusionType } from "../../constants";
+import { pluginEditAnnotation } from "./extensions/editing-modes";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../settings";
 
@@ -44,6 +45,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 						);
 						editor.cm.dispatch(editor.cm.state.update({
 							changes,
+							annotations: [pluginEditAnnotation.of(true)],
 						}));
 					});
 			});
@@ -60,6 +62,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 						);
 						editor.cm.dispatch(editor.cm.state.update({
 							changes,
+							annotations: [pluginEditAnnotation.of(true)],
 						}));
 					});
 			});
@@ -81,6 +84,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 							.onClick(() => {
 								editor.cm.dispatch(editor.cm.state.update({
 									changes: range.add_metadata("author", plugin.settings.author),
+									annotations: [pluginEditAnnotation.of(true)],
 								}));
 							});
 					});
@@ -90,6 +94,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 							.onClick(() => {
 								editor.cm.dispatch(editor.cm.state.update({
 									changes: range.add_metadata("time", Math.round(Date.now() / 1000)),
+									annotations: [pluginEditAnnotation.of(true)],
 								}));
 							});
 					});
@@ -105,6 +110,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 									.onClick(() => {
 										editor.cm.dispatch(editor.cm.state.update({
 											changes: reopen_thread(range),
+											annotations: [pluginEditAnnotation.of(true)],
 										}));
 									});
 							} else {
@@ -113,6 +119,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 									.onClick(() => {
 										editor.cm.dispatch(editor.cm.state.update({
 											changes: resolve_thread(range),
+											annotations: [pluginEditAnnotation.of(true)],
 										}));
 									});
 							}

@@ -2,6 +2,7 @@ import { EditorSelection, Text } from "@codemirror/state";
 import type { Editor } from "obsidian";
 import { type PluginSettings } from "../../../types";
 import { pluginSettingsField } from "../../uix";
+import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 import { type EditorSuggestion } from "../edit-handler";
 import { type MetadataCompatibility, MetadataMergeAction, range_metadata_compatible, rangeParser } from "../edit-util";
 import { generate_metadata } from "../edit-util/metadata";
@@ -617,5 +618,6 @@ export function mark_editor_ranges(editor: Editor, type: MarkType, settings: Plu
 	editor.cm.dispatch(editor.cm.state.update({
 		changes,
 		selection: EditorSelection.create(resulting_selections),
+		annotations: [pluginEditAnnotation.of(true)],
 	}));
 }

@@ -23,6 +23,7 @@ import {
 
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
+import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
 
 const vim_action_resolver = {
 	"moveByCharacters": {
@@ -113,16 +114,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 	if (tr.docChanged) {
 		const changed_ranges = getEditorRanges(tr.startState.selection, tr.changes, tr.startState.doc);
 
-		const is_recognized_edit_operation = tr.isUserEvent("input") || tr.isUserEvent("paste") ||
-			tr.isUserEvent("delete");
-
-		// ISSUE: Pasting an image yields no userEvent that could be used to determine the type, so the
-		//      operation type needs to be determined via the changed ranges. However, a change of the state
-		//      *will* result in the new transaction being filtered through the suggestion mode filter again (recursion)
-		// TODO: Currently, a only transactions with valid userEvents editevents considered
-		//       Somehow, someway, image pastes need to get an userevent attached (monkey-around insertFiles?)
-		// TODO: Dragging and dropping a selection also doesn't seem to fire a userEvent
-		if (!is_recognized_edit_operation)
+		if (is_exempt_from_tracking(tr))
 			return tr;
 
 		const ranges = tr.startState.field(rangeParser).ranges;
@@ -199,7 +191,9 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		return tr.startState.update({
 			changes,
 			selection: EditorSelection.create(selections),
-			annotations: forwardedEvent ? [Transaction.userEvent.of(forwardedEvent)] : undefined,
+			annotations: forwardedEvent ?
+				[Transaction.userEvent.of(forwardedEvent), pluginEditAnnotation.of(true)] :
+				[pluginEditAnnotation.of(true)],
 			filter: false,
 		});
 	} // CASE 2: Handle cursor movements

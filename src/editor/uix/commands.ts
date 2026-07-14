@@ -25,7 +25,7 @@ import {
 	previewMode,
 	previewModeState,
 } from "../settings";
-import { getEditMode } from "./extensions/editing-modes";
+import { getEditMode, pluginEditAnnotation } from "./extensions/editing-modes";
 
 export const debug_application_commands = (plugin: CommentatorPlugin) => [
 	{
@@ -76,6 +76,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 			// TODO: Add warning is #ranges > 100 ('Are you sure you want to accept all suggestions?')
 			editor.cm.dispatch(editor.cm.state.update({
 				changes: acceptSuggestions(editor.cm.state),
+				annotations: [pluginEditAnnotation.of(true)],
 			}));
 		},
 	},
@@ -87,6 +88,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		regular_callback: (editor: Editor, _) => {
 			editor.cm.dispatch(editor.cm.state.update({
 				changes: rejectSuggestions(editor.cm.state),
+				annotations: [pluginEditAnnotation.of(true)],
 			}));
 		},
 	},
@@ -104,6 +106,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 			const changes = selections.map(selection => acceptSuggestions(editor.cm.state, selection.from, selection.to));
 			editor.cm.dispatch(editor.cm.state.update({
 				changes,
+				annotations: [pluginEditAnnotation.of(true)],
 			}));
 		},
 	},
@@ -122,6 +125,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 			);
 			editor.cm.dispatch(editor.cm.state.update({
 				changes,
+				annotations: [pluginEditAnnotation.of(true)],
 			}));
 		},
 	},
@@ -232,6 +236,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 					to: selection.to,
 					insert: diff,
 				}],
+				annotations: [pluginEditAnnotation.of(true)],
 			}));
 		},
 	},

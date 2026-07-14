@@ -20,7 +20,7 @@ import {
 	commentDraftField,
 	setCommentDraft,
 } from "../../uix/extensions/comment-draft";
-import { commentModeAnnotation } from "../../uix/extensions/editing-modes";
+import { commentModeAnnotation, pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 
 export function addCommentToView(
 	editor: EditorView,
@@ -81,7 +81,7 @@ export function addCommentToView(
 					changes: { from: selection.from, to: selection.to, insert },
 					selection: EditorSelection.cursor(selection.from + insert.length - 3),
 					scrollIntoView: scroll,
-					annotations: [commentModeAnnotation.of(true)],
+					annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 				}));
 				activeWindow.setTimeout(() => {
 					editor.dispatch(editor.state.update({
@@ -121,7 +121,7 @@ export function addCommentToView(
 		},
 		selection: EditorSelection.cursor(cursor),
 		scrollIntoView: scroll,
-		annotations: [commentModeAnnotation.of(true)],
+		annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 	}));
 
 	// EXPL: This code ensures that the input of a new comment is focused on when created
@@ -244,7 +244,7 @@ export function commitReply(editor: EditorView, range: CriticMarkupRange, text: 
 
 	editor.dispatch(editor.state.update({
 		changes: { from: cursor, to: cursor, insert: create_range(settings, SuggestionType.COMMENT, text) },
-		annotations: [commentModeAnnotation.of(true)],
+		annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 	}));
 	return true;
 }
@@ -284,7 +284,7 @@ export function commitCommentDraft(editor: EditorView, text: string): boolean {
 		editor.dispatch(editor.state.update({
 			changes: { from: cursor, to: cursor, insert: comment },
 			effects: [clearCommentDraft.of(null)],
-			annotations: [commentModeAnnotation.of(true)],
+			annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 		}));
 		new Notice(`Inkling: added the comment without an anchor — ${rejection}.`);
 		return true;
@@ -296,7 +296,7 @@ export function commitCommentDraft(editor: EditorView, text: string): boolean {
 	editor.dispatch(editor.state.update({
 		changes: { from: draft.from, to: draft.to, insert },
 		effects: [clearCommentDraft.of(null)],
-		annotations: [commentModeAnnotation.of(true)],
+		annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 	}));
 	return true;
 }

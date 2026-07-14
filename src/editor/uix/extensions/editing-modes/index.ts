@@ -25,3 +25,4 @@ export * from "./comment-mode";
 export * from "./cursor_movement";
 export * from "./edit-mode";
 export * from "./suggestion-mode";
+export * from "./tracked-edit";

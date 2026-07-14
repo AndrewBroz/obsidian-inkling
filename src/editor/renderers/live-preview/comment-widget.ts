@@ -12,6 +12,7 @@ import {
 	CriticMarkupRange,
 } from "../../base";
 import { pluginSettingsField } from "../../uix";
+import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 import { annotationGutterFocusAnnotation } from "../gutters";
 
 import { EmbeddableMarkdownEditor } from "../../../ui/embeddable-editor";
@@ -112,6 +113,7 @@ export class CommentIconWidget extends WidgetType {
 					to: range.to,
 					insert: create_range(this.view.state.field(pluginSettingsField), range.type, content),
 				},
+				annotations: [pluginEditAnnotation.of(true)],
 			}));
 			return;
 		}
@@ -126,7 +128,10 @@ export class CommentIconWidget extends WidgetType {
 
 		// EXPL: Cancel dispatch goes FIRST, before any DOM mutation, while range.from/to are still
 		//       valid document offsets.
-		this.view.dispatch(this.view.state.update({ changes: cancel_empty_comment(range) }));
+		this.view.dispatch(this.view.state.update({
+			changes: cancel_empty_comment(range),
+			annotations: [pluginEditAnnotation.of(true)],
+		}));
 
 		if (range === this.range) {
 			this.unrenderTooltip();
@@ -199,6 +204,7 @@ export class CommentIconWidget extends WidgetType {
 									to: range.full_range_back,
 									insert: "",
 								},
+								annotations: [pluginEditAnnotation.of(true)],
 							});
 							this.unrenderTooltip();
 						});
@@ -231,6 +237,7 @@ export class CommentIconWidget extends WidgetType {
 											to: range.full_range_back,
 											insert: create_range(this.view.state.field(pluginSettingsField), range.type, editor.get()),
 										},
+										annotations: [pluginEditAnnotation.of(true)],
 									}));
 									this.unrenderTooltip();
 								},
@@ -252,6 +259,7 @@ export class CommentIconWidget extends WidgetType {
 												to: range.full_range_back,
 												insert: create_range(this.view.state.field(pluginSettingsField), range.type, content),
 											},
+											annotations: [pluginEditAnnotation.of(true)],
 										}));
 									}
 									replyComponent.unload();
@@ -277,7 +285,10 @@ export class CommentIconWidget extends WidgetType {
 					.setSection("comment-handling")
 					.onClick((e) => {
 						this.tooltip!.removeChild(rangeContainer);
-						this.view.dispatch({ changes: { from: range.from, to: range.to, insert: "" } });
+						this.view.dispatch({
+							changes: { from: range.from, to: range.to, insert: "" },
+							annotations: [pluginEditAnnotation.of(true)],
+						});
 						editorComponent.unload();
 					});
 			});
@@ -385,6 +396,7 @@ export class CommentIconWidget extends WidgetType {
 									to: this.range.full_range_back,
 									insert: "",
 								},
+								annotations: [pluginEditAnnotation.of(true)],
 							});
 						});
 				});

@@ -3,6 +3,7 @@ import { Notice } from "obsidian";
 
 import { type PluginSettings } from "../../../../types";
 import { rangeParser, SuggestionType } from "../../../base";
+import { is_exempt_from_tracking } from "./tracked-edit";
 
 /** Marks a transaction as a Commentator comment operation, exempt from comment-mode blocking. */
 export const commentModeAnnotation = Annotation.define<boolean>();
@@ -18,10 +19,7 @@ export const commentMode = (settings: PluginSettings): Extension =>
 			return tr;
 		// EXPL: Only gate direct user edits; programmatic transactions (accept/reject from the
 		//       gutter, comment-widget submissions, undo of allowed edits) pass through
-		if (
-			!(tr.isUserEvent("input") || tr.isUserEvent("delete") ||
-				tr.isUserEvent("paste") || tr.isUserEvent("move"))
-		) {
+		if (is_exempt_from_tracking(tr)) {
 			return tr;
 		}
 
