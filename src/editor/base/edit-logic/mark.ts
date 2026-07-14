@@ -494,7 +494,11 @@ export function mark_ranges(
 	//         COMMENT:   a comment's body is prose, not document text, so typing inside one is editing
 	//                    the comment — not making a tracked change to the note. Apply the edit
 	//                    verbatim (REGULAR); never split, never track.
-	if (!force && in_range.length === 1 && in_range[0].encloses_range(from, to, true) &&
+	//
+	//       `from !== to || inserted.length` guards against a DEGENERATE operation: a collapsed cursor
+	//       with nothing inserted has nothing to split the range around, so splitting anyway would only
+	//       damage the enclosing range to make room for an empty insertion.
+	if (!force && (from !== to || inserted.length) && in_range.length === 1 && in_range[0].encloses_range(from, to, true) &&
 		(type === SuggestionType.ADDITION || type === SuggestionType.DELETION ||
 			type === SuggestionType.SUBSTITUTION) &&
 		should_ignore_range(in_range[0], type, metadata_fields)

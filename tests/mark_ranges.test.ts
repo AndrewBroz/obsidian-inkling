@@ -189,6 +189,13 @@ describe("interior: an edit inside a highlight splits it", () => {
 		expect(mark("{==here==}", 4, 4, "x", SuggestionType.ADDITION)).toBe("{==h==}{++x++}{==ere==}");
 	});
 
+	// EXPL: A collapsed cursor with nothing to insert is a DEGENERATE operation — there is nothing to
+	//       split the highlight around. Splitting anyway damaged the user's existing markup to make room
+	//       for an empty range. (The junk {++++} empty range itself is a separate, pre-existing bug.)
+	test("a collapsed cursor with nothing inserted does NOT split the highlight", () => {
+		expect(mark("{==here==}", 4, 4, "", SuggestionType.ADDITION)).toBe("{==here==}{++++}");
+	});
+
 	test("the cursor lands after the typed character, not somewhere in the split's syntax", () => {
 		// {  =  =  h  =  =  }  {  +  +  x
 		// 0  1  2  3  4  5  6  7  8  9  10   <- "x" occupies 10; cursor ends at 11
