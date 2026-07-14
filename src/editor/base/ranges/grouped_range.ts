@@ -71,8 +71,21 @@ export class CriticMarkupRanges {
 		return undefined;
 	}
 
+	/** CLOSED: also returns ranges that merely ABUT [start, end]. See `ranges_overlapping_interval`. */
 	ranges_in_interval(start: number, end: number) {
 		return this.tree.search([start, end]) as CriticMarkupRange[];
+	}
+
+	/**
+	 * Ranges sharing at least one character with [start, end). Excludes ranges that merely abut it.
+	 *
+	 * The interval tree cannot answer this: `@flatten-js/interval-tree`'s `not_intersect` uses a
+	 * strict `<`, so it reports two intervals that merely TOUCH as intersecting. The tree is still a
+	 * correct superset index, so search it and then apply the honest test to its results.
+	 */
+	ranges_overlapping_interval(start: number, end: number): CriticMarkupRange[] {
+		return (this.tree.search([start, end]) as CriticMarkupRange[])
+			.filter(range => range.overlaps(start, end));
 	}
 
 	ranges_in_intervals(intervals: { from: number; to: number }[]) {

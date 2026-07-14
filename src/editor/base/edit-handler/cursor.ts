@@ -25,7 +25,7 @@ function cat_different(old_cat: CharCategory | null, new_cat: CharCategory | nul
  * @remark This function exists to prevent having to iterate through all suggestion ranges when trying to find the new range after a cursor movement
  */
 function find_range_cursor(cursor_head: number, ranges: CriticMarkupRanges, range: CriticMarkupRange) {
-	if (range.cursor_inside(cursor_head))
+	if (range.interior_or_edge(cursor_head))
 		return range;
 	else {
 		const check_direction = range.cursor_before_range(cursor_head);
@@ -36,7 +36,7 @@ function find_range_cursor(cursor_head: number, ranges: CriticMarkupRanges, rang
 			if (check_direction ? range.cursor_before_range(cursor_head) : range.cursor_after_range(cursor_head))
 				range_idx += check_direction ? -1 : 1;
 			else
-				return range.cursor_inside(cursor_head) ? range : undefined;
+				return range.interior_or_edge(cursor_head) ? range : undefined;
 		}
 	}
 

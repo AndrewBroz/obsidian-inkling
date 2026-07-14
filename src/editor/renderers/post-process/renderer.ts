@@ -70,7 +70,7 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 
 			// TODO: Compare with converting to IntervalTree and getting range (probably slower)
 			// ranges_in_range = all_ranges.ranges_in_range(start_char, end_char, true);
-			ranges_in_range = all_ranges.filter(range => range.partially_in_range(start_char!, end_char!));
+			ranges_in_range = all_ranges.filter(range => range.adjoins(start_char!, end_char!));
 
 			if (!ranges_in_range.length) return;
 

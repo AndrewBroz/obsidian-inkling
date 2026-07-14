@@ -206,8 +206,30 @@ export abstract class CriticMarkupRange {
 		return this.text.slice(Math.max(3, from), Math.min(this.text.length - 3, to));
 	}
 
-	partially_in_range(start: number, end: number) {
-		// return this.from < end && start < this.to;
+	/**
+	 * The position lies strictly between this range's outer brackets: an edit here lands INSIDE the
+	 * markup. A position at either edge is BESIDE the range, not in it — use `touches` for that.
+	 */
+	interior(p: number) {
+		return this.from < p && p < this.to;
+	}
+
+	/**
+	 * This range and [start, end) share at least one character. A range that merely ABUTS the
+	 * interval — ends exactly at `start`, or begins exactly at `end` — does NOT overlap it.
+	 *
+	 * Degenerates correctly for a zero-width interval (a keystroke): `overlaps(p, p) === interior(p)`.
+	 */
+	overlaps(start: number, end: number) {
+		return this.from < end && start < this.to;
+	}
+
+	/**
+	 * Shares a character with [start, end) OR merely abuts it. This is the CLOSED test — a range
+	 * touching the interval's edge matches. Prefer `overlaps` unless you specifically want the
+	 * abutting range too.
+	 */
+	adjoins(start: number, end: number) {
 		return !(start > this.to || end < this.from);
 	}
 
@@ -236,7 +258,11 @@ export abstract class CriticMarkupRange {
 		return this.from === cursor || this.to === cursor;
 	}
 
-	cursor_inside(cursor: number) {
+	/**
+	 * The cursor is inside this range OR sitting on one of its edges. The CLOSED test. Prefer
+	 * `interior` unless you specifically mean to include the edges.
+	 */
+	interior_or_edge(cursor: number) {
 		return this.from <= cursor && cursor <= this.to;
 	}
 
@@ -277,7 +303,7 @@ export abstract class CriticMarkupRange {
 	}
 
 	cursor_move_through(cursor: number, right: boolean, movement: RANGE_CURSOR_MOVEMENT_OPTION) {
-		if (movement == RANGE_CURSOR_MOVEMENT_OPTION.UNCHANGED || !this.cursor_inside(cursor)) { /* No action */ }
+		if (movement == RANGE_CURSOR_MOVEMENT_OPTION.UNCHANGED || !this.interior_or_edge(cursor)) { /* No action */ }
 		else if (movement == RANGE_CURSOR_MOVEMENT_OPTION.IGNORE_COMPLETELY)
 			cursor = right ? this.to : this.from;
 		else
