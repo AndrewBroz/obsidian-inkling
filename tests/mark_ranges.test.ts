@@ -176,3 +176,55 @@ describe("edges: a keystroke beside a range is not a keystroke inside it", () =>
 		expect(mark("{>>c<<}rest", 0, 0, "x", SuggestionType.ADDITION)).toBe("{++x++}{>>c<<}rest");
 	});
 });
+
+describe("interior: an edit inside a highlight splits it", () => {
+	//  {  =  =  h  e  r  e  =  =  }
+	//  0  1  2  3  4  5  6  7  8  9   <- `to` is 10; content "here" is 3..7
+	//
+	// EXPL: CriticMarkup cannot nest, so a tracked change inside a highlight has nowhere to live.
+	//       The old code teleported it out of the highlight's far side. Splitting keeps BOTH the
+	//       highlight and the tracked change, losslessly, in valid CriticMarkup.
+	//       A later phase's overlap dialect expresses this properly as {==#a1 h{++x++}ere==#a1}.
+	test("typing inside a highlight splits it around the addition", () => {
+		expect(mark("{==here==}", 4, 4, "x", SuggestionType.ADDITION)).toBe("{==h==}{++x++}{==ere==}");
+	});
+
+	test("the cursor lands after the typed character, not somewhere in the split's syntax", () => {
+		// {  =  =  h  =  =  }  {  +  +  x
+		// 0  1  2  3  4  5  6  7  8  9  10   <- "x" occupies 10; cursor ends at 11
+		const state = createRangeState("{==here==}", { enable_metadata: true, enable_author_metadata: true });
+		const edits = mark_ranges(state.field(rangeParser).ranges, state.doc, 4, 4, "x", SuggestionType.ADDITION);
+		expect(edits).toHaveLength(1);
+		expect(edits[0].start).toBe(10);
+		expect(edits[0].end).toBe(11);
+	});
+
+	test("typing at the very start of a highlight's CONTENT does not split — nothing is left of it", () => {
+		// position 3 is the first content char; the left half would be empty, so emit no empty range
+		expect(mark("{==here==}", 3, 3, "x", SuggestionType.ADDITION)).toBe("{++x++}{==here==}");
+	});
+
+	test("typing at the very end of a highlight's CONTENT does not split — nothing is right of it", () => {
+		expect(mark("{==here==}", 7, 7, "x", SuggestionType.ADDITION)).toBe("{==here==}{++x++}");
+	});
+
+	test("deleting inside a highlight splits it around the deletion", () => {
+		// delete "er" (content offsets 4..6)
+		expect(mark("{==here==}", 4, 6, "", SuggestionType.DELETION)).toBe("{==h==}{--er--}{==e==}");
+	});
+
+	test("a highlight's metadata is re-emitted on both halves of the split", () => {
+		// `{==` is 0..3, the 13-char metadata block `{"done":true}` is 3..16, `@@` is 16..18,
+		// content "here" is 18..22, `==}` is 22..25. The cursor sits after the "h", at 19.
+		const doc = `{=={"done":true}@@here==}`;
+		expect(mark(doc, 19, 19, "x", SuggestionType.ADDITION))
+			.toBe(`{=={"done":true}@@h==}{++x++}{=={"done":true}@@ere==}`);
+	});
+
+	test("a comment is NOT split — typing inside one edits the comment's prose", () => {
+		// A comment's body is prose, not document text. Editing it is editing the comment.
+		//  {  >  >  n  o  t  e  <  <  }
+		//  0  1  2  3  4  5  6  7  8  9
+		expect(mark("{>>note<<}", 4, 4, "x", SuggestionType.ADDITION)).toBe("{>>nxote<<}");
+	});
+});

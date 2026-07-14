@@ -480,6 +480,33 @@ export function mark_ranges(
 	//       query returned a highlight starting exactly at `from`, which the ignore-loop below then
 	//       jumped the whole operation past — silently relocating the user's keystroke.
 	const in_range = ranges.ranges_overlapping_interval(from, to);
+
+	// EXPL: The operation lands strictly INSIDE a single incompatible range (so it is the only range
+	//       the operation overlaps — ranges do not nest). The ignore-loop below cannot cope with that:
+	//       it jumps last_range_start past range.to, which silently relocated the user's edit to the
+	//       far side of the range (or, for a deletion, dropped it outright). Delegate to mark_range,
+	//       which emits the range's own split affixes around the edit:
+	//
+	//         HIGHLIGHT: CriticMarkup cannot nest, so a tracked change has nowhere to live *within*
+	//                    the highlight. Split the highlight around it — {==here==} + "x" after the h
+	//                    becomes {==h==}{++x++}{==ere==}. Nothing is lost, and both survive
+	//                    accept/reject.
+	//         COMMENT:   a comment's body is prose, not document text, so typing inside one is editing
+	//                    the comment — not making a tracked change to the note. Apply the edit
+	//                    verbatim (REGULAR); never split, never track.
+	if (!force && in_range.length === 1 && in_range[0].encloses_range(from, to, true) &&
+		(type === SuggestionType.ADDITION || type === SuggestionType.DELETION ||
+			type === SuggestionType.SUBSTITUTION) &&
+		should_ignore_range(in_range[0], type, metadata_fields)
+	) {
+		const range = in_range[0];
+		if (range.type === SuggestionType.HIGHLIGHT || range.type === SuggestionType.COMMENT) {
+			const inner_type = range.type === SuggestionType.COMMENT ? MarkAction.REGULAR : type;
+			const edit = mark_range(ranges, text, from, to, inserted, inner_type, metadata_fields);
+			return edit ? [edit] : [];
+		}
+	}
+
 	const left_range = in_range.at(0);
 	const right_range = in_range.at(-1);
 
