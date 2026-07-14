@@ -149,14 +149,64 @@ describe("marking over pending additions consumes them (reject-all safety)", () 
 		expect(accept_all(output)).toBe("abqef");
 	});
 
-	// BUG: Partial coverage of a pending addition still folds the covered slice —
-	//      reject-all resurrects it ("abcef" instead of "abef"). Full-coverage retraction
-	//      only, by design of the Phase 3A fix; scheduled for a later phase.
-	//      Do NOT "fix" this expectation without implementing partial-coverage retraction.
-	test("KNOWN RESIDUAL: partial coverage of an addition still folds the covered slice", () => {
-		const output = mark("ab{++cd++}ef", 0, 6, "", SuggestionType.DELETION);
-		expect(output).toBe("{~~abc~>d~~}ef");
-		expect(reject_all(output)).toBe("abcef"); // ideal would be "abef"
+	describe("partial coverage of a pending addition RETRACTS it", () => {
+		// EXPL: "{++cd++}" means c and d were never in the base document -- they are pending. Deleting
+		//       across part of that addition used to FOLD the covered slice into the deletion's old-text,
+		//       so reject-all resurrected a character that never existed.
+		//
+		//       reject_all is the oracle here: rejecting everything must return the BASE document, and the
+		//       base document never contained "c". accept_all must still be what the user meant.
+		test("deleting across the front of an addition drops the covered slice", () => {
+			//        a b { + + c d + + } e f
+			//        0 1 2 3 4 5 6 7 8 9
+			// delete [0, 6) -- that is "ab" plus the addition's "c"
+			const output = mark("ab{++cd++}ef", 0, 6, "", SuggestionType.DELETION);
+			// EXPL: The brief guessed "{--ab--}{++d++}ef". mark_range instead MERGES the surviving pending
+			//       "d" into the new substitution's inserted half: the deletion of base "ab" abuts the
+			//       addition, so DELETION+ADDITION merges to a SUBSTITUTION whose old-text is "ab" and
+			//       whose new-text is the uncovered remainder "d". BOTH oracle invariants hold identically
+			//       -- reject drops "c"/"d" and restores "ab"; accept keeps "d", drops "ab" -- so the
+			//       shape is negotiable per the brief. The covered "c" is GONE either way.
+			expect(output).toBe("{~~ab~>d~~}ef");
+			expect(reject_all(output)).toBe("abef"); // "ab" restored, "d" dropped, "c" GONE
+			expect(accept_all(output)).toBe("def"); // "ab" deleted, "d" kept
+		});
+
+		test("deleting across the back of an addition drops the covered slice", () => {
+			// delete from inside the addition (after "c") through "ef"
+			const output = mark("ab{++cd++}ef", 6, 12, "", SuggestionType.DELETION);
+			expect(output).toBe("ab{++c++}{--ef--}");
+			expect(reject_all(output)).toBe("abef");
+			expect(accept_all(output)).toBe("abc");
+		});
+
+		test("FULL coverage still retracts (no regression)", () => {
+			const output = mark("ab{++cd++}ef", 2, 10, "", SuggestionType.DELETION);
+			expect(reject_all(output)).toBe("abef");
+			expect(accept_all(output)).toBe("abef");
+		});
+
+		// EXPL: Deleting a span WHOLLY INSIDE a single pending addition (neither end covers a base
+		//       character) currently no-ops rather than splitting the addition into {++c++}{++f++}.
+		//       That is an ACCEPT-side limitation, NOT the reject-side resurrection this task fixes:
+		//       reject_all still equals the base document ("abgh"), which is the contract. The covered
+		//       "de" is not resurrected -- it simply is not yet removed on accept. Characterised in
+		//       .superpowers/sdd/task-6-report.md; the reject invariant (asserted first) is what holds.
+		test("deleting the MIDDLE of an addition does not resurrect on reject (accept-side residual)", () => {
+			//        a b { + + c d e f + + } g h
+			//        0 1 2 3 4 5 6 7 8 9 ...
+			const output = mark("ab{++cdef++}gh", 6, 8, "", SuggestionType.DELETION);
+			expect(reject_all(output)).toBe("abgh"); // THE CONTRACT: "de" is not resurrected
+			// accept-side residual: the pending "de" is not yet dropped (no split into {++cf++}).
+			expect(accept_all(output)).toBe("abcdefgh");
+		});
+
+		test("a substitution's inserted half is a pending addition too", () => {
+			// {~~old~>new~~}: "new" is pending, "old" is base. Deleting across part of "new" must not
+			// resurrect it on reject.
+			const output = mark("x{~~old~>new~~}y", 0, 12, "", SuggestionType.DELETION);
+			expect(reject_all(output)).toBe("xoldy");
+		});
 	});
 });
 

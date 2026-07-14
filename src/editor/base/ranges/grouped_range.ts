@@ -137,16 +137,24 @@ export class CriticMarkupRanges {
 		for (const range of ranges) {
 			if (prev_range !== -1)
 				output += doc.sliceString(prev_range, range.from);
-			if (drop_pending_additions && from <= range.from && range.to <= to) {
-				// EXPL: A pending addition consumed by a deletion/substitution mark is a retracted
-				//       suggestion — its text was never in the base document, so folding it into
-				//       the new range would make reject-all resurrect it.
+			if (drop_pending_additions && range.overlaps(from, to)) {
+				// EXPL: A pending addition consumed by a deletion/substitution mark is a RETRACTED
+				//       suggestion — its text was never in the base document, so folding it into the new
+				//       range would make reject-all resurrect it.
+				//
+				//       This used to require FULL coverage (`from <= range.from && range.to <= to`), so a
+				//       partial deletion across an addition folded the covered slice in and reject-all
+				//       brought back a character the user had never committed. Any overlap retracts now;
+				//       the UNCOVERED remainder survives as an addition via mark_range's split affixes /
+				//       the abutting-range merge.
 				if (range.type === SuggestionType.ADDITION) {
-					// contributes nothing
-				} else if (range.type === SuggestionType.SUBSTITUTION)
+					// contributes nothing — the covered slice is retracted
+				} else if (range.type === SuggestionType.SUBSTITUTION) {
+					// only the base ("old") half was ever in the document; the inserted half is pending
 					output += range.unwrap_parts()[0];
-				else
+				} else {
 					output += range.unwrap_slice(Math.max(0, from), to);
+				}
 			} else {
 				output += range.unwrap_slice(Math.max(0, from), to);
 			}
