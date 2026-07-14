@@ -106,9 +106,13 @@
 //       so any arrangement that paints them on two nested elements STACKS them into something darker
 //       than either — which is exactly the "highlights are additive, and go solid after a few clicks"
 //       bug. One painter, one layer, by construction.
+// EXPL: No border-radius. A highlight is a MARK ON TEXT, not a chip or a badge, and it has to survive
+//       being split: a highlight that wraps across a line break renders as several boxes, and rounding
+//       every one of them puts stray rounded caps mid-word at each wrap point. Squared edges also let
+//       adjacent highlights read as one continuous mark instead of a row of pills. Google Docs draws
+//       it square for the same reasons.
 .cmtr-highlight {
   background-color: var(--highlight-color);
-  border-radius: var(--radius-s);
   transition: background-color 120ms ease-in-out;
 }
 
