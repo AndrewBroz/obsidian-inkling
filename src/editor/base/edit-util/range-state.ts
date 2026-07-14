@@ -119,7 +119,6 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 				dangling_comments.set(range.from, range as CommentRange);
 		}
 
-		// FIXME: Rare cases of comment ranges in threads being duplicated due to editor changes
 		if (dangling_comments.size) {
 			const comment_threads: CommentRange[][] = [];
 			let last_range: CommentRange | undefined = undefined;
@@ -140,10 +139,26 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 
 			for (const thread of comment_threads) {
 				const head = thread[0];
-				const adjacent_range = value.ranges.tree.search([head.from, head.from])[0] as CriticMarkupRange;
-				adjacent_range!.replies.length = 0;
-				for (const comment of thread.slice(adjacent_range === head ? 1 : 0))
-					comment.add_reply(adjacent_range);
+
+				// EXPL: The anchor is the range immediately to the LEFT of the head -- the one whose `to`
+				//       is the head's `from`. It is never the head itself.
+				//
+				//       This used to be `search([head.from, head.from])[0]`. A closed-interval point
+				//       search returns BOTH the head (it begins there) and the anchor (it ends there --
+				//       touching counts), and `[0]` picked one in interval-tree TRAVERSAL order, which is
+				//       not document order and which shifts as the tree rebalances during editing. So the
+				//       same document rebuilt its threads differently on different keystrokes, and since
+				//       only the picked range's `replies` was cleared, the other kept its stale ones.
+				//       That was the duplication.
+				const anchor = (value.ranges.tree.search([head.from, head.from]) as CriticMarkupRange[])
+					.find(range => range !== head && range.to === head.from);
+
+				// No anchor => this is a bare thread and the head is its own base.
+				const base = anchor ?? head;
+
+				base.replies.length = 0;
+				for (const comment of thread.slice(base === head ? 1 : 0))
+					comment.add_reply(base);
 			}
 		}
 
