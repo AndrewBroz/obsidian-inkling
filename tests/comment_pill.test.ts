@@ -34,6 +34,29 @@ describe("pill_eligible", () => {
 		expect(pill_eligible(state)).toBe(false);
 	});
 
+	// EXPL: CriticMarkup ranges cannot nest, so a selection that SHARES characters with an existing
+	//       range has nowhere clean to wrap. But a selection that merely TOUCHES a range's edge —
+	//       shares no character with it — wraps perfectly well; the abutted range is left untouched
+	//       either way. `ranges_in_interval` (the closed-interval predicate this line replaced) could
+	//       not tell "touches the edge" apart from "shares a character": both are reported as hits.
+	//       `ranges_overlapping_interval` applies the honest overlap test on top of the tree search,
+	//       so only genuine character-sharing counts. [0,2) ends exactly at the addition range's left
+	//       edge ([2,11)) — pinning this guards against silently regressing to the closed predicate.
+	test("a selection abutting the left edge of an existing range is eligible", () => {
+		const doc = "he{++llo++} world";
+		const state = stateWithSelection(doc, 0, 2);
+		expect(pill_eligible(state)).toBe(true);
+	});
+
+	// EXPL: Mirror image on the other edge: [11,16) begins exactly at the range's right edge. This
+	//       goes through a different guard in mark.ts's ignore-loop (asymmetric left/right handling),
+	//       so the left-edge case above does not exercise it — it needs its own pin.
+	test("a selection abutting the right edge of an existing range is eligible", () => {
+		const doc = "he{++llo++} world";
+		const state = stateWithSelection(doc, 11, 16);
+		expect(pill_eligible(state)).toBe(true);
+	});
+
 	test("a selection inside a comment is not eligible", () => {
 		const doc = "hello {>>note<<} world";
 		const inside_start = doc.indexOf("note");
