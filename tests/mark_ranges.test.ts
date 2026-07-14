@@ -43,6 +43,21 @@ function reject_all(doc: string): string {
 	return applyToText(doc, (range) => range.reject(), state.field(rangeParser).ranges.ranges);
 }
 
+// EXPL: The underlying document text: every suggestion rejected, and highlight markup (an
+//       annotation, not text) removed. THE data-safety invariant for an operation that consumes
+//       highlighted text is base_text(output) === base_text(input): not one character of the
+//       user's text is lost, and not one is resurrected.
+//
+//       reject_all alone cannot carry that weight here. A deletion that swallows highlighted text
+//       destroys the highlight's brackets, and rejecting the deletion cannot put them back:
+//       CriticMarkup cannot nest, so a pending deletion has nowhere to record "this text used to
+//       be highlighted". (The same is already true of the split in Task 3: reject_all of
+//       "{==h==}{++x++}{==ere==}" is "{==h==}{==ere==}", not "{==here==}".) Every test below
+//       still asserts the exact reject_all string, so any change to that is deliberate.
+function base_text(doc: string): string {
+	return reject_all(doc).replaceAll("{==", "").replaceAll("==}", "");
+}
+
 describe("mark_ranges in plain text", () => {
 	test("insertion wraps in addition markup", () => {
 		expect(mark("hello world", 5, 5, " big", SuggestionType.ADDITION)).toBe("hello{++ big++} world");
@@ -233,5 +248,82 @@ describe("interior: an edit inside a highlight splits it", () => {
 		//  {  >  >  n  o  t  e  <  <  }
 		//  0  1  2  3  4  5  6  7  8  9
 		expect(mark("{>>note<<}", 4, 4, "x", SuggestionType.ADDITION)).toBe("{>>nxote<<}");
+	});
+});
+
+describe("overlap: an operation covering part of a highlight splits it, and never drops the edit", () => {
+	// EXPL: THE SILENTLY TRUNCATED EDIT. mark_ranges' ignore-loop emitted an edit for the region
+	//       BEFORE an incompatible range and then jumped `last_range_start = range.to`. The region
+	//       INSIDE the range was marked by nobody: it just vanished. Selecting highlighted text and
+	//       pressing Delete did nothing at all ("x{==here==}y" -> unchanged); a selection running
+	//       from inside a highlight into the text after it deleted only the part outside it.
+	//
+	//       A highlight the operation actually covers is now SPLIT at the coverage boundary: the
+	//       covered content is marked, the uncovered content stays highlighted. A COMMENT is never
+	//       split — its body is prose, not document text (see the comment cases below).
+
+	test("selecting exactly a highlight and deleting deletes it (it used to do nothing at all)", () => {
+		//  x  {  =  =  h  e  r  e  =  =  }  y
+		//  0  1  2  3  4  5  6  7  8  9 10 11   <- the highlight is [1, 11)
+		const output = mark("x{==here==}y", 1, 11, "", SuggestionType.DELETION);
+		expect(output).toBe("x{--here--}y");
+		expect(accept_all(output)).toBe("xy");
+		expect(reject_all(output)).toBe("xherey");
+		expect(base_text(output)).toBe(base_text("x{==here==}y"));
+	});
+
+	test("deleting from inside a highlight through the text after it deletes BOTH parts", () => {
+		//  {  =  =  h  e  r  e  =  =  }  r  e  s  t
+		//  0  1  2  3  4  5  6  7  8  9 10 11 12 13   <- [5, 12) covers "re" of "here" and "re" of "rest"
+		const output = mark("{==here==}rest", 5, 12, "", SuggestionType.DELETION);
+		expect(output).toBe("{==he==}{--rere--}st");
+		expect(accept_all(output)).toBe("{==he==}st");
+		expect(reject_all(output)).toBe("{==he==}rerest");
+		expect(base_text(output)).toBe(base_text("{==here==}rest"));
+	});
+
+	test("selecting all of a document with a highlight in it and deleting deletes all of it", () => {
+		//  a  b  {  =  =  c  d  =  =  }  e  f
+		//  0  1  2  3  4  5  6  7  8  9 10 11   <- [0, 12) is the whole document
+		const output = mark("ab{==cd==}ef", 0, 12, "", SuggestionType.DELETION);
+		expect(output).toBe("{--abcdef--}");
+		expect(accept_all(output)).toBe("");
+		expect(reject_all(output)).toBe("abcdef");
+		expect(base_text(output)).toBe(base_text("ab{==cd==}ef"));
+	});
+
+	test("a deletion ending inside a highlight consumes only the covered part of its content", () => {
+		// [0, 6) covers "ab" and the "c" of the highlighted "cd"; "d" stays highlighted
+		const output = mark("ab{==cd==}ef", 0, 6, "", SuggestionType.DELETION);
+		expect(output).toBe("{--abc--}{==d==}ef");
+		expect(accept_all(output)).toBe("{==d==}ef");
+		expect(reject_all(output)).toBe("abc{==d==}ef");
+		expect(base_text(output)).toBe(base_text("ab{==cd==}ef"));
+	});
+
+	test("a substitution across a highlight replaces the highlighted text too", () => {
+		const output = mark("ab{==cd==}ef", 0, 12, "q", SuggestionType.SUBSTITUTION);
+		expect(output).toBe("{~~abcdef~>q~~}");
+		expect(accept_all(output)).toBe("q");
+		expect(reject_all(output)).toBe("abcdef");
+		expect(base_text(output)).toBe(base_text("ab{==cd==}ef"));
+	});
+
+	test("a comment is NOT split: a deletion across one leaves the comment's prose alone", () => {
+		//  a  b  {  >  >  n  o  t  e  <  <  }  e  f
+		//  0  1  2  3  4  5  6  7  8  9 10 11 12 13
+		const output = mark("ab{>>note<<}ef", 0, 14, "", SuggestionType.DELETION);
+		expect(output).toBe("{--ab--}{>>note<<}{--ef--}");
+		expect(accept_all(output)).toBe("");
+		expect(reject_all(output)).toBe("abef");
+		expect(base_text(output)).toBe(base_text("ab{>>note<<}ef"));
+	});
+
+	test("a comment is NOT split: a deletion starting inside one deletes only the text after it", () => {
+		const output = mark("{>>note<<}rest", 5, 12, "", SuggestionType.DELETION);
+		expect(output).toBe("{>>note<<}{--re--}st");
+		expect(accept_all(output)).toBe("st");
+		expect(reject_all(output)).toBe("rest");
+		expect(base_text(output)).toBe(base_text("{>>note<<}rest"));
 	});
 });

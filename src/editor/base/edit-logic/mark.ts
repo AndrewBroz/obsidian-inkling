@@ -481,6 +481,13 @@ export function mark_ranges(
 	//       jumped the whole operation past — silently relocating the user's keystroke.
 	const in_range = ranges.ranges_overlapping_interval(from, to);
 
+	// EXPL: A DEGENERATE operation — a collapsed cursor with nothing inserted — has nothing to split a
+	//       range around, so splitting anyway would only damage the user's markup to make room for an
+	//       empty range. Both the early-out and the ignore-loop below check this before splitting.
+	const degenerate = from === to && !inserted.length;
+	const is_suggestion = type === SuggestionType.ADDITION || type === SuggestionType.DELETION ||
+		type === SuggestionType.SUBSTITUTION;
+
 	// EXPL: The operation lands strictly INSIDE a single incompatible range (so it is the only range
 	//       the operation overlaps — ranges do not nest). The ignore-loop below cannot cope with that:
 	//       it jumps last_range_start past range.to, which silently relocated the user's edit to the
@@ -495,12 +502,9 @@ export function mark_ranges(
 	//                    the comment — not making a tracked change to the note. Apply the edit
 	//                    verbatim (REGULAR); never split, never track.
 	//
-	//       `from !== to || inserted.length` guards against a DEGENERATE operation: a collapsed cursor
-	//       with nothing inserted has nothing to split the range around, so splitting anyway would only
-	//       damage the enclosing range to make room for an empty insertion.
-	if (!force && (from !== to || inserted.length) && in_range.length === 1 && in_range[0].encloses_range(from, to, true) &&
-		(type === SuggestionType.ADDITION || type === SuggestionType.DELETION ||
-			type === SuggestionType.SUBSTITUTION) &&
+	if (
+		!force && !degenerate && in_range.length === 1 && in_range[0].encloses_range(from, to, true) &&
+		is_suggestion &&
 		should_ignore_range(in_range[0], type, metadata_fields)
 	) {
 		const range = in_range[0];
@@ -523,8 +527,27 @@ export function mark_ranges(
 	let last_range_start = from;
 	const range_operations: EditorSuggestion[] = [];
 
+	// EXPL: THE SILENTLY TRUNCATED EDIT. The loop below emits an edit for the region BEFORE an ignored
+	//       range and then jumps `last_range_start = range.to`. The region INSIDE the range is marked by
+	//       nobody: it just vanishes. Selecting exactly a highlight and pressing Delete did nothing at
+	//       all; a selection running from inside a highlight into the text after it deleted only the
+	//       part outside the highlight and silently discarded the rest.
+	//
+	//       A HIGHLIGHT the operation actually covers is therefore NOT ignored: it is handed to
+	//       mark_range, which splits it at the coverage boundary (mergeable_range rejects the
+	//       type-incompatible highlight, and split_left_range/split_right_range emit its closing and
+	//       reopening brackets as affixes). The covered content is marked; the uncovered content stays
+	//       highlighted. CriticMarkup cannot nest, so the covered content's highlight cannot survive —
+	//       but not one character of the user's text is lost, which is what the old code did.
+	//
+	//       A COMMENT is still ignored, and is never split: its body is prose, not document text, so a
+	//       selection sweeping over one must leave its text alone (same rule as the early-out above).
+	const split_highlights = !force && !degenerate && is_suggestion;
+
 	if (!force) {
 		for (const range of in_range) {
+			if (split_highlights && range.type === SuggestionType.HIGHLIGHT)
+				continue;
 			if (should_ignore_range(range, type, metadata_fields)) {
 				if (last_range_start < range.from) {
 					const adj_type = type === SuggestionType.SUBSTITUTION ? SuggestionType.DELETION : type;
