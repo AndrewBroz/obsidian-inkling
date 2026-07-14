@@ -476,7 +476,10 @@ export function mark_ranges(
 	metadata_fields?: MetadataFields,
 	force = false,
 ): EditorSuggestion[] {
-	const in_range = ranges.ranges_in_interval(from, to);
+	// EXPL: STRICT. A range that merely ABUTS this operation is beside it, not in it. The closed
+	//       query returned a highlight starting exactly at `from`, which the ignore-loop below then
+	//       jumped the whole operation past — silently relocating the user's keystroke.
+	const in_range = ranges.ranges_overlapping_interval(from, to);
 	const left_range = in_range.at(0);
 	const right_range = in_range.at(-1);
 

@@ -38,7 +38,7 @@ export function addCommentToView(
 	//       plain at-cursor comment below.
 	if (!range && !selection.empty) {
 		const ranges = editor.state.field(rangeParser).ranges;
-		if (ranges.ranges_in_interval(selection.from, selection.to).length === 0) {
+		if (ranges.ranges_overlapping_interval(selection.from, selection.to).length === 0) {
 			// EXPL: The draft path is only viable where the provisional card can actually be RENDERED,
 			//       i.e. where the annotation gutter is installed. It is not always: `annotation_gutter`
 			//       is a user-facing toggle (GutterSettings.svelte) that leaves the gutter extension —

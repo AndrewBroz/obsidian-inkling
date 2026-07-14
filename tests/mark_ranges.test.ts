@@ -153,3 +153,26 @@ describe("mark_ranges characterization (snapshot-pinned)", () => {
 			.toMatchSnapshot();
 	});
 });
+
+describe("edges: a keystroke beside a range is not a keystroke inside it", () => {
+	// EXPL: THE TELEPORTING KEYSTROKE. Typing at position 0, immediately before a highlight that
+	//       begins at position 0, used to relocate the character to the FAR SIDE of the highlight:
+	//       "{==h==}rest" + "x" gave "{==h==}{++x++}rest".
+	//
+	//       Cause: mark_ranges asked ranges_in_interval(0, 0), whose closed-interval search returns
+	//       the highlight (it TOUCHES 0). The ignore-loop then treated the highlight as an atomic
+	//       island: its guard `if (last_range_start < range.from)` was `0 < 0` — false — so it
+	//       emitted no edit for "before the range", then set last_range_start = range.to, jumping
+	//       the insertion point clean past the highlight.
+	test("typing immediately BEFORE a highlight inserts before it, not after it", () => {
+		expect(mark("{==h==}rest", 0, 0, "x", SuggestionType.ADDITION)).toBe("{++x++}{==h==}rest");
+	});
+
+	test("typing immediately AFTER a highlight inserts after it", () => {
+		expect(mark("rest{==h==}", 11, 11, "x", SuggestionType.ADDITION)).toBe("rest{==h==}{++x++}");
+	});
+
+	test("typing immediately BEFORE a comment inserts before it", () => {
+		expect(mark("{>>c<<}rest", 0, 0, "x", SuggestionType.ADDITION)).toBe("{++x++}{>>c<<}rest");
+	});
+});
