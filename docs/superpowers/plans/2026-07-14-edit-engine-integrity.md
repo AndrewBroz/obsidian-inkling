@@ -1466,3 +1466,102 @@ must equal what the user meant. Assert both on every test — the output string 
 - [ ] **Step 4:** Run; confirm pass. Update the `deletion across highlight range` snapshot with `-u` and
       **state in the commit message why the snapshot changed**.
 - [ ] **Step 5:** Full suite. Commit.
+
+---
+
+## Task 4b: The interval tree's `max` augmentation is broken (CRITICAL, pre-existing, corrupts documents)
+
+**Added mid-execution.** Found by Task 4's review. This is live on `main` today and has been for the life of
+the plugin. It is the most serious defect this phase has found.
+
+**Files:**
+- Modify: `src/editor/base/edit-util/range-state.ts:88-114` (`visitNode`)
+- Modify: `src/editor/base/edit-logic/alter-suggestion.ts:23-27` (defensive dedupe)
+- Test: `tests/range_state_tree.test.ts` (NEW)
+
+### The defect
+
+`range-state.ts` mutates range positions **in place** on the interval tree's keys (a deliberate optimisation —
+it avoids a full rebuild per keystroke), then hand-rolls the `max` fixup:
+
+```ts
+node.item.key.low  = node.item.value.from;    // in-place key shift
+node.item.key.high = node.item.value.to;
+...
+if (node.left != nil_node)  node.max.low  = node.left.max.low;
+if (node.right != nil_node) node.max.high = node.right.max.high;
+```
+
+**Bug 1 — the writes go nowhere.** `@flatten-js/interval-tree`'s `Interval`:
+```js
+get max() { return this.clone(); }     // interval.js:43 — A CLONE
+```
+`node.max` is never aliased to `item.key`. Every `node.max.low = …` writes into a throwaway object and is
+discarded. **This code has been a no-op since it was written.**
+
+**Bug 2 — the invariant is wrong anyway.** The correct `max` is over the node's **own key and both children**.
+This ignores the node's just-shifted key, ignores the opposite child in each branch, and never updates a leaf.
+
+### Why it corrupts documents
+
+`Node.not_intersect_left_subtree` prunes a subtree when `left.max.high < search.low` (`node.js:92-96`). With a
+stale `max`, **the tree prunes subtrees that DO contain matches** — `tree.search()` silently returns
+**incomplete** results.
+
+A range that should have been removed is not found by the search, so it is never deleted — but it *is*
+regenerated. Result: **two distinct range objects at the same document position.**
+
+`acceptSuggestions` (`alter-suggestion.ts:23-27`) does not dedupe, so the duplicate emits two overlapping
+`ChangeSpec`s, and `ChangeSet.of` composes rather than rejects them:
+
+```
+BEFORE Accept All:  ...{++bravo++}z{>>c2<<} two {++delta++}...
+AFTER  Accept All:  PPPPPPPPalpha one bravobravo} two delta three echo four
+EXPECTED:           PPPPPPPPalpha onez bravo two delta three echo four
+```
+
+Text duplicated. A stray `}` left in the note. **The user's typed `z` silently lost.**
+
+Also: doubled gutter comment cards, stacked comment icons, `length === 1` mispredictions in
+`edit-mode.ts:59` / `suggestion-mode.ts:155`, and the corruption is persisted to the vault cache
+(`main.ts:127`).
+
+**Frequency: 396 of 1000 random 6-edit sequences (39.6%).**
+
+### The design
+
+The library already ships the correct routine — `Node.update_max()` (`node.js:78-90`). It **reassigns**
+`this.max` (rather than mutating a clone) and takes the max over the node's own key and both children.
+
+Replace the hand-rolled fixup with it. **`max` depends on the children, so the recomputation must run
+BOTTOM-UP (post-order).** The current `visitNode` applies its fixup in-order, which would still be wrong even
+with the right formula. Restructure:
+
+```ts
+function visitNode(node) {
+    if (node == null || node === nil_node) return;
+    visitNode(node.left);
+    visitNode(node.right);
+    // keys were shifted in place above; recompute this node's key, THEN its max — post-order, because
+    // a node's max is defined over its own key AND both children's maxes.
+    node.item.key.low  = node.item.value.from;
+    node.item.key.high = node.item.value.to;
+    node.update_max();
+}
+```
+Verify this against the real `visitNode` — the key-shift may need to stay where it is and only the `max`
+recomputation move to post-order. Derive it; do not guess.
+
+- [ ] **Step 1:** Write a failing test that asserts `tree.search()` returns COMPLETE results after in-place
+      key shifts. Assert directly on the tree, not through the UI. Then write the end-to-end one: build the
+      repro document, apply the two edits, and assert `ranges.ranges` contains no two distinct objects at the
+      same `[from, to)`.
+- [ ] **Step 2:** Write the corruption test: the repro doc + 2 edits + Accept All must produce the EXPECTED
+      text above, not the duplicated one. This is the test that matters.
+- [ ] **Step 3:** Run them; confirm they fail exactly as described.
+- [ ] **Step 4:** Fix `visitNode`. Add a defensive dedupe in `acceptSuggestions`/`rejectSuggestions` so a
+      duplicate can never again compose into overlapping changes — belt and braces, because this failure mode
+      is silent.
+- [ ] **Step 5:** Re-run the 1000-sequence fuzz from Task 3b's harness. The 396 duplicate-range failures must
+      go to **0**. Report the number.
+- [ ] **Step 6:** Full suite. Commit.
