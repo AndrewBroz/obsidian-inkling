@@ -648,14 +648,33 @@ export class AnnotationMarker extends GutterMarker {
 	}
 
 	/**
-	 * Called by GutterElement.setMarkers once this marker's DOM is actually in the document.
-	 * Reopening (and focusing) a reply box from inside toDOM() is a silent no-op: the node is not
-	 * attached yet.
+	 * Called by GutterElement.setMarkers right after `insertBefore` -- but for THIS gutter that is
+	 * not the same as "attached to the document". AnnotationUpdateContext (annotation-gutter.ts)
+	 * builds a block's GutterElement DETACHED and only appends it to the live gutter tree later, in
+	 * its `finish()` -- so a freshly-created block's `dom` is often still disconnected right here.
+	 * Reopening (and focusing) a reply box from inside toDOM() is a silent no-op too: the node is
+	 * not attached yet either way.
 	 */
 	afterAttach(dom: HTMLElement) {
-		if (!dom.isConnected || !this.reopen_on_attach) return;
+		if (!this.reopen_on_attach) return;
 		this.reopen_on_attach = false;
-		this.showReplyBox();
+
+		if (dom.isConnected) {
+			this.showReplyBox();
+			return;
+		}
+
+		// Not attached yet -- defer to the next measure, by which point
+		// AnnotationUpdateContext.finish() has appended this block's GutterElement to the live
+		// gutter. Re-check that `dom` is still this card's CURRENT thread -- a further rebuild
+		// (another re-home before this callback runs) would have replaced `annotation_thread`
+		// with a fresh node, and this stale one must not be reopened.
+		this.view.requestMeasure({
+			read: () => {
+				if (dom.isConnected && this.annotation_thread === dom)
+					this.showReplyBox();
+			},
+		});
 	}
 
 	focus() {

@@ -470,6 +470,74 @@ describe("provisional comment card", () => {
 		view.destroy();
 	});
 
+	// EXPL: THE ACTUAL REGRESSION. The annotation gutter builds a block's GutterElement DETACHED
+	//       and only appends it to the live gutter tree LATER, in AnnotationUpdateContext.finish()
+	//       (annotation-gutter.ts) -- which runs AFTER GutterElement.setMarkers (and therefore
+	//       afterAttach) has already returned. So `dom.isConnected` is routinely still false at
+	//       afterAttach time even for a marker that is about to be legitimately attached a moment
+	//       later. The test above pre-attaches `dom` by hand before calling afterAttach, which
+	//       papers over exactly this timing hole -- that is how the pill-focus fix regressed
+	//       without a red test. This test drives the DETACHED case afterAttach must actually
+	//       handle: defer the focus (via `view.requestMeasure`) rather than silently dropping it.
+	test("afterAttach defers focus via requestMeasure when the node is not yet connected", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
+		const focus_spy = jest.spyOn(ReplyBox.prototype, "focus").mockImplementation(() => {});
+		const requestMeasure_spy = jest.spyOn(view, "requestMeasure").mockImplementation(() => {});
+
+		const dom = marker.toDOM();
+		// `dom` is deliberately NOT attached to the document here.
+		marker.afterAttach(dom);
+
+		// Must not focus synchronously against a disconnected node...
+		expect(focus_spy).not.toHaveBeenCalled();
+		// ...but must have scheduled a deferred check via requestMeasure.
+		expect(requestMeasure_spy).toHaveBeenCalledTimes(1);
+		const request = requestMeasure_spy.mock.calls[0][0] as { read: () => void };
+		expect(typeof request.read).toBe("function");
+
+		// Once the node is actually attached and the measure's read callback runs, focus fires.
+		document.body.appendChild(dom);
+		request.read();
+
+		expect(focus_spy).toHaveBeenCalledTimes(1);
+
+		focus_spy.mockRestore();
+		requestMeasure_spy.mockRestore();
+		view.destroy();
+	});
+
+	// EXPL: The draft can be dismissed/rebuilt in the window between afterAttach scheduling the
+	//       measure and that measure's read callback actually running -- a second toDOM() call
+	//       replaces `built_reply_box`, and the FIRST (now-stale) box must never be focused once
+	//       it's too late for it to matter.
+	test("afterAttach's deferred focus is a no-op if the draft was rebuilt before the measure ran", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
+		const focus_spy = jest.spyOn(ReplyBox.prototype, "focus").mockImplementation(() => {});
+		const requestMeasure_spy = jest.spyOn(view, "requestMeasure").mockImplementation(() => {});
+
+		const dom = marker.toDOM();
+		marker.afterAttach(dom);
+		const request = requestMeasure_spy.mock.calls[0][0] as { read: () => void };
+
+		// A rebuild lands before the deferred read runs -- this is what "stale" means here.
+		document.body.appendChild(dom);
+		marker.toDOM();
+
+		request.read();
+
+		expect(focus_spy).not.toHaveBeenCalled();
+
+		focus_spy.mockRestore();
+		requestMeasure_spy.mockRestore();
+		view.destroy();
+	});
+
 	// EXPL: Pins the offsetTop crash guard (annotation-gutter.ts moveGutter). The marker list and
 	//       the DOM children of a GutterElement can disagree for one frame while a draft card is
 	//       alive; before the fix, moveGutter read `.offsetTop` off `children[markerIndex]`

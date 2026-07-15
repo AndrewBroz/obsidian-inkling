@@ -116,15 +116,34 @@ export class PendingAnnotationMarker extends GutterMarker {
 	}
 
 	/**
-	 * Called by GutterElement.setMarkers once this marker's DOM is actually in the document.
-	 * Focusing from inside toDOM() is a silent no-op: the node is not attached yet.
+	 * Called by GutterElement.setMarkers right after `insertBefore` -- but for THIS gutter that is
+	 * not the same as "attached to the document". AnnotationUpdateContext (annotation-gutter.ts)
+	 * builds a block's GutterElement DETACHED and only appends it to the live gutter tree later, in
+	 * its `finish()` -- so a freshly-created block's `dom` is often still disconnected right here.
+	 * Focusing from inside toDOM() is a silent no-op too: the node is not attached yet either way.
 	 */
 	afterAttach(dom: HTMLElement) {
 		// The draft can be torn down (Escape, a selection change, a gutter reflow) or rebuilt
 		// between toDOM() returning and this call, so `reply_box` may no longer be the box this
 		// call was meant to focus.
-		if (!dom.isConnected || this.reply_box !== this.built_reply_box) return;
-		this.reply_box?.focus();
+		const box = this.reply_box;
+		if (box == null || box !== this.built_reply_box) return;
+
+		if (dom.isConnected) {
+			box.focus();
+			return;
+		}
+
+		// Not attached yet -- defer to the next measure, by which point
+		// AnnotationUpdateContext.finish() has appended this block's GutterElement to the live
+		// gutter. Re-check the FULL staleness guard inside the callback: the draft can still be
+		// dismissed or rebuilt again before this runs.
+		this.view.requestMeasure({
+			read: () => {
+				if (dom.isConnected && this.reply_box === box && box === this.built_reply_box)
+					box.focus();
+			},
+		});
 	}
 
 	// EXPL: Clear the field BEFORE removing the child (never after): removeChild unloads the box,
