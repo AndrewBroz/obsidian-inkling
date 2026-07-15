@@ -31,6 +31,13 @@ export class PendingAnnotationMarker extends GutterMarker {
 	reply_box: ReplyBox | null = null;
 	/** In-progress comment text, cached across a card rebuild. @see toDOM */
 	draft_text = "";
+	/**
+	 * The reply box built by the MOST RECENT toDOM() call. Used by afterAttach as a staleness
+	 * guard: the draft can be torn down (Escape, a selection change, a gutter reflow) or rebuilt
+	 * between toDOM() returning and afterAttach() running, so `this.reply_box` may no longer be
+	 * the box this particular afterAttach call was meant to focus.
+	 */
+	private built_reply_box: ReplyBox | null = null;
 
 	constructor(from: number, to: number, public view: EditorView) {
 		super();
@@ -78,6 +85,10 @@ export class PendingAnnotationMarker extends GutterMarker {
 			new ReplyBox(app, container, {
 				placeholder: "Comment…",
 				value: this.draft_text,
+				// EXPL: This container is not attached to the document yet -- toDOM()'s return value
+				//       is what GutterElement.setMarkers hands to insertBefore, so focusing now would
+				//       be a silent no-op. afterAttach() below focuses explicitly once it is live.
+				focus: false,
 				onCommit: (text) => {
 					// EXPL: Drop the cache BEFORE dispatching, restore it only if the write was
 					//       refused. commitCommentDraft's dispatch is synchronous and tears this card
@@ -97,10 +108,23 @@ export class PendingAnnotationMarker extends GutterMarker {
 				},
 			}),
 		);
+		this.built_reply_box = this.reply_box;
 		this.component.load();
 
 		this.thread = thread;
 		return thread;
+	}
+
+	/**
+	 * Called by GutterElement.setMarkers once this marker's DOM is actually in the document.
+	 * Focusing from inside toDOM() is a silent no-op: the node is not attached yet.
+	 */
+	afterAttach(dom: HTMLElement) {
+		// The draft can be torn down (Escape, a selection change, a gutter reflow) or rebuilt
+		// between toDOM() returning and this call, so `reply_box` may no longer be the box this
+		// call was meant to focus.
+		if (!dom.isConnected || this.reply_box !== this.built_reply_box) return;
+		this.reply_box?.focus();
 	}
 
 	// EXPL: Clear the field BEFORE removing the child (never after): removeChild unloads the box,

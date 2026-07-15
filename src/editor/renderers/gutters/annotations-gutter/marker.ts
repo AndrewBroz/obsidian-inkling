@@ -445,6 +445,12 @@ export class AnnotationMarker extends GutterMarker {
 	reply_text: string = "";
 	/** Whether a reply box was open when the card was last torn down. @see toDOM */
 	reply_open: boolean = false;
+	/**
+	 * Set by toDOM() when a reopened reply box is owed to this card once it is actually attached
+	 * (see afterAttach below) -- showReplyBox() cannot run from inside toDOM() itself, since its
+	 * return value is not attached to the document yet at that point.
+	 */
+	private reopen_on_attach: boolean = false;
 
 	constructor(
 		public annotation: CriticMarkupRange,
@@ -630,14 +636,26 @@ export class AnnotationMarker extends GutterMarker {
 			this.component.addChild(new AnnotationNode(range, this));
 		this.component.load();
 
-		// EXPL: After `component.load()`, so addChild auto-loads the box the way it does on the
-		//       ordinary click path (showReplyBox always runs against an already-loaded Component).
-		//       `reply_text` survived the hideReplyBox() above, so the rebuilt box opens holding
-		//       exactly what the user had typed.
-		if (reopen)
-			this.showReplyBox();
+		// EXPL: showReplyBox() builds and focuses a box -- but `annotation_thread` has not been
+		//       returned to insertBefore yet at this point, so its DOM is still disconnected and
+		//       that focus would be a silent no-op. Defer to afterAttach(), which runs once
+		//       GutterElement.setMarkers has actually attached this node. `reply_text` survived the
+		//       hideReplyBox() above, so the box that opens there holds exactly what the user had
+		//       typed.
+		this.reopen_on_attach = reopen;
 
 		return this.annotation_thread;
+	}
+
+	/**
+	 * Called by GutterElement.setMarkers once this marker's DOM is actually in the document.
+	 * Reopening (and focusing) a reply box from inside toDOM() is a silent no-op: the node is not
+	 * attached yet.
+	 */
+	afterAttach(dom: HTMLElement) {
+		if (!dom.isConnected || !this.reopen_on_attach) return;
+		this.reopen_on_attach = false;
+		this.showReplyBox();
 	}
 
 	focus() {

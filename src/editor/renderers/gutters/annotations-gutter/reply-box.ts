@@ -9,6 +9,14 @@ export interface ReplyBoxOptions {
 	 * AnnotationMarker.toDOM) — the box is a fresh object, but the user's words are not.
 	 */
 	value?: string;
+	/**
+	 * Whether the box's editor grabs focus as soon as it finishes loading. Defaults to true.
+	 * Pass false when the box is being built INSIDE toDOM() -- its container is not attached to
+	 * the document yet at that point, so focusing then is a silent no-op. The caller is expected
+	 * to call this box's own `focus()` once its DOM is actually attached (see
+	 * PendingAnnotationMarker.afterAttach).
+	 */
+	focus?: boolean;
 	/** Returns true if the text was accepted and written; false for blank/rejected input. */
 	onCommit: (text: string) => boolean;
 	onDismiss: () => void;
@@ -57,6 +65,15 @@ export class ReplyBox extends Component {
 		return this.editor?.get() ?? "";
 	}
 
+	/**
+	 * Focuses this box's editor. Only meaningful once this box's own DOM is actually attached to
+	 * the document -- see the `focus` option above and PendingAnnotationMarker.afterAttach, the
+	 * caller that uses this to escape the toDOM()-time no-op.
+	 */
+	focus() {
+		this.editor?.focus();
+	}
+
 	onload() {
 		super.onload();
 
@@ -65,7 +82,7 @@ export class ReplyBox extends Component {
 				value: this.options.value ?? "",
 				cls: "cmtr-anno-gutter-reply-editor",
 				placeholder: this.options.placeholder,
-				focus: true,
+				focus: this.options.focus ?? true,
 				filteredExtensions: [this.app.plugins.plugins["inkling"].editorExtensions],
 
 				onEnter: (editor, _mod, shift) => {

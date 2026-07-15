@@ -137,6 +137,14 @@ export function asArray<T>(val: T | readonly T[]) {
 
 interface PersistentGutterMarker extends GutterMarker {
 	preventUnload?: boolean; // MODF: Prevents unloading of a marker if it used in both old and new GutterElement
+	/**
+	 * MODF: Optional hook, called after this marker's `toDOM()` return value has actually been
+	 * attached to the document (see GutterElement.setMarkers below). `toDOM()` runs BEFORE
+	 * `insertBefore` attaches its result, so a marker cannot focus (or measure) its own DOM from
+	 * inside toDOM() -- the node is still disconnected, and e.g. `HTMLElement.focus()` on a
+	 * disconnected node is a silent no-op. Anything that needs a live node goes here instead.
+	 */
+	afterAttach?(dom: HTMLElement): void;
 }
 
 export class GutterElement {
@@ -206,8 +214,15 @@ export class GutterElement {
 			}
 			if (!marker) break;
 			if (marker.toDOM && view) {
-				if (matched) domPos = domPos!.nextSibling;
-				else this.dom.insertBefore(marker.toDOM(view), domPos);
+				if (matched) {
+					domPos = domPos!.nextSibling;
+				} else {
+					// MODF: Hold the built node, attach it, and only THEN notify the marker -- see
+					// the `afterAttach` doc above.
+					const dom = marker.toDOM(view);
+					this.dom.insertBefore(dom, domPos);
+					(marker as PersistentGutterMarker).afterAttach?.(dom as HTMLElement);
+				}
 			}
 			if (matched) iOld++;
 		}

@@ -199,7 +199,12 @@ describe("AnnotationMarker reply box lifecycle", () => {
 		expect(marker.reply_box).not.toBeNull();
 
 		const stale_box = marker.reply_box;
-		marker.toDOM();
+		const dom = marker.toDOM();
+		// EXPL: The reopen is deferred to afterAttach() -- toDOM()'s return value is not attached
+		//       to the document yet, so showReplyBox() cannot run from inside toDOM() itself (see
+		//       AnnotationMarker.afterAttach). Simulate what GutterElement.setMarkers does.
+		document.body.appendChild(dom);
+		marker.afterAttach(dom);
 
 		// EXPL: Without the fix, `reply_box` would still hold the box bound to the OLD (now
 		// detached) annotation_thread, and showReplyBox()'s `if (this.reply_box) return;` guard
@@ -222,7 +227,10 @@ describe("AnnotationMarker reply box lifecycle", () => {
 		openReplyBox(marker);
 		(marker.reply_box!.editor as unknown as MockEditor).set("half-written reply");
 
-		marker.toDOM();
+		const dom = marker.toDOM();
+		// EXPL: The reopen is deferred to afterAttach() -- see the comment in the previous test.
+		document.body.appendChild(dom);
+		marker.afterAttach(dom);
 		marker.reply_box?.load();
 
 		expect(marker.reply_box).not.toBeNull();
