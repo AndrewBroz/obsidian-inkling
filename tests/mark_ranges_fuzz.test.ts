@@ -88,8 +88,9 @@ describe("fuzz: a deletion/substitution mark never resurrects a pending addition
 		//         substitution_class -- the op partially covers a SUBSTITUTION range (its inserted "new"
 		//                            half is cut through). Handled by a DIFFERENT code path
 		//                            (mark.ts's SubstitutionRange CASE branches / the substitution merge
-		//                            branches), untouched by this task and out of its scope. Characterised,
-		//                            not asserted (see .superpowers/sdd/task-6-report.md).
+		//                            branches), which Task 6b took 78 -> 9; the residual 9 are a separate PRE-EXISTING old-half
+		//                            offset-math bug ("old" -> "oldld"), not a regression. Characterised,
+		//                            not asserted (see .superpowers/sdd/task-6b-report.md).
 		let addition_class = 0;
 		let substitution_class = 0;
 		let highlight_bracket_loss = 0; // reject differs but base_text does not (Task 3b unrepresentable)
@@ -133,6 +134,7 @@ describe("fuzz: a deletion/substitution mark never resurrects a pending addition
 					if (partial_sub)
 						substitution_class++;
 					else {
+						// NOTE: 0 after Task 6 — asserted below.
 						addition_class++;
 						if (corruption_examples.length < 12) {
 							corruption_examples.push(

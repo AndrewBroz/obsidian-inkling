@@ -320,34 +320,34 @@ function mark_range(
 							end_offset,
 						));
 						from = left_range.from;
-					} else if (left === false) {
-						// CASE 5: Deleting/Replacing from the addition-part of the substitution
-						deleted = left_range.unwrap_slice(from, to);
-						end_offset = deleted.length;
-						insert = inserted + left_range.unwrap_slice(to, Infinity);
-						if (!inserted.length) end_offset -= 2;
-						split_left_range();
-						({ insert, start_offset, end_offset } = construct_range(
-							insert,
-							deleted,
-							merge_result.type,
-							merge_result.merged_metadata,
-							start_offset,
-							end_offset,
-						));
-						to = left_range.to;
 					} else {
-						// CASE 6: Deleting/Replacing from the addition-part of the substitution and inserting to the deletion-part
-						const char_middle = Math.clamp(
-							to - (left_range as SubstitutionRange).middle - 2,
-							0,
-							parts[1].length,
-						);
-						deleted = parts[0] + parts[1].slice(0, char_middle);
-						start_offset = from - left_range.range_start;
-						end_offset = char_middle + (parts[0].length - from + left_range.range_start);
-						insert = inserted + parts[1].slice(char_middle);
-						if (insert.length && !inserted.length) end_offset -= 2;
+						// CASE 5/6: The op deletes/replaces a span reaching into the addition ("new")
+						//           half of the substitution — either strictly inside it (left === false)
+						//           or straddling the separator from the deletion side into it
+						//           (left === undefined).
+						//
+						// EXPL: The "new" half is a PENDING addition: it was never in the base document.
+						//       The covered slice of it must be RETRACTED (dropped), NEVER folded into the
+						//       range's deleted/base side — else reject-all resurrects a character the user
+						//       never committed (Task 6b). This is the substitution analog of Task 6's bare
+						//       addition fix, in mark.ts's dedicated single-substitution path (which Task 6's
+						//       grouped_range.ts change never reaches).
+						//
+						//       The "old" (deletion) half is COMMITTED base text and is preserved IN FULL:
+						//       any coverage of it is a no-op on the base (exactly as CASE 3), so reject-all
+						//       always restores the full "old". The result is the substitution
+						//           old  ->  new[0, cut_start) + inserted + new[cut_end, len)
+						//       i.e. old is kept, the covered slice of new is removed, and any replacement is
+						//       inserted at the cut. construct_suggestion downgrades to a plain deletion
+						//       ({--old--}) when new empties out, or a plain addition ({++...++}) when old is
+						//       empty — both of which reject to the base and accept to the user's intent.
+						const middle = (left_range as SubstitutionRange).middle;
+						const new_len = parts[1].length;
+						const from_char = Math.clamp(from - middle - 2, 0, new_len);
+						const to_char = Math.clamp(to - middle - 2, 0, new_len);
+						deleted = parts[0];
+						insert = parts[1].slice(0, from_char) + inserted + parts[1].slice(to_char);
+						start_offset = parts[0].length + from_char;
 						({ insert, start_offset, end_offset } = construct_suggestion(
 							insert,
 							deleted,

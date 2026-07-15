@@ -2,6 +2,7 @@ import type { Text } from "@codemirror/state";
 import IntervalTree from "@flatten-js/interval-tree";
 import type { CriticMarkupRange } from "./base_range";
 import { SuggestionType } from "./definitions";
+import type { SubstitutionRange } from "./types";
 
 export class CriticMarkupRanges {
 	ranges: CriticMarkupRange[];
@@ -150,8 +151,21 @@ export class CriticMarkupRanges {
 				if (range.type === SuggestionType.ADDITION) {
 					// contributes nothing — the covered slice is retracted
 				} else if (range.type === SuggestionType.SUBSTITUTION) {
-					// only the base ("old") half was ever in the document; the inserted half is pending
-					output += range.unwrap_parts()[0];
+					// EXPL: Only the base ("old") half was ever in the document; the inserted ("new") half is
+					//       pending, so it is dropped either way. "old" folds into the new range's
+					//       deleted-text only when the op actually reaches into the OLD (deletion) half —
+					//       i.e. it starts before the separator (`from < middle`). That covers full coverage
+					//       and any coverage of "old".
+					//
+					//       When the op covers ONLY the pending "new" tail (`from >= middle`), "old" is
+					//       untouched and the caller preserves this range's "old" itself (split_left_range /
+					//       split_right_range re-emit the surviving substitution around the cut). Folding
+					//       "old" here too would DUPLICATE it — reject-all would yield "oldold" (Task 6b).
+					//       Conversely, always folding it (the pre-Task-6b behaviour) would LOSE "old" when
+					//       the op consumed the OLD-front of a back-substitution. `from < middle` splits the
+					//       two correctly: no resurrection, no lost committed text.
+					if (from < (range as SubstitutionRange).middle)
+						output += range.unwrap_parts()[0];
 				} else {
 					output += range.unwrap_slice(Math.max(0, from), to);
 				}

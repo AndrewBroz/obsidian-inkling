@@ -210,6 +210,97 @@ describe("marking over pending additions consumes them (reject-all safety)", () 
 	});
 });
 
+// EXPL: Task 6b — the substitution analog of Task 6. In {~~old~>new~~} the "new" half is a PENDING
+//       addition (it was NEVER in the base document); "old" is the COMMITTED base text. Deleting/
+//       replacing PART of "new" used to fold the covered slice into a new range's base side, so
+//       reject-all resurrected a character the user never committed (e.g. "x{~~old~>new~~}y" [10,12)
+//       -> "x{~~old~>n~~}{~~ew~>~~}y", reject "xoldewy" — "ew" resurrected). This path lives in
+//       mark.ts's dedicated single-substitution CASE branches, which Task 6's grouped_range.ts fix
+//       never reaches.
+//
+//       The ORACLE on EVERY case: reject-all(output) === the base document (for a substitution the
+//       "old" side IS base, the "new" side is NOT); accept-all(output) === what the user meant.
+describe("Task 6b: editing a substitution's pending 'new' half never resurrects it on reject", () => {
+	// new = "newer" (5 chars) so front/middle/back are unambiguous; "old" is the 3-char base.
+	//   x { ~ ~ o l d ~ > n e w e r ~ ~ } y
+	//   0 1 2 3 4 5 6 7 8 9 ...      13 ...
+	// new "newer" occupies doc positions 9..14; "old" occupies 4..7.
+	test("deleting the FRONT of 'new' drops the covered slice, keeps 'old'", () => {
+		const output = mark("x{~~old~>newer~~}y", 9, 11, "", SuggestionType.DELETION); // del "ne"
+		expect(output).toBe("x{~~old~>wer~~}y");
+		expect(reject_all(output)).toBe("xoldy"); // base preserved — "ne" NOT resurrected
+		expect(accept_all(output)).toBe("xwery");
+	});
+
+	test("deleting the MIDDLE of 'new' drops the covered slice, keeps 'old'", () => {
+		const output = mark("x{~~old~>newer~~}y", 11, 13, "", SuggestionType.DELETION); // del "we"
+		expect(output).toBe("x{~~old~>ner~~}y");
+		expect(reject_all(output)).toBe("xoldy");
+		expect(accept_all(output)).toBe("xnery");
+	});
+
+	test("deleting the BACK of 'new' drops the covered slice, keeps 'old'", () => {
+		const output = mark("x{~~old~>newer~~}y", 12, 14, "", SuggestionType.DELETION); // del "er"
+		expect(output).toBe("x{~~old~>new~~}y");
+		expect(reject_all(output)).toBe("xoldy");
+		expect(accept_all(output)).toBe("xnewy");
+	});
+
+	test("the reproducer from the brief no longer resurrects 'ew'", () => {
+		// Pre-fix: "x{~~old~>n~~}{~~ew~>~~}y", reject "xoldewy". Now a single clean substitution.
+		const output = mark("x{~~old~>new~~}y", 10, 12, "", SuggestionType.DELETION); // del "ew"
+		expect(output).toBe("x{~~old~>n~~}y");
+		expect(reject_all(output)).toBe("xoldy");
+		expect(accept_all(output)).toBe("xny");
+	});
+
+	test("deleting ALL of 'new' downgrades to a plain deletion of 'old'", () => {
+		// old -> "" means the substitution is now just "delete old"; construct_suggestion emits {--old--}.
+		const output = mark("x{~~old~>new~~}y", 9, 12, "", SuggestionType.DELETION);
+		expect(output).toBe("x{--old--}y");
+		expect(reject_all(output)).toBe("xoldy"); // base preserved
+		expect(accept_all(output)).toBe("xy"); // old removed, nothing added
+	});
+
+	test("replacing part of an empty-deletion substitution's 'new' half rewrites it as an addition", () => {
+		// {~~~>ins~~}: "old" is empty, so once "new" is edited it is a pure pending addition.
+		const output = mark("ab{~~~>ins~~}", 7, 9, "xy", SuggestionType.SUBSTITUTION); // replace "in" -> "xy"
+		expect(output).toBe("ab{++xys++}");
+		expect(reject_all(output)).toBe("ab"); // base ("ab") preserved
+		expect(accept_all(output)).toBe("abxys");
+	});
+
+	test("a substitution's metadata block survives editing the 'new' half (offset math)", () => {
+		//   x { ~ ~ {"author":"A"} @@ o l d ~ > n e w ~ ~ } y
+		// "old" is 20..23, separator 23..25, "new" is 25..28. Delete "ne" [25,27).
+		const doc = `x{~~{"author":"A"}@@old~>new~~}y`;
+		const output = mark(doc, 25, 27, "", SuggestionType.DELETION);
+		expect(output).toBe(`x{~~{"author":"A"}@@old~>w~~}y`);
+		expect(reject_all(output)).toBe("xoldy"); // metadata + old intact
+		expect(accept_all(output)).toBe("xwy");
+	});
+
+	// THE FALSE-RETRACTION GUARD — the opposite failure mode. "old" is COMMITTED base text; deleting
+	// inside it must be a no-op on the base (exactly CASE 3), NEVER a retraction. Losing "old" here
+	// would be data loss, the mirror image of the resurrection bug above.
+	test("deleting part of the COMMITTED 'old' half preserves it in full (no false retraction)", () => {
+		const output = mark("x{~~old~>new~~}y", 4, 6, "", SuggestionType.DELETION); // "ol" of "old"
+		expect(output).toBe("x{~~old~>new~~}y"); // no-op: old is the delete-side already
+		expect(reject_all(output)).toBe("xoldy"); // the whole "old" survives on reject
+		expect(accept_all(output)).toBe("xnewy");
+	});
+
+	// The "oldold" duplication case from the brief: a substitution abutting a comment. The op reaches
+	// into the substitution's closing bracket, so boundary-snapping picked the comment as the right
+	// range and the multi-range path folded "old" into a NEW {--old--} while the split kept "old" too
+	// -> reject "oldold". Fixed in grouped_range.ts (fold "old" only when the op covers the OLD half).
+	test("a substitution abutting a comment does not duplicate 'old' on reject", () => {
+		const output = mark("{~~old~>new~~}{>>comment<<}", 10, 14, "", SuggestionType.DELETION);
+		expect(reject_all(output)).toBe("old"); // was "oldold" pre-fix
+		expect(base_text(output)).toBe(base_text("{~~old~>new~~}{>>comment<<}"));
+	});
+});
+
 // EXPL: Characterization tests — they pin down CURRENT behavior of the branches
 //       mark.ts itself flags as uncertain (its TODO/FIXME comments), so any later
 //       change to this logic trips a snapshot diff and gets reviewed deliberately.
