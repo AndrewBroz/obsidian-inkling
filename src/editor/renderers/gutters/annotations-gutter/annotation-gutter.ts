@@ -202,6 +202,14 @@ export class AnnotationGutterView extends GutterView {
 	 * @param marker - Marker to align the gutter by
 	 */
 	public moveGutter(marker: GutterMarker) {
+		// EXPL: While a comment draft is being composed, the provisional card is added/removed across
+		//       frames, so the element heights and the marker<->DOM-child mapping are transient.
+		//       moveGutter's margin shift is CUMULATIVE and never reset (see the debounce note above),
+		//       so a shift measured against that transient state permanently displaces a run of cards
+		//       until reload. Skip alignment during a draft; the next focus with a stable DOM re-aligns.
+		if (this.view.state.field(commentDraftField, false) != null)
+			return;
+
 		// NOTE: We can assume that only one gutter exists
 		const activeGutter = this.gutters[0];
 
