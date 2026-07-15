@@ -238,6 +238,65 @@ describe("AnnotationMarker reply box lifecycle", () => {
 		expect(marker.reply_box!.text()).toBe("half-written reply");
 	});
 
+	// EXPL: THE SAME TIMING HOLE as PendingAnnotationMarker's (see pending_card.test.ts). The
+	//       annotation gutter builds a block's GutterElement DETACHED and only appends it to the
+	//       live gutter tree LATER, in AnnotationUpdateContext.finish() (annotation-gutter.ts) --
+	//       which runs AFTER GutterElement.setMarkers (and afterAttach) has already returned. The
+	//       two tests above pre-attach `dom` by hand before calling afterAttach, papering over this
+	//       exact hole. This test drives the DETACHED case afterAttach must actually handle.
+	test("afterAttach defers the reopen via requestMeasure when the node is not yet connected", () => {
+		const { view, ranges } = setup("x{>>hi<<}y");
+		const marker = mountThread(view, ranges[0]);
+		openReplyBox(marker);
+
+		const dom = marker.toDOM();
+		// `dom` is deliberately NOT attached to the document here.
+		const requestMeasure_spy = jest.spyOn(view, "requestMeasure").mockImplementation(() => {});
+		marker.afterAttach(dom);
+
+		// Must not reopen synchronously against a disconnected node...
+		expect(marker.reply_box).toBeNull();
+		// ...but must have scheduled a deferred check via requestMeasure.
+		expect(requestMeasure_spy).toHaveBeenCalledTimes(1);
+		const request = requestMeasure_spy.mock.calls[0][0] as { read: () => void };
+
+		// Once the node is actually attached and the measure's read callback runs, it reopens.
+		document.body.appendChild(dom);
+		request.read();
+
+		expect(marker.reply_box).not.toBeNull();
+		expect(marker.annotation_thread.querySelectorAll(".cmtr-anno-gutter-reply")).toHaveLength(1);
+
+		requestMeasure_spy.mockRestore();
+	});
+
+	// EXPL: The card can be rebuilt again (a second re-home) in the window between afterAttach
+	//       scheduling the measure and that measure's read callback actually running -- a further
+	//       toDOM() call replaces `annotation_thread`, and the FIRST (now-stale, and by now
+	//       detached) thread must never have its reply box reopened once it's too late to matter.
+	test("afterAttach's deferred reopen is a no-op if the card was rebuilt again before the measure ran", () => {
+		const { view, ranges } = setup("x{>>hi<<}y");
+		const marker = mountThread(view, ranges[0]);
+		openReplyBox(marker);
+
+		const dom = marker.toDOM();
+		const requestMeasure_spy = jest.spyOn(view, "requestMeasure").mockImplementation(() => {});
+		marker.afterAttach(dom);
+		const request = requestMeasure_spy.mock.calls[0][0] as { read: () => void };
+
+		// A further rebuild lands before the deferred read runs.
+		document.body.appendChild(dom);
+		marker.toDOM();
+		const reply_box_after_rebuild = marker.reply_box;
+
+		request.read();
+
+		// The stale callback must not have touched the card again.
+		expect(marker.reply_box).toBe(reply_box_after_rebuild);
+
+		requestMeasure_spy.mockRestore();
+	});
+
 	// EXPL: A closed card must STAY closed through a re-home — reopening one the user never opened
 	//       would steal focus out of the note.
 	test("a re-home does not open a reply box on a card that had none", () => {

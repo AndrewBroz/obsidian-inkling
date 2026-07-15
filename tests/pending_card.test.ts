@@ -470,6 +470,74 @@ describe("provisional comment card", () => {
 		view.destroy();
 	});
 
+	// EXPL: THE ACTUAL REGRESSION. The annotation gutter builds a block's GutterElement DETACHED
+	//       and only appends it to the live gutter tree LATER, in AnnotationUpdateContext.finish()
+	//       (annotation-gutter.ts) -- which runs AFTER GutterElement.setMarkers (and therefore
+	//       afterAttach) has already returned. So `dom.isConnected` is routinely still false at
+	//       afterAttach time even for a marker that is about to be legitimately attached a moment
+	//       later. The test above pre-attaches `dom` by hand before calling afterAttach, which
+	//       papers over exactly this timing hole -- that is how the pill-focus fix regressed
+	//       without a red test. This test drives the DETACHED case afterAttach must actually
+	//       handle: defer the focus (via `view.requestMeasure`) rather than silently dropping it.
+	test("afterAttach defers focus via requestMeasure when the node is not yet connected", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
+		const focus_spy = jest.spyOn(ReplyBox.prototype, "focus").mockImplementation(() => {});
+		const requestMeasure_spy = jest.spyOn(view, "requestMeasure").mockImplementation(() => {});
+
+		const dom = marker.toDOM();
+		// `dom` is deliberately NOT attached to the document here.
+		marker.afterAttach(dom);
+
+		// Must not focus synchronously against a disconnected node...
+		expect(focus_spy).not.toHaveBeenCalled();
+		// ...but must have scheduled a deferred check via requestMeasure.
+		expect(requestMeasure_spy).toHaveBeenCalledTimes(1);
+		const request = requestMeasure_spy.mock.calls[0][0] as { read: () => void };
+		expect(typeof request.read).toBe("function");
+
+		// Once the node is actually attached and the measure's read callback runs, focus fires.
+		document.body.appendChild(dom);
+		request.read();
+
+		expect(focus_spy).toHaveBeenCalledTimes(1);
+
+		focus_spy.mockRestore();
+		requestMeasure_spy.mockRestore();
+		view.destroy();
+	});
+
+	// EXPL: The draft can be dismissed/rebuilt in the window between afterAttach scheduling the
+	//       measure and that measure's read callback actually running -- a second toDOM() call
+	//       replaces `built_reply_box`, and the FIRST (now-stale) box must never be focused once
+	//       it's too late for it to matter.
+	test("afterAttach's deferred focus is a no-op if the draft was rebuilt before the measure ran", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
+		const focus_spy = jest.spyOn(ReplyBox.prototype, "focus").mockImplementation(() => {});
+		const requestMeasure_spy = jest.spyOn(view, "requestMeasure").mockImplementation(() => {});
+
+		const dom = marker.toDOM();
+		marker.afterAttach(dom);
+		const request = requestMeasure_spy.mock.calls[0][0] as { read: () => void };
+
+		// A rebuild lands before the deferred read runs -- this is what "stale" means here.
+		document.body.appendChild(dom);
+		marker.toDOM();
+
+		request.read();
+
+		expect(focus_spy).not.toHaveBeenCalled();
+
+		focus_spy.mockRestore();
+		requestMeasure_spy.mockRestore();
+		view.destroy();
+	});
+
 	// EXPL: Pins the offsetTop crash guard (annotation-gutter.ts moveGutter). The marker list and
 	//       the DOM children of a GutterElement can disagree for one frame while a draft card is
 	//       alive; before the fix, moveGutter read `.offsetTop` off `children[markerIndex]`
@@ -491,5 +559,54 @@ describe("provisional comment card", () => {
 		expect(() => gutterView.moveGutter(marker)).not.toThrow();
 
 		view.destroy();
+	});
+
+	// EXPL: THE GUTTER-DRIFT BUG (fix-0.10.1-gutter-draft, symptom 3). moveGutter's margin shift on
+	//       `elements[0]` is CUMULATIVE and never reset (see the debounce note at
+	//       annotation-gutter.ts:101-102). While a draft card is being composed, the provisional
+	//       card is added/removed across frames, so the marker<->DOM-child mapping is transient --
+	//       an `offset` measured against that transient state is wrong, and the cumulative write
+	//       permanently shoves a run of cards out of view until reload (restart resets marginTop,
+	//       which is why restart "fixes" it). moveGutter must no-op while a draft is live.
+	//
+	//       Both tests drive the REAL `moveGutter` through the REAL AnnotationGutterView (same
+	//       harness as the crash-guard test above) rather than a smaller seam -- the guard sits at
+	//       the top of a method with real DOM-writing side effects, so the honest way to pin it is
+	//       to call the method and observe the DOM. jsdom has no layout (`offsetTop` is always 0),
+	//       so `element.block.top` is forced to 100 by hand to put `offset` past the `>= 10`
+	//       micro-adjustment threshold that gates the marginTop write.
+	describe("moveGutter is suppressed while a comment draft is live", () => {
+		test("no draft: moveGutter still shifts marginTop (baseline behaviour is unchanged)", () => {
+			const { view } = setup("hello {>>note<<} world");
+			expect(view.state.field(commentDraftField, false)).toBeNull();
+
+			const gutterView = view.plugin(annotationGutterView)!;
+			const element = gutterView.gutters[0].elements[0];
+			const marker = element.markers[0];
+			element.block = { ...element.block, top: 100 } as unknown as typeof element.block;
+
+			gutterView.moveGutter(marker);
+
+			expect(element.dom.style.marginTop).toBe("100px");
+
+			view.destroy();
+		});
+
+		test("draft active: moveGutter does NOT touch marginTop", () => {
+			const { view } = setup("hello world");
+			view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+			expect(view.state.field(commentDraftField, false)).not.toBeNull();
+
+			const marker = pendingMarker(view)!;
+			const gutterView = view.plugin(annotationGutterView)!;
+			const element = gutterView.gutters[0].elements.find(el => el.markers.includes(marker))!;
+			element.block = { ...element.block, top: 100 } as unknown as typeof element.block;
+
+			gutterView.moveGutter(marker);
+
+			expect(element.dom.style.marginTop).toBe("");
+
+			view.destroy();
+		});
 	});
 });
