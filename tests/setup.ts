@@ -10,6 +10,12 @@ global.app = <Partial<App>> {
 	},
 };
 
+// Obsidian augments the global `Math` with `clamp(value, min, max)`. Edit-logic code
+// (mark.ts's substitution CASE branches) calls it; jsdom's Math has no such method, so
+// provide Obsidian's definition.
+if (typeof (Math as any).clamp !== "function")
+	(Math as any).clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
 // Obsidian defines `activeWindow` as a global alias for the currently focused
 // window (defaults to `window`). Editor code (e.g. addCommentToView) relies on
 // it for scheduling; jsdom doesn't provide it, so mirror Obsidian's default.

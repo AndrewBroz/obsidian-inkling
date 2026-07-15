@@ -246,11 +246,21 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 	}
 
 	/**
+	 * Focuses the underlying editor. Public so a caller holding this wrapper (e.g. ReplyBox) can
+	 * focus it explicitly once its DOM is actually attached to the document -- calling this on a
+	 * detached node is a silent no-op (see PendingAnnotationMarker.afterAttach /
+	 * AnnotationMarker.afterAttach).
+	 */
+	focus(): void {
+		this.editor?.focus();
+	}
+
+	/**
 	 * When finished loading, take focus
 	 */
 	onload() {
 		super.onload();
 		if (this.options.focus)
-			this.editor?.focus();
+			this.focus();
 	}
 }

@@ -4,7 +4,7 @@ exports[`mark_ranges characterization (snapshot-pinned) clear action on marked t
 
 exports[`mark_ranges characterization (snapshot-pinned) delete inside existing deletion 1`] = `"ab{--cd--}ef"`;
 
-exports[`mark_ranges characterization (snapshot-pinned) deletion across highlight range 1`] = `"{--ab--}{==cd==}{--ef--}"`;
+exports[`mark_ranges characterization (snapshot-pinned) deletion across highlight range 1`] = `"{--abcdef--}"`;
 
 exports[`mark_ranges characterization (snapshot-pinned) insert at right edge of addition 1`] = `"he{++lloy++}x"`;
 

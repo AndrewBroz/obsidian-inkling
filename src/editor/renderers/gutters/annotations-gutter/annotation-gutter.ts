@@ -216,8 +216,13 @@ export class AnnotationGutterView extends GutterView {
 		// EXPL: Where the gutter element should be located (i.e. flush with the top of the block)
 		const desiredLocation = element.block!.top;
 		// EXPL: Where the gutter element is currently located (possibly pushed down by other gutter elements)
-		// FIXME: offsetTop not defined error (repr: when interacting in phantom comment note)
-		const currentLocation = (element.dom.children[markerIndex] as HTMLElement).offsetTop;
+		// EXPL: The child can be absent while a pending (draft) comment card is alive -- the marker
+		//       list and the DOM children can disagree for one frame during the draft's lifecycle.
+		//       Bail rather than throw; the next update will place it.
+		const marker_el = element.dom.children[markerIndex] as HTMLElement | undefined;
+		if (!marker_el)
+			return;
+		const currentLocation = marker_el.offsetTop;
 
 		// EXPL: Determine the offset between the current location and the desired location
 		let offset = desiredLocation - currentLocation;

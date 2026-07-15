@@ -2,6 +2,7 @@ import { EditorSelection, Text } from "@codemirror/state";
 import type { Editor } from "obsidian";
 import { type PluginSettings } from "../../../types";
 import { pluginSettingsField } from "../../uix";
+import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 import { type EditorSuggestion } from "../edit-handler";
 import { type MetadataCompatibility, MetadataMergeAction, range_metadata_compatible, rangeParser } from "../edit-util";
 import { generate_metadata } from "../edit-util/metadata";
@@ -319,34 +320,34 @@ function mark_range(
 							end_offset,
 						));
 						from = left_range.from;
-					} else if (left === false) {
-						// CASE 5: Deleting/Replacing from the addition-part of the substitution
-						deleted = left_range.unwrap_slice(from, to);
-						end_offset = deleted.length;
-						insert = inserted + left_range.unwrap_slice(to, Infinity);
-						if (!inserted.length) end_offset -= 2;
-						split_left_range();
-						({ insert, start_offset, end_offset } = construct_range(
-							insert,
-							deleted,
-							merge_result.type,
-							merge_result.merged_metadata,
-							start_offset,
-							end_offset,
-						));
-						to = left_range.to;
 					} else {
-						// CASE 6: Deleting/Replacing from the addition-part of the substitution and inserting to the deletion-part
-						const char_middle = Math.clamp(
-							to - (left_range as SubstitutionRange).middle - 2,
-							0,
-							parts[1].length,
-						);
-						deleted = parts[0] + parts[1].slice(0, char_middle);
-						start_offset = from - left_range.range_start;
-						end_offset = char_middle + (parts[0].length - from + left_range.range_start);
-						insert = inserted + parts[1].slice(char_middle);
-						if (insert.length && !inserted.length) end_offset -= 2;
+						// CASE 5/6: The op deletes/replaces a span reaching into the addition ("new")
+						//           half of the substitution — either strictly inside it (left === false)
+						//           or straddling the separator from the deletion side into it
+						//           (left === undefined).
+						//
+						// EXPL: The "new" half is a PENDING addition: it was never in the base document.
+						//       The covered slice of it must be RETRACTED (dropped), NEVER folded into the
+						//       range's deleted/base side — else reject-all resurrects a character the user
+						//       never committed (Task 6b). This is the substitution analog of Task 6's bare
+						//       addition fix, in mark.ts's dedicated single-substitution path (which Task 6's
+						//       grouped_range.ts change never reaches).
+						//
+						//       The "old" (deletion) half is COMMITTED base text and is preserved IN FULL:
+						//       any coverage of it is a no-op on the base (exactly as CASE 3), so reject-all
+						//       always restores the full "old". The result is the substitution
+						//           old  ->  new[0, cut_start) + inserted + new[cut_end, len)
+						//       i.e. old is kept, the covered slice of new is removed, and any replacement is
+						//       inserted at the cut. construct_suggestion downgrades to a plain deletion
+						//       ({--old--}) when new empties out, or a plain addition ({++...++}) when old is
+						//       empty — both of which reject to the base and accept to the user's intent.
+						const middle = (left_range as SubstitutionRange).middle;
+						const new_len = parts[1].length;
+						const from_char = Math.clamp(from - middle - 2, 0, new_len);
+						const to_char = Math.clamp(to - middle - 2, 0, new_len);
+						deleted = parts[0];
+						insert = parts[1].slice(0, from_char) + inserted + parts[1].slice(to_char);
+						start_offset = parts[0].length + from_char;
 						({ insert, start_offset, end_offset } = construct_suggestion(
 							insert,
 							deleted,
@@ -476,21 +477,106 @@ export function mark_ranges(
 	metadata_fields?: MetadataFields,
 	force = false,
 ): EditorSuggestion[] {
-	const in_range = ranges.ranges_in_interval(from, to);
+	// EXPL: STRICT. A range that merely ABUTS this operation is beside it, not in it. The closed
+	//       query returned a highlight starting exactly at `from`, which the ignore-loop below then
+	//       jumped the whole operation past — silently relocating the user's keystroke.
+	const in_range = ranges.ranges_overlapping_interval(from, to);
+
+	// EXPL: A DEGENERATE operation — a collapsed cursor with nothing inserted — has nothing to split a
+	//       range around, so splitting anyway would only damage the user's markup to make room for an
+	//       empty range. Both the early-out and the ignore-loop below check this before splitting.
+	const degenerate = from === to && !inserted.length;
+	const is_suggestion = type === SuggestionType.ADDITION || type === SuggestionType.DELETION ||
+		type === SuggestionType.SUBSTITUTION;
+
+	// EXPL: The operation lands strictly INSIDE a single incompatible range (so it is the only range
+	//       the operation overlaps — ranges do not nest). The ignore-loop below cannot cope with that:
+	//       it jumps last_range_start past range.to, which silently relocated the user's edit to the
+	//       far side of the range (or, for a deletion, dropped it outright). Delegate to mark_range,
+	//       which emits the range's own split affixes around the edit:
+	//
+	//         HIGHLIGHT: CriticMarkup cannot nest, so a tracked change has nowhere to live *within*
+	//                    the highlight. Split the highlight around it — {==here==} + "x" after the h
+	//                    becomes {==h==}{++x++}{==ere==}. Nothing is lost, and both survive
+	//                    accept/reject.
+	//         COMMENT:   a comment's body is prose, not document text, so typing inside one is editing
+	//                    the comment — not making a tracked change to the note. Apply the edit
+	//                    verbatim (REGULAR); never split, never track.
+	//
+	if (
+		!force && !degenerate && in_range.length === 1 && in_range[0].encloses_range(from, to, true) &&
+		is_suggestion &&
+		should_ignore_range(in_range[0], type, metadata_fields)
+	) {
+		const range = in_range[0];
+		if (range.type === SuggestionType.HIGHLIGHT || range.type === SuggestionType.COMMENT) {
+			const inner_type = range.type === SuggestionType.COMMENT ? MarkAction.REGULAR : type;
+			const edit = mark_range(ranges, text, from, to, inserted, inner_type, metadata_fields);
+			return edit ? [edit] : [];
+		}
+	}
+
 	const left_range = in_range.at(0);
 	const right_range = in_range.at(-1);
 
+	// EXPL: THE INJECTED DELIMITER. An operation's boundary can land partway INSIDE a boundary range's
+	//       bracket, and there are FOUR ways for that to happen — only two were snapped. An unsnapped
+	//       boundary left half a delimiter inside the operation, where it was read back as document
+	//       TEXT and re-emitted: "cc{~~r~>s~~}" with a deletion of [1, 4) — ending one character into
+	//       the `{~~` — produced "c{~~c~r~>s~~}", inventing a `~` in the user's note. (Only `{~~`
+	//       corrupts: it is the one delimiter whose interior character survives unwrapping.)
+	//
+	//       All four cases, stated explicitly (bracket bounds per touches_*_bracket, both ends loose):
+	//         from in left's  OPENING bracket [left.from, left.range_start]  -> from = left.from
+	//              The operation already owns the range's opening syntax: swallow the range whole.
+	//         from in left's  CLOSING bracket [left.to - 3, left.to]         -> from = left.to
+	//              Only the closing delimiter is caught; the range's content is untouched. Start after it.
+	//         to   in right's CLOSING bracket [right.to - 3, right.to]       -> to   = right.to
+	//              Swallow the range whole.
+	//         to   in right's OPENING bracket [right.from, right.range_start] -> to  = right.from
+	//              Only the opening delimiter is caught. Stop before the range; never half-swallow it.
+	//
+	//       The closing/opening cases are checked SECOND so an empty range (whose brackets abut) keeps
+	//       its established swallow-whole behaviour. Excluding the range does not defeat merging: the
+	//       operation still ABUTS it, and mark_range re-derives its neighbours with at_cursor, which
+	//       sees an abutting range — so "cc{--r--}" [1, 4) still merges into "c{--cr--}".
+	//       The `<= to` / `>= from` guards keep a boundary that lies wholly inside one bracket from
+	//       inverting the interval.
 	if (left_range?.touches_left_bracket(from, true, true, true))
 		from = left_range.from;
+	else if (left_range?.touches_right_bracket(from, true, true) && left_range.to <= to)
+		from = left_range.to;
+
 	if (right_range?.touches_right_bracket(to, true, true))
 		to = right_range.to;
+	else if (right_range?.touches_left_bracket(to, true, true, true) && right_range.from >= from)
+		to = right_range.from;
 
 	// NOTE: When marking long section as SUBSTITUTION, inserted should only be set for the last range?, all other ranges should be DELETION
 	let last_range_start = from;
 	const range_operations: EditorSuggestion[] = [];
 
+	// EXPL: THE SILENTLY TRUNCATED EDIT. The loop below emits an edit for the region BEFORE an ignored
+	//       range and then jumps `last_range_start = range.to`. The region INSIDE the range is marked by
+	//       nobody: it just vanishes. Selecting exactly a highlight and pressing Delete did nothing at
+	//       all; a selection running from inside a highlight into the text after it deleted only the
+	//       part outside the highlight and silently discarded the rest.
+	//
+	//       A HIGHLIGHT the operation actually covers is therefore NOT ignored: it is handed to
+	//       mark_range, which splits it at the coverage boundary (mergeable_range rejects the
+	//       type-incompatible highlight, and split_left_range/split_right_range emit its closing and
+	//       reopening brackets as affixes). The covered content is marked; the uncovered content stays
+	//       highlighted. CriticMarkup cannot nest, so the covered content's highlight cannot survive —
+	//       but not one character of the user's text is lost, which is what the old code did.
+	//
+	//       A COMMENT is still ignored, and is never split: its body is prose, not document text, so a
+	//       selection sweeping over one must leave its text alone (same rule as the early-out above).
+	const split_highlights = !force && !degenerate && is_suggestion;
+
 	if (!force) {
 		for (const range of in_range) {
+			if (split_highlights && range.type === SuggestionType.HIGHLIGHT)
+				continue;
 			if (should_ignore_range(range, type, metadata_fields)) {
 				if (last_range_start < range.from) {
 					const adj_type = type === SuggestionType.SUBSTITUTION ? SuggestionType.DELETION : type;
@@ -532,5 +618,6 @@ export function mark_editor_ranges(editor: Editor, type: MarkType, settings: Plu
 	editor.cm.dispatch(editor.cm.state.update({
 		changes,
 		selection: EditorSelection.create(resulting_selections),
+		annotations: [pluginEditAnnotation.of(true)],
 	}));
 }

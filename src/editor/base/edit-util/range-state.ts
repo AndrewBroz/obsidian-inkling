@@ -91,6 +91,29 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 
 		// apply-offsets: 2.72-3.70 ms
 		const nil_node = value.ranges.tree.nil_node;
+		// EXPL: Keys are shifted IN PLACE rather than rebuilding the tree -- a deliberate optimisation, and
+		//       the reason this traversal exists at all. But the tree is an AUGMENTED red-black tree: every
+		//       node caches `max`, the widest interval in its subtree, and `search()` prunes a subtree
+		//       outright when `left.max.high < search.low` (Node.not_intersect_left_subtree). Shifting a key
+		//       without refreshing `max` leaves that cache stale, and a stale `max` makes the tree prune
+		//       subtrees that DO contain matches: `search()` then silently returns INCOMPLETE results, the
+		//       ranges an edit invalidated are never removed (only regenerated), and the document ends up
+		//       with two range objects at one position -- which Accept All composes into overlapping changes
+		//       and corrupts the text with.
+		//
+		//       Two traversal orders are in play here, and they are NOT the same one:
+		//
+		//       - The key shift must run IN-ORDER. `offsets` is a queue consumed in ascending key order, so
+		//         the node's OLD `key.low` has to be read while the queue is still positioned at it.
+		//       - `max` must be recomputed BOTTOM-UP (post-order). A node's max is defined over its own key
+		//         AND both children's maxes, so every child must already be final when the parent is
+		//         computed. Hence `update_max()` sits after BOTH subtree visits -- by which point this
+		//         node's key has been shifted (above) and both children have been recomputed.
+		//
+		//       `Node.update_max()` is the library's own routine and REASSIGNS `node.max`. The hand-rolled
+		//       fixup this replaces wrote to `node.max.low` / `node.max.high` instead -- and `Interval`'s
+		//       `get max()` returns a CLONE, so those writes landed in a throwaway object and were discarded.
+		//       It was a no-op, on top of computing the wrong invariant.
 		function visitNode(node: Node<CriticMarkupRange>) {
 			if (node != null && node != nil_node) {
 				visitNode(node.left);
@@ -100,10 +123,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 				node.item.key.low = node.item.value.from;
 				node.item.key.high = node.item.value.to;
 				visitNode(node.right);
-				if (node.left != nil_node)
-					node.max.low = node.left.max.low;
-				if (node.right != nil_node)
-					node.max.high = node.right.max.high;
+				node.update_max();
 			}
 		}
 		visitNode(value.ranges.tree.root!);
@@ -119,7 +139,6 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 				dangling_comments.set(range.from, range as CommentRange);
 		}
 
-		// FIXME: Rare cases of comment ranges in threads being duplicated due to editor changes
 		if (dangling_comments.size) {
 			const comment_threads: CommentRange[][] = [];
 			let last_range: CommentRange | undefined = undefined;
@@ -140,10 +159,26 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 
 			for (const thread of comment_threads) {
 				const head = thread[0];
-				const adjacent_range = value.ranges.tree.search([head.from, head.from])[0] as CriticMarkupRange;
-				adjacent_range!.replies.length = 0;
-				for (const comment of thread.slice(adjacent_range === head ? 1 : 0))
-					comment.add_reply(adjacent_range);
+
+				// EXPL: The anchor is the range immediately to the LEFT of the head -- the one whose `to`
+				//       is the head's `from`. It is never the head itself.
+				//
+				//       This used to be `search([head.from, head.from])[0]`. A closed-interval point
+				//       search returns BOTH the head (it begins there) and the anchor (it ends there --
+				//       touching counts), and `[0]` picked one in interval-tree TRAVERSAL order, which is
+				//       not document order and which shifts as the tree rebalances during editing. So the
+				//       same document rebuilt its threads differently on different keystrokes, and since
+				//       only the picked range's `replies` was cleared, the other kept its stale ones.
+				//       That was the duplication.
+				const anchor = (value.ranges.tree.search([head.from, head.from]) as CriticMarkupRange[])
+					.find(range => range !== head && range.to === head.from);
+
+				// No anchor => this is a bare thread and the head is its own base.
+				const base = anchor ?? head;
+
+				base.replies.length = 0;
+				for (const comment of thread.slice(base === head ? 1 : 0))
+					comment.add_reply(base);
 			}
 		}
 

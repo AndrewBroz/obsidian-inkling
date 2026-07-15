@@ -52,6 +52,40 @@ describe("addCommentToView with a selection", () => {
 		expect(view.state.field(commentDraftField)).toBeNull();
 	});
 
+	// EXPL: CriticMarkup ranges cannot nest, so a selection that SHARES characters with an existing
+	//       range has nowhere clean to wrap — but one that merely TOUCHES a range's edge, sharing no
+	//       character with it, wraps perfectly well; the abutted range itself is left untouched
+	//       either way. `ranges_in_interval` (the closed-interval predicate this guard used to call)
+	//       cannot tell "touches the edge" apart from "shares a character" — the interval tree it
+	//       wraps reports both as hits — so it wrongly refused this selection and fell through to an
+	//       unanchored at-cursor comment. `ranges_overlapping_interval` applies the honest overlap
+	//       test on top of that same tree search, so only genuine character-sharing disqualifies a
+	//       selection. [0,2) ends exactly at the addition range's left edge ([2,11)); asserting the
+	//       doc gains a `{==...==}` highlight (not just a bare `{>><<}`) pins that the wrap path,
+	//       not the unanchored fallback, ran.
+	test("a selection abutting the left edge of an existing range is wrapped, not left unanchored", () => {
+		const doc = "he{++llo++} world";
+		const view = viewWith(doc, 0, 2, [commentDraftField]);
+		addCommentToView(view, undefined);
+
+		const result = view.state.doc.toString();
+		expect(result).toContain("{==he==}");
+		expect(result).toBe("{==he==}{>><<}{++llo++} world");
+	});
+
+	// EXPL: Mirror image on the other edge: [11,16) begins exactly at the range's right edge, and —
+	//       per `mark.ts`'s asymmetric ignore-loop guard — goes through different code than the
+	//       left-edge case above, so it needs its own pin rather than being assumed symmetric.
+	test("a selection abutting the right edge of an existing range is wrapped, not left unanchored", () => {
+		const doc = "he{++llo++} world";
+		const view = viewWith(doc, 11, 16, [commentDraftField]);
+		addCommentToView(view, undefined);
+
+		const result = view.state.doc.toString();
+		expect(result).toContain("{== worl==}");
+		expect(result).toBe("he{++llo++}{== worl==}{>><<}d");
+	});
+
 	// EXPL: The legacy no-gutter path wraps the selection in `{==…==}`, and CriticMarkup has no
 	//       escapes: a `==}` in the selected text closes that highlight the instant it is written,
 	//       stranding `text==}` as plain text and leaving a DANGLING `==}` in the user's note (with

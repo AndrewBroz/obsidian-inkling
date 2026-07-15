@@ -20,7 +20,7 @@ import {
 	commentDraftField,
 	setCommentDraft,
 } from "../../uix/extensions/comment-draft";
-import { commentModeAnnotation } from "../../uix/extensions/editing-modes";
+import { commentModeAnnotation, pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 
 export function addCommentToView(
 	editor: EditorView,
@@ -38,7 +38,7 @@ export function addCommentToView(
 	//       plain at-cursor comment below.
 	if (!range && !selection.empty) {
 		const ranges = editor.state.field(rangeParser).ranges;
-		if (ranges.ranges_in_interval(selection.from, selection.to).length === 0) {
+		if (ranges.ranges_overlapping_interval(selection.from, selection.to).length === 0) {
 			// EXPL: The draft path is only viable where the provisional card can actually be RENDERED,
 			//       i.e. where the annotation gutter is installed. It is not always: `annotation_gutter`
 			//       is a user-facing toggle (GutterSettings.svelte) that leaves the gutter extension —
@@ -81,7 +81,7 @@ export function addCommentToView(
 					changes: { from: selection.from, to: selection.to, insert },
 					selection: EditorSelection.cursor(selection.from + insert.length - 3),
 					scrollIntoView: scroll,
-					annotations: [commentModeAnnotation.of(true)],
+					annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 				}));
 				activeWindow.setTimeout(() => {
 					editor.dispatch(editor.state.update({
@@ -121,7 +121,7 @@ export function addCommentToView(
 		},
 		selection: EditorSelection.cursor(cursor),
 		scrollIntoView: scroll,
-		annotations: [commentModeAnnotation.of(true)],
+		annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 	}));
 
 	// EXPL: This code ensures that the input of a new comment is focused on when created
@@ -169,7 +169,7 @@ function unsafe_sequence(text: string, delimiters: string[]): string | undefined
  */
 function safe_insert_position(state: EditorState, pos: number): number {
 	const ranges = state.field(rangeParser).ranges;
-	const covering = ranges.ranges_in_interval(pos, pos).find(range => range.from < pos && pos < range.to);
+	const covering = ranges.ranges_overlapping_interval(pos, pos)[0];
 	return covering ? covering.full_range_back : pos;
 }
 
@@ -190,16 +190,7 @@ function safe_insert_position(state: EditorState, pos: number): number {
  */
 function anchor_rejection(state: EditorState, draft: CommentDraft): string | undefined {
 	const ranges = state.field(rangeParser).ranges;
-	// EXPL: STRICT overlap, not the closed-interval `ranges_in_interval` search used at open time. A
-	//       range that merely ABUTS the anchor (ends exactly at `draft.from`, or starts exactly at
-	//       `draft.to`) is matched by the closed search but wraps perfectly well —
-	//       `aaa {++x++}{==bbb==}{>>note<<}` parses exactly as it reads — so degrading there would
-	//       drop the user's anchor and tell them the selection "contains tracked changes" when it
-	//       does not. Only a range that actually shares text with the anchor can be swallowed by the
-	//       wrap. (Eligibility checks — `pill_eligible`, the open-time guard — keep the closed
-	//       semantics on purpose: they gate a NEW selection, where touching markup is a fine reason
-	//       to stay out of the way.)
-	if (ranges.ranges_in_interval(draft.from, draft.to).some(range => range.from < draft.to && draft.from < range.to))
+	if (ranges.ranges_overlapping_interval(draft.from, draft.to).length)
 		return "the selected text now contains tracked changes or comments";
 
 	// EXPL: `==}` would close the wrapping highlight early; `@@` would be eaten as this highlight's
@@ -253,7 +244,7 @@ export function commitReply(editor: EditorView, range: CriticMarkupRange, text: 
 
 	editor.dispatch(editor.state.update({
 		changes: { from: cursor, to: cursor, insert: create_range(settings, SuggestionType.COMMENT, text) },
-		annotations: [commentModeAnnotation.of(true)],
+		annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 	}));
 	return true;
 }
@@ -293,7 +284,7 @@ export function commitCommentDraft(editor: EditorView, text: string): boolean {
 		editor.dispatch(editor.state.update({
 			changes: { from: cursor, to: cursor, insert: comment },
 			effects: [clearCommentDraft.of(null)],
-			annotations: [commentModeAnnotation.of(true)],
+			annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 		}));
 		new Notice(`Inkling: added the comment without an anchor — ${rejection}.`);
 		return true;
@@ -305,7 +296,7 @@ export function commitCommentDraft(editor: EditorView, text: string): boolean {
 	editor.dispatch(editor.state.update({
 		changes: { from: draft.from, to: draft.to, insert },
 		effects: [clearCommentDraft.of(null)],
-		annotations: [commentModeAnnotation.of(true)],
+		annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 	}));
 	return true;
 }

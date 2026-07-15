@@ -6,12 +6,13 @@ import { App, editorEditorField, editorInfoField } from "obsidian";
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import { addCommentToView } from "../src/editor/base/edit-logic/add-comment";
-import { annotation_gutter } from "../src/editor/renderers/gutters/annotations-gutter/annotation-gutter";
+import { annotation_gutter, annotationGutterView } from "../src/editor/renderers/gutters/annotations-gutter/annotation-gutter";
 import { annotationGutterMarkers } from "../src/editor/renderers/gutters/annotations-gutter/marker";
 import {
 	PendingAnnotationMarker,
 	pendingAnnotationMarkers,
 } from "../src/editor/renderers/gutters/annotations-gutter/pending-marker";
+import { ReplyBox } from "../src/editor/renderers/gutters/annotations-gutter/reply-box";
 import { GutterElement } from "../src/editor/renderers/gutters/base";
 import { annotationGutterIncludedTypesState } from "../src/editor/settings";
 import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
@@ -428,6 +429,66 @@ describe("provisional comment card", () => {
 		// ...and collapses again once the draft is abandoned
 		view.dispatch({ effects: clearCommentDraft.of(null) });
 		expect(width()).toBe(0);
+
+		view.destroy();
+	});
+
+	// EXPL: THE PILL-FOCUS BUG. `.focus()` used to be reached inside PendingAnnotationMarker.toDOM()
+	//       (via ReplyBox's default `focus: true`, fired by Component.load() during toDOM()), on the
+	//       node toDOM() is still building. But toDOM()'s RETURN VALUE is exactly what
+	//       GutterElement.setMarkers passes to insertBefore -- so nothing that runs inside toDOM()
+	//       can ever run after attachment, and HTMLElement.focus() on a disconnected node is a
+	//       SILENT no-op per the HTML spec: no throw, no warning, activeElement simply does not move.
+	//       (This is why clicking an EXISTING card worked: that path runs in a live click handler on
+	//       an already-attached node.)
+	//
+	//       This is a TIMING bug, so the assertion is on `isConnected` AT FOCUS TIME -- that is what
+	//       actually differs before/after the fix. No `onFocus` seam existed on ReplyBox before this
+	//       test; rather than add one purely for observability, this spies directly on the `focus()`
+	//       method afterAttach() is required to call (see PendingAnnotationMarker.afterAttach).
+	test("the pending card's reply box is focused only once it is attached to the document", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
+		const focused_while: boolean[] = [];
+		const focus_spy = jest.spyOn(ReplyBox.prototype, "focus").mockImplementation(function(this: ReplyBox) {
+			focused_while.push(this.container.isConnected);
+		});
+
+		// EXPL: Drives toDOM() directly, exactly what GutterElement.setMarkers does -- see the "FIX
+		//       regression" tests above for why that is the faithful way to provoke this under jsdom.
+		const dom = marker.toDOM();
+		expect(focused_while).toHaveLength(0); // MUST NOT have focused yet -- it is not attached
+
+		document.body.appendChild(dom);
+		marker.afterAttach(dom);
+
+		expect(focused_while).toEqual([true]); // focused, and connected when it happened
+
+		focus_spy.mockRestore();
+		view.destroy();
+	});
+
+	// EXPL: Pins the offsetTop crash guard (annotation-gutter.ts moveGutter). The marker list and
+	//       the DOM children of a GutterElement can disagree for one frame while a draft card is
+	//       alive; before the fix, moveGutter read `.offsetTop` off `children[markerIndex]`
+	//       unconditionally and threw `TypeError: Cannot read properties of undefined` the moment
+	//       that index had no corresponding DOM node.
+	test("moveGutter does not throw when a marker's DOM child is momentarily absent", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const marker = pendingMarker(view)!;
+		const gutterView = view.plugin(annotationGutterView)!;
+		const element = gutterView.gutters[0].elements.find(el => el.markers.includes(marker))!;
+		const markerIndex = element.markers.indexOf(marker);
+
+		// EXPL: Simulate the disagreement window directly: the marker is still listed, but its DOM
+		//       child is gone.
+		element.dom.children[markerIndex]!.remove();
+
+		expect(() => gutterView.moveGutter(marker)).not.toThrow();
 
 		view.destroy();
 	});

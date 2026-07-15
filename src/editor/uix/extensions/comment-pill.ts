@@ -46,7 +46,7 @@ export function pill_eligible(state: EditorState): boolean {
 		return false;
 
 	const ranges = state.field(rangeParser).ranges;
-	return ranges.ranges_in_interval(selection.from, selection.to).length === 0;
+	return ranges.ranges_overlapping_interval(selection.from, selection.to).length === 0;
 }
 
 function createPillDom(view: EditorView): TooltipView {

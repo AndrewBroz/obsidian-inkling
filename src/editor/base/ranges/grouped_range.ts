@@ -2,6 +2,7 @@ import type { Text } from "@codemirror/state";
 import IntervalTree from "@flatten-js/interval-tree";
 import type { CriticMarkupRange } from "./base_range";
 import { SuggestionType } from "./definitions";
+import type { SubstitutionRange } from "./types";
 
 export class CriticMarkupRanges {
 	ranges: CriticMarkupRange[];
@@ -71,8 +72,21 @@ export class CriticMarkupRanges {
 		return undefined;
 	}
 
+	/** CLOSED: also returns ranges that merely ABUT [start, end]. See `ranges_overlapping_interval`. */
 	ranges_in_interval(start: number, end: number) {
 		return this.tree.search([start, end]) as CriticMarkupRange[];
+	}
+
+	/**
+	 * Ranges sharing at least one character with [start, end). Excludes ranges that merely abut it.
+	 *
+	 * The interval tree cannot answer this: `@flatten-js/interval-tree`'s `not_intersect` uses a
+	 * strict `<`, so it reports two intervals that merely TOUCH as intersecting. The tree is still a
+	 * correct superset index, so search it and then apply the honest test to its results.
+	 */
+	ranges_overlapping_interval(start: number, end: number): CriticMarkupRange[] {
+		return (this.tree.search([start, end]) as CriticMarkupRange[])
+			.filter(range => range.overlaps(start, end));
 	}
 
 	ranges_in_intervals(intervals: { from: number; to: number }[]) {
@@ -124,16 +138,37 @@ export class CriticMarkupRanges {
 		for (const range of ranges) {
 			if (prev_range !== -1)
 				output += doc.sliceString(prev_range, range.from);
-			if (drop_pending_additions && from <= range.from && range.to <= to) {
-				// EXPL: A pending addition consumed by a deletion/substitution mark is a retracted
-				//       suggestion — its text was never in the base document, so folding it into
-				//       the new range would make reject-all resurrect it.
+			if (drop_pending_additions && range.overlaps(from, to)) {
+				// EXPL: A pending addition consumed by a deletion/substitution mark is a RETRACTED
+				//       suggestion — its text was never in the base document, so folding it into the new
+				//       range would make reject-all resurrect it.
+				//
+				//       This used to require FULL coverage (`from <= range.from && range.to <= to`), so a
+				//       partial deletion across an addition folded the covered slice in and reject-all
+				//       brought back a character the user had never committed. Any overlap retracts now;
+				//       the UNCOVERED remainder survives as an addition via mark_range's split affixes /
+				//       the abutting-range merge.
 				if (range.type === SuggestionType.ADDITION) {
-					// contributes nothing
-				} else if (range.type === SuggestionType.SUBSTITUTION)
-					output += range.unwrap_parts()[0];
-				else
+					// contributes nothing — the covered slice is retracted
+				} else if (range.type === SuggestionType.SUBSTITUTION) {
+					// EXPL: Only the base ("old") half was ever in the document; the inserted ("new") half is
+					//       pending, so it is dropped either way. "old" folds into the new range's
+					//       deleted-text only when the op actually reaches into the OLD (deletion) half —
+					//       i.e. it starts before the separator (`from < middle`). That covers full coverage
+					//       and any coverage of "old".
+					//
+					//       When the op covers ONLY the pending "new" tail (`from >= middle`), "old" is
+					//       untouched and the caller preserves this range's "old" itself (split_left_range /
+					//       split_right_range re-emit the surviving substitution around the cut). Folding
+					//       "old" here too would DUPLICATE it — reject-all would yield "oldold" (Task 6b).
+					//       Conversely, always folding it (the pre-Task-6b behaviour) would LOSE "old" when
+					//       the op consumed the OLD-front of a back-substitution. `from < middle` splits the
+					//       two correctly: no resurrection, no lost committed text.
+					if (from < (range as SubstitutionRange).middle)
+						output += range.unwrap_parts()[0];
+				} else {
 					output += range.unwrap_slice(Math.max(0, from), to);
+				}
 			} else {
 				output += range.unwrap_slice(Math.max(0, from), to);
 			}

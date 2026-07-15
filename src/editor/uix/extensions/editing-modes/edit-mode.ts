@@ -16,6 +16,7 @@ import {
 
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
+import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
 
 export const editMode = (settings: PluginSettings): Extension =>
 	EditorState.transactionFilter.of(tr => applyCorrectedEdit(tr, settings));
@@ -39,7 +40,7 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 	if (tr.docChanged) {
 		const changed_ranges = getEditorRanges(tr.startState.selection, tr.changes, tr.startState.doc);
 
-		if (!(tr.isUserEvent("input") || tr.isUserEvent("paste") || tr.isUserEvent("delete")))
+		if (is_exempt_from_tracking(tr))
 			return tr;
 
 		const ranges = tr.startState.field(rangeParser).ranges;
@@ -139,7 +140,9 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 		return tr.startState.update({
 			changes,
 			selection: EditorSelection.create(selections),
-			annotations: forwardedEvent ? [Transaction.userEvent.of(forwardedEvent)] : undefined,
+			annotations: forwardedEvent ?
+				[Transaction.userEvent.of(forwardedEvent), pluginEditAnnotation.of(true)] :
+				[pluginEditAnnotation.of(true)],
 			filter: false,
 		});
 	} // CASE 2: Handle cursor movements
