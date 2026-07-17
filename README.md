@@ -22,16 +22,16 @@ All credit for the plugin's foundation belongs to them.
 
 ## What's different in this fork
 
-**Data-safety fixes** (the headline reason this fork exists):
+**Data-safety fixes:**
 
 - Rejecting all suggestions no longer resurrects text from retracted additions
-- "Accept/reject selected" no longer misfires at the very start of a document (previously accepted _everything_)
+- "Accept/reject selected" no longer misfires at the start of a document (previously accepted _everything_)
 - Substitution ranges are no longer corrupted (separator/metadata destruction) by the markup auto-correcter
 - Vault-wide accept/reject refuses to apply stale positions to files that changed after indexing
 
 **Collaboration features:**
 
-- **Comments anchored to selections** — Select text → _Add comment_ → `{==highlight==}{>>comment<<}` thread.
+- **Comments anchored to selections** — Select text > _Add comment_ > `{==highlight==}{>>comment<<}` thread.
 - **Comment mode** — A reviewer-friendly mode where text edits are blocked (with feedback) but commenting works
 - **Frontmatter-enforced modes** — A note can force `suggest`/`comment`/`off` for everyone except listed authors (see [Frontmatter](#frontmatter))
 - **No unprotected mode** — Every editing mode guards the CriticMarkup syntax (see [Editing modes](#editing-modes))
@@ -50,8 +50,8 @@ The editor toggle (status bar / note header) cycles through three modes:
 | **Commenting** | Document edits are blocked (with feedback); comments and replies still work                       |
 
 Upstream Commentator also had a "Regular" mode that installed no protection at all, so ordinary typing
-could silently corrupt a note's markup (backspacing `{++` into `{+`, deleting half of a range). It has been
-removed. Its one useful property — seeing the raw brackets and metadata of the range under the cursor — is
+could corrupt a note's markup (backspacing `{++` into `{+`, deleting half of a range). It has been
+removed. Its one interesting property, seeing the raw brackets and metadata of the range under the cursor, is
 now the **Reveal CriticMarkup syntax under the cursor** setting (Editor settings), which works in every mode.
 
 ## Frontmatter
@@ -71,7 +71,8 @@ reader's own default of suggesting or commenting.
 The legacy `commentator:` / `commentator-authors:` keys still work (checked when no `inkling` key is present),
 so existing notes from before the rename don't need to be updated.
 
-Note that this is not hard technical enforcement! This tool is only appropriate for high-trust teams.
+> [!NOTE]
+> This is not hard technical enforcement. Inkling is only appropriate for high-trust teams.
 
 ## Developing
 
