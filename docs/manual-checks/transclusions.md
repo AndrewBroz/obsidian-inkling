@@ -28,5 +28,6 @@ Check:
 - **No flash on resize:** in Live Preview, resize the editor pane (or the window) while a cleaned transclusion is on screen. The original text stays displayed throughout; raw CriticMarkup does not flash in.
 - **Heading embed and self-embed in Live Preview:** add `![[Reviewed#Reviewed]]` and, inside `Reviewed.md` itself, a self-embed such as `![[Reviewed#^r1]]`. Both clean correctly in Live Preview, not just Reading view.
 - **Styling parity:** a cleaned transclusion's headings, lists, tables, code blocks and blockquotes look identical (fonts, spacing, colours, indentation) to an equivalent plain (no-CriticMarkup) transclusion — not stripped-down or unstyled.
+- **Transclusion cycles:** create `A.md` containing `![[B]]` and a suggestion such as `{++added++}`, and `B.md` containing `![[A]]` and a comment such as `{>>note<<}`. Open `A.md` in Reading view and Live Preview. Nesting stops after a few levels and Obsidian stays responsive (no growing CPU use, no ever-deepening transclusions).
 
-Known gaps: transclusions inside hover popovers and Canvas are not cleaned (no host note view).
+Known gaps: transclusions inside hover popovers, Canvas and popout windows are not cleaned (no host note view, or not in the main window's document).
