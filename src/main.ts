@@ -24,6 +24,7 @@ import {
 	rangeParser,
 	text_copy,
 } from "./editor/base";
+import { registerOriginalTextEmbeds } from "./editor/renderers/embed/original-text-embeds";
 import {
 	annotationGutter,
 	annotationGutterCompartment,
@@ -335,6 +336,9 @@ export default class CommentatorPlugin extends Plugin {
 			// Full postprocessor rerender on enabling the plugin?
 			postProcessorRerender(this.app);
 		}
+
+		// EXPL: Transclusions always show the note's original text (independent of the post-processor setting).
+		registerOriginalTextEmbeds(this);
 
 		this.registerEvent(cmenuGlobalCommands(this));
 		this.registerEvent(cmenuViewportCommands(this));
