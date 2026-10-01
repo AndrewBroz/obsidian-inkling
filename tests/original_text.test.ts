@@ -46,6 +46,24 @@ describe("toOriginalText", () => {
 		expect(toOriginalText("Para one.\n\n{++New paragraph.++}\n\nPara two.")).toBe("Para one.\n\nPara two.");
 	});
 
+	test("drops a line left with only a block prefix", () => {
+		expect(toOriginalText("- {++Buy milk++}")).toBe("");
+		expect(toOriginalText("## {++New heading++}")).toBe("");
+		expect(toOriginalText("- [ ] {++task++}")).toBe("");
+		expect(toOriginalText("> {>>c<<}")).toBe("");
+		expect(toOriginalText("a\n- {++x++}\n- keep")).toBe("a\n- keep");
+		expect(toOriginalText("- keep {++x++}")).toBe("- keep");
+	});
+
+	test("drops a trailing space before CRLF line endings", () => {
+		expect(toOriginalText("Done. {>>c<<}\r\nNext")).toBe("Done.\r\nNext");
+	});
+
+	test("drops the blank lines after emptied lines at the very start", () => {
+		expect(toOriginalText("{>>c<<}\n\nPara")).toBe("Para");
+		expect(toOriginalText("{++A\n\nB++}\n\nC")).toBe("C");
+	});
+
 	test("keeps blank lines that no removal touched", () => {
 		expect(toOriginalText("A\n\n\nB {++x++}")).toBe("A\n\n\nB");
 	});
