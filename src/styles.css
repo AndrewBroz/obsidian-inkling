@@ -1,1 +1,5 @@
 @import "./assets/main.scss";
+
+.inkling-original-hidden {
+	display: none !important;
+}
