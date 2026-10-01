@@ -103,6 +103,10 @@ function disposeChild(plugin: CommentatorPlugin, state: EmbedState, embed: HTMLE
 }
 
 async function renderOriginal(plugin: CommentatorPlugin, state: EmbedState, embed: HTMLElement): Promise<void> {
+	// EXPL: Obsidian's raw nested embeds stay in the DOM under a hidden preview (see below); skip them so
+	//       they are never rendered invisibly.
+	if (embed.closest(`.${HIDDEN_CLASS}`)) return;
+
 	const app = plugin.app;
 	const content = embed.querySelector<HTMLElement>(":scope > .markdown-embed-content");
 	if (!content) return;
@@ -150,20 +154,52 @@ async function renderOriginal(plugin: CommentatorPlugin, state: EmbedState, embe
 	}
 	delete content.dataset.inklingPlain;
 
-	const wrapper = createDiv({ cls: RENDERED_CLASS });
+	// EXPL: The wrapper sits outside `.markdown-preview-view`, so it needs `markdown-rendered` itself to pick
+	//       up Obsidian's styling for headings, lists, tables, code, blockquotes, etc. (never
+	//       `markdown-preview-view`, so the `:scope > .markdown-preview-view` lookup above can never match
+	//       it). `rtl`/`show-indentation-guide` are copied from the hidden preview since they are state, not
+	//       part of the `markdown-rendered` ruleset itself.
+	const wrapper = createDiv({ cls: `${RENDERED_CLASS} markdown-rendered` });
+	wrapper.classList.toggle("rtl", preview.classList.contains("rtl"));
+	wrapper.classList.toggle("show-indentation-guide", preview.classList.contains("show-indentation-guide"));
 	wrapper.dataset.signature = signature;
 
 	const child = new MarkdownRenderChild(wrapper);
 	plugin.addChild(child);
 	// EXPL: The wrapper sits outside Obsidian's own click-handling root, so internal links need their own
-	//       handler; external links are plain <a> tags and work natively.
-	child.registerDomEvent(wrapper, "click", (evt) => {
+	//       handling; external links are plain <a> tags and work natively.
+	const internalLinkAt = (evt: Event): HTMLAnchorElement | null => {
 		const target_el = evt.target;
-		const link = target_el instanceof HTMLElement ? target_el.closest<HTMLAnchorElement>("a.internal-link") : null;
+		return target_el instanceof HTMLElement ? target_el.closest<HTMLAnchorElement>("a.internal-link") : null;
+	};
+	const openInternalLink = (evt: MouseEvent, new_leaf: boolean | "tab" | "split" | "window") => {
+		const link = internalLinkAt(evt);
 		if (!link) return;
 		evt.preventDefault();
 		const href = link.getAttribute("data-href") ?? link.getAttribute("href") ?? "";
-		void app.workspace.openLinkText(href, file.path, Keymap.isModEvent(evt));
+		void app.workspace.openLinkText(href, file.path, new_leaf);
+	};
+	child.registerDomEvent(wrapper, "click", (evt) => openInternalLink(evt, Keymap.isModEvent(evt)));
+	// EXPL: Middle-click opens in a new tab, matching Obsidian's own embed links; other aux buttons (back/
+	//       forward/right) are left to the browser's defaults.
+	child.registerDomEvent(wrapper, "auxclick", (evt) => {
+		if (evt.button === 1) openInternalLink(evt, true);
+	});
+	child.registerDomEvent(wrapper, "mouseover", (evt) => {
+		const link = internalLinkAt(evt);
+		if (!link) return;
+		const href = link.getAttribute("data-href") ?? link.getAttribute("href") ?? "";
+		// EXPL: Drives the core "Page preview" plugin's hover popover. The event payload has no exported
+		//       type in obsidian.d.ts (only `registerHoverLinkSource`/`HoverLinkSource` are typed), so it is
+		//       passed as a plain object; `Workspace.trigger` itself accepts `unknown[]`.
+		app.workspace.trigger("hover-link", {
+			event: evt,
+			source: "preview",
+			hoverParent: child,
+			targetEl: link,
+			linktext: href,
+			sourcePath: file.path,
+		});
 	});
 
 	await MarkdownRenderer.render(app, toOriginalText(slice, plugin.settings), wrapper, file.path, child);
