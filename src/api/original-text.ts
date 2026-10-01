@@ -63,6 +63,8 @@ function tidy(marked: string): string {
 }
 
 function tidyLine(line: string): string {
+	// EXPL: The pattern intentionally matches the REMOVED placeholder (a literal control character).
+	// eslint-disable-next-line no-control-regex
 	return line.replace(/ ?\u0000(?: ?\u0000)*( ?)/g, (match: string, trailing: string, offset: number) => {
 		const leading = match.startsWith(" ");
 		const at_start = line.slice(0, offset).trim() === "";
