@@ -163,3 +163,16 @@ Items may be dropped for any reason.
 
 - [x] Add comments to selection
 - [x] Smooth cursor movement through markup
+
+## API for other plugins
+
+Other plugins can turn CriticMarkup into the note's original text: suggestions shown as rejected, comments removed, highlights unwrapped.
+
+```ts
+const api = app.plugins.getPlugin("inkling")?.api;
+if (api && api.version >= 1) {
+	const original = api.toOriginalText(markdown);
+}
+```
+
+`version` changes only on a breaking change. Transclusions of notes containing CriticMarkup are displayed using this original text.

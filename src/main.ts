@@ -24,6 +24,7 @@ import {
 	rangeParser,
 	text_copy,
 } from "./editor/base";
+import { registerOriginalTextEmbeds } from "./editor/renderers/embed/original-text-embeds";
 import {
 	annotationGutter,
 	annotationGutterCompartment,
@@ -63,6 +64,8 @@ import { AuthorNameModal } from "./ui/modals";
 import { CommentatorSettings } from "./ui/settings";
 import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/view.svelte";
 
+import { createApi, type InklingApi } from "./api";
+
 import {
 	backfillLegacyMetadataFlags,
 	backfillMarkupFocus,
@@ -101,6 +104,8 @@ export default class CommentatorPlugin extends Plugin {
 	settings: PluginSettings = DEFAULT_SETTINGS;
 	previous_settings: Partial<PluginSettings> = {};
 	changed_settings: Partial<PluginSettings> = {};
+
+	api!: InklingApi;
 
 	// EXPL: True only when loadData() returned null, i.e. no saved data.json existed yet.
 	//       Used to gate the first-run author-name prompt (see onload()).
@@ -275,6 +280,9 @@ export default class CommentatorPlugin extends Plugin {
 
 		await this.migrateSettings(await this.loadData());
 
+		// EXPL: Public API for other plugins (e.g. Transclusion Extractor); see README "API for other plugins".
+		this.api = createApi(() => this.settings);
+
 		// EXPL: First-run-only prompt for the author name used in suggestion/comment attribution.
 		//       Skipping (or an existing vault with settings.author already set) leaves settings
 		//       untouched; generate_metadata() simply omits the author field while it is empty.
@@ -328,6 +336,9 @@ export default class CommentatorPlugin extends Plugin {
 			// Full postprocessor rerender on enabling the plugin?
 			postProcessorRerender(this.app);
 		}
+
+		// EXPL: Transclusions always show the note's original text (independent of the post-processor setting).
+		registerOriginalTextEmbeds(this);
 
 		this.registerEvent(cmenuGlobalCommands(this));
 		this.registerEvent(cmenuViewportCommands(this));
