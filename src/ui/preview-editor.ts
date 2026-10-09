@@ -55,6 +55,8 @@ export class PreviewEditor extends Component {
 	public options: PreviewEditorProps;
 	private currentMode!: "preview" | "edit";
 	private clickContainer: HTMLElement;
+	// EXPL: Preview mode's one-shot click-to-edit listener, while it is armed.
+	private clickListener: (() => void) | null = null;
 
 	constructor(private app: App, private container: HTMLElement, options: Partial<PreviewEditorProps> = {}) {
 		super();
@@ -113,6 +115,11 @@ export class PreviewEditor extends Component {
 			return;
 
 		this.currentMode = "edit";
+		// EXPL: Disarm preview's click-to-edit listener. When edit mode is entered some other way
+		//       (setMode("edit") from the "Edit comment" menu item), it would otherwise still be
+		//       listening on the click container, and the first click inside the editor would
+		//       switch straight back to preview.
+		this.removeClickListener();
 		this.cleanup();
 
 		if (this.options.editor_cls)
@@ -149,12 +156,20 @@ export class PreviewEditor extends Component {
 			this.container.addClass(...([] as string[]).concat(this.options.preview_cls));
 
 		MarkdownRenderer.render(this.app, this.options.value, this.container, "", this);
+		this.removeClickListener();
 		const click_listener = () => {
-			this.clickContainer.removeEventListener(this.options.focus_mode, click_listener);
+			this.removeClickListener();
 			setImmediate(() => {
 				this.switchMode();
 			});
 		};
+		this.clickListener = click_listener;
 		this.clickContainer.addEventListener(this.options.focus_mode, click_listener);
+	}
+
+	private removeClickListener() {
+		if (!this.clickListener) return;
+		this.clickContainer.removeEventListener(this.options.focus_mode, this.clickListener);
+		this.clickListener = null;
 	}
 }

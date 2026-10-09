@@ -109,11 +109,13 @@ class AnnotationNode extends Component {
 			if (this.currentMode === "source") return;
 
 			const { app } = this.marker.view.state.field(editorInfoField);
-			this.annotation_container.toggleClass("cmtr-anno-gutter-annotation-editing", true);
 			if (this.range.fields.author && this.range.fields.author !== app.plugins.plugins.inkling.settings.author) {
 				new Notice("[Inkling] You cannot edit comments from other authors.");
 				return;
 			}
+			// EXPL: Set only once the edit is actually allowed: AnnotationMarker.onCommentThreadClick
+			//       reads this class to tell clicks inside a live comment editor apart.
+			this.annotation_container.toggleClass("cmtr-anno-gutter-annotation-editing", true);
 
 			this.annotation_view.empty();
 			this.editMode = this.addChild(
@@ -466,7 +468,15 @@ export class AnnotationMarker extends GutterMarker {
 			this.annotations[0].equals(other.annotations[0]);
 	}
 
-	onCommentThreadClick() {
+	onCommentThreadClick(e: MouseEvent) {
+		// EXPL: A click inside a comment that is being edited is the user placing the cursor, not
+		//       focusing the thread. Without this, the click bubbles here and showReplyBox() opens a
+		//       reply box whose editor grabs focus; the comment editor blurs, and blur saves and
+		//       closes it (AnnotationNode.renderSource onBlur). Keyboard input fires no clicks, which
+		//       is why arrow-key editing kept working.
+		if ((e.target as Element | null)?.closest?.(".cmtr-anno-gutter-annotation-editing"))
+			return;
+
 		// EXPL: When the annotation gets focused, ensure that it is aligned to the block it is attached to,
 		// 		 pushing other annotations up/down
 		this.view.dispatch({
