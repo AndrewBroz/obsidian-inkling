@@ -83,6 +83,38 @@ B"
 `);
 	});
 
+	test("leaves an opener without a closer as written", () => {
+		expect(toOriginalText("{--open never closed\n\nmore")).toBe("{--open never closed\n\nmore");
+		expect(toOriginalText("{==open")).toBe("{==open");
+		expect(toOriginalText("{~~open~>never")).toBe("{~~open~>never");
+		expect(toOriginalText("{>>open")).toBe("{>>open");
+		expect(toOriginalText("{++open never closed")).toBe("{++open never closed");
+		expect(toOriginalText("{++x--}")).toBe("{++x--}");
+		expect(toOriginalText("{++")).toBe("{++");
+		expect(toOriginalText("{++}")).toBe("{++}");
+	});
+
+	test("still processes closed markup after an unclosed opener", () => {
+		expect(toOriginalText("Keep {++this\n\nand the rest {--gone--}")).toBe("Keep {++this\n\nand the rest gone");
+		expect(toOriginalText("{++a {~~b~>c~~} d")).toBe("{++a b d");
+		expect(toOriginalText("Text {==here==}{>>one<<}{>>open")).toBe("Text here{>>open");
+		expect(toOriginalText("{++a++} {--b")).toBe("{--b");
+	});
+
+	test("ends a substitution with a repeated `~>` at its closer", () => {
+		expect(toOriginalText("a {~~x~>y~>z~~} b")).toBe("a x b");
+		expect(toOriginalText("a {~~x~>y~>z~~} b {++c++} d")).toBe("a x b d");
+		expect(toOriginalText("a {~~x~>y~>z~~}{>>why<<} b")).toBe("a x b");
+		expect(toOriginalText(`{~~{"author":"A"}@@x~>y~>z~~}`)).toBe("x");
+		// EXPL: without a closer it is an unclosed opener, and the markup after it still counts.
+		expect(toOriginalText("x {~~a~>b~>c {--d--}")).toBe("x {~~a~>b~>c d");
+	});
+
+	test("never leaks metadata when the content repeats `@@`", () => {
+		expect(toOriginalText(`x {++{"author":"A"}@@a@@b++} y`)).toBe("x y");
+		expect(toOriginalText(`{--{"author":"A"}@@a@@b--} here`)).toBe("a@@b here");
+	});
+
 	test("pins behaviour for markup inside inline code", () => {
 		expect(toOriginalText("Use `{++x++}` literally")).toMatchInlineSnapshot(`"Use \`\` literally"`);
 	});

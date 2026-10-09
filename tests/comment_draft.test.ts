@@ -240,21 +240,23 @@ describe("commitCommentDraft cannot corrupt the note", () => {
 
 	// EXPL: FIX 1. The degrade branch runs BECAUSE there is markup in or around the anchor, so
 	//       `draft.to` — the anchor's own end — is exactly the position most likely to be inside it.
-	//       Typing `{--` inside the anchor makes an (unterminated) deletion swallow the anchor's end;
-	//       writing the comment at `draft.to` gives `alpha be{--ta{>>note<<} gamma`, which the parser
-	//       reads as ONE deletion with the user's comment buried in it as inert text. Snap to the
-	//       covering range's thread end instead.
-	//       (The user's own stray `{--` still runs to the end of their note — that is their text, and
-	//       no write can escape an unterminated opener. What this pins is that WE never add a second
-	//       break by splicing through the middle of a range.)
-	test("the degraded comment is never spliced inside a range that covers the anchor's end", () => {
+	//       Writing the comment at `draft.to` must never give `alpha be{--ta{>>note<<} gamma`, the
+	//       user's comment buried inert inside a deletion.
+	//       A stray `{--` typed inside the anchor used to parse as an unterminated deletion swallowing
+	//       the rest of the note. An opener without a closer is not a range any more: it stays inert
+	//       text, the anchor holds no range, and the comment anchors normally around it.
+	test("a stray unterminated opener inside the anchor is not a range the comment is spliced into", () => {
 		const view = viewWith("alpha beta gamma");
 		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 10 }) }); // "beta"
 		view.dispatch({ changes: { from: 8, to: 8, insert: "{--" } });
 
 		expect(commitCommentDraft(view, "note")).toBe(true);
-		expect(view.state.doc.toString()).toBe("alpha be{--ta gamma{>>note<<}");
+		expect(view.state.doc.toString()).toBe("alpha {==be{--ta==}{>>note<<} gamma");
 		expect(view.state.doc.toString()).not.toContain("{--ta{>>note<<}");
+		const ranges = view.state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(range => range.type)).toEqual([SuggestionType.HIGHLIGHT, SuggestionType.COMMENT]);
+		expect(ranges[0].unwrap()).toBe("be{--ta");
+		expect(ranges[1].unwrap()).toBe("note");
 		expect(view.state.field(commentDraftField)).toBeNull();
 	});
 
