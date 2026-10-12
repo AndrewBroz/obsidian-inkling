@@ -61,6 +61,12 @@ const context = await esbuild.context({
 	outdir: dir,
 	metafile: verbose,
 	drop: prod ? ["console"] : [],
+	// NOTE: localforage's default build bundles a Promise polyfill (lie + immediate) whose
+	//       legacy-browser fallback injects <script> elements. Obsidian's directory review rejects
+	//       that, and Obsidian always has native Promise, so use the polyfill-free build.
+	alias: {
+		localforage: "localforage/dist/localforage.nopromises.js",
+	},
 
 	plugins: [
 		sassPlugin(),
