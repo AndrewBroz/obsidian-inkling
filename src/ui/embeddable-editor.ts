@@ -13,6 +13,7 @@
 
 import { App, type Constructor, Scope, TFile, WorkspaceLeaf } from "obsidian";
 import type { MarkdownScrollableEditView, WidgetEditorView } from "obsidian-typings";
+import { enterSubmits } from "./comment-keys";
 
 import { EditorSelection, type Extension, Prec } from "@codemirror/state";
 import { EditorView, keymap, placeholder, ViewUpdate } from "@codemirror/view";
@@ -63,11 +64,8 @@ export const defaultMarkdownEditorProps: MarkdownEditorProps = {
 	focus: true,
 	filteredExtensions: [],
 
-	onEnter: (editor, mod, shift) => {
-		if (mod)
-			editor.options.onSubmit(editor);
-		return mod;
-	},
+	// EXPL: Every embeddable editor in Inkling is a comment editor; they all share enterSubmits.
+	onEnter: (editor, _mod, shift) => enterSubmits(shift, () => editor.options.onSubmit(editor)),
 	onEscape: (editor) => {
 		editor.options.onBlur(editor);
 	},

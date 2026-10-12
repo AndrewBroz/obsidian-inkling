@@ -26,8 +26,8 @@ export interface ReplyBoxOptions {
 /**
  * The always-one-click-away reply input at the foot of a gutter thread card.
  *
- * EXPL: Enter submits and Shift+Enter newlines, which inverts EmbeddableMarkdownEditor's default
- *       (`onEnter` ships as "Mod+Enter submits, bare Enter newlines" — embeddable-editor.ts:66-70).
+ * EXPL: Enter submits and Shift+Enter newlines, the convention every comment editor shares
+ *       (enterSubmits, comment-keys.ts). This box keeps its own onEnter for the `committing` latch.
  *       Returning true from onEnter means "handled, don't insert a newline"; returning false lets
  *       CodeMirror insert one. That single hook is the whole keybinding — no custom keymap.
  *
