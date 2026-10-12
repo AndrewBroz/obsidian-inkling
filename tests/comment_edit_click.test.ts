@@ -82,7 +82,7 @@ if (typeof (globalThis as any).setImmediate !== "function")
 	(globalThis as any).setImmediate = (fn: () => void) => setTimeout(fn, 0);
 
 function stubPluginManager(author = "me") {
-	return { plugins: { inkling: { editorExtensions: [], settings: { author } } } };
+	return { plugins: { "inkling-markup": { editorExtensions: [], settings: { author } } } };
 }
 
 function setup(doc: string) {

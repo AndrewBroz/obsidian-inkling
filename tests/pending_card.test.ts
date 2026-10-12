@@ -87,14 +87,14 @@ if (!("win" in proto)) {
 	});
 }
 
-// EXPL: reply-box.ts eagerly reads `app.plugins.plugins["inkling"].editorExtensions` while building
+// EXPL: reply-box.ts eagerly reads `app.plugins.plugins["inkling-markup"].editorExtensions` while building
 //       its EmbeddableMarkdownEditor options; the App stand-in (__mocks__/obsidian.ts) has no
 //       plugin manager, so stub the shape the card actually touches.
 function stubApp() {
 	const app = new App();
 	(app.workspace as any).requestSaveLayout = () => {};
 	(app.vault as any).getConfig = () => undefined;
-	(app as any).plugins = { plugins: { inkling: { editorExtensions: [] } } };
+	(app as any).plugins = { plugins: { "inkling-markup": { editorExtensions: [] } } };
 	return app;
 }
 

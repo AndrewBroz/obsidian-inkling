@@ -40,6 +40,6 @@ declare module "obsidian" {
 
 declare module "obsidian-typings" {
 	interface PluginsPluginsRecord {
-		inkling: CommentatorPlugin;
+		"inkling-markup": CommentatorPlugin;
 	}
 }

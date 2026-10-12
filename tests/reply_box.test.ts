@@ -68,14 +68,14 @@ proto.empty = function() {
 };
 
 // EXPL: reply-box.ts and marker.ts's renderSource() both eagerly read
-//       `app.plugins.plugins["inkling"].editorExtensions` while building the EmbeddableMarkdownEditor
+//       `app.plugins.plugins["inkling-markup"].editorExtensions` while building the EmbeddableMarkdownEditor
 //       options object. Real Obsidian always has this; jsdom's App stand-in (__mocks__/obsidian.ts)
 //       does not, so tests that actually construct an editor (rather than just poking at the
 //       marker's own fields) need it stubbed in.
 // EXPL: This is the value of `app.plugins` (Obsidian's plugin manager: `.plugins` is its
 //       dict of loaded plugin instances by id).
 function stubPluginManager() {
-	return { plugins: { inkling: { editorExtensions: [] } } };
+	return { plugins: { "inkling-markup": { editorExtensions: [] } } };
 }
 
 function setup(doc: string) {
