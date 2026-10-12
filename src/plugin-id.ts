@@ -106,7 +106,7 @@ export function noticeLegacyInstall(app: App) {
 		"store will otherwise offer an unrelated plugin as its \"update\".";
 	const button = fragment.appendChild(document.createElement("button"));
 	button.textContent = "Uninstall old copy";
-	button.style.marginTop = "8px";
+	button.addClass("inkling-legacy-uninstall-button");
 
 	const notice = new Notice(fragment, 0);
 	button.addEventListener("click", async (evt) => {
