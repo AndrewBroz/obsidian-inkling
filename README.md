@@ -1,4 +1,4 @@
-# Inkling: Collaborative Editing for Obsidian
+# Inkling Markup: Collaborative Editing for Obsidian
 
 **Inkling** is a [CriticMarkup](https://github.com/CriticMarkup/CriticMarkup-toolkit) editor for [Obsidian](https://obsidian.md/).
 It is designed both for collaborative editing (with tools like Relay) and for reviewing your notes, providing a suggestion mode
@@ -13,7 +13,7 @@ All credit for the plugin's foundation belongs to them.
 
 1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin
 2. In BRAT: **Add beta plugin** → `AndrewBroz/obsidian-inkling`
-3. Enable **Inkling** in Settings → Community plugins
+3. Enable **Inkling Markup** in Settings → Community plugins
 
 ### Upgrading from 0.11.x or older (plugin id `inkling`)
 
@@ -24,7 +24,7 @@ different plugin.
 
 1. In BRAT, check for updates (or re-add `AndrewBroz/obsidian-inkling`); this installs `inkling-markup`
    alongside the old copy
-2. Enable the new **Inkling** in Settings → Community plugins. On first load it imports your settings and
+2. Enable **Inkling Markup** in Settings → Community plugins. On first load it imports your settings and
    hotkeys from the old copy and disables it
 3. Click **Uninstall old copy** in the notice that appears (or uninstall the 0.11.x **Inkling** manually)
 
