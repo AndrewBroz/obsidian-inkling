@@ -75,7 +75,7 @@ function tidyLine(raw: string): string {
 	const cr = raw.endsWith("\r") ? "\r" : "";
 	const line = cr ? raw.slice(0, -1) : raw;
 	// EXPL: The pattern intentionally matches the REMOVED placeholder (a literal control character).
-	// eslint-disable-next-line no-control-regex
+	// eslint-disable-next-line no-control-regex -- matches the REMOVED placeholder, a literal NUL
 	return line.replace(/ ?\u0000(?: ?\u0000)*( ?)/g, (match: string, trailing: string, offset: number) => {
 		const leading = match.startsWith(" ");
 		const at_start = line.slice(0, offset).trim() === "";

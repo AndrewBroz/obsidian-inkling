@@ -86,7 +86,7 @@ export class AnnotationGutterView extends GutterView {
 		// EXPL: If the gutter is not inside a Markdown View, hide it and remove it from the gutter extension from the view
 		if (!view.dom.parentElement!.classList.contains("markdown-source-view")) {
 			// NOTE: Prevents gutter from appearing for a brief second (until setImmediate kicks in)
-			this.dom.style.display = "none";
+			this.dom.setCssStyles({ display: "none" });
 			// NOTE: Codemirror doesn't allow state changes during updates, so reconfiguration needs to be delayed
 			setImmediate(() => {
 				view.dispatch(view.state.update({
@@ -418,7 +418,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 		this.add_resize_handle = config.includeResizeHandle;
 
 		if ((this.hide_on_empty && !has_gutter_content(view.state)) || this.folded)
-			this.dom.style.width = "0";
+			this.dom.setCssStyles({ width: "0" });
 		else
 			this.dom.style.width = this.width + "px";
 		this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.folded ? "0px" : this.width + "px");
@@ -532,11 +532,11 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			if (this.folded) {
 				icon.ariaLabel = "Unfold gutter";
 				if (this.resize_handle_el)
-					this.resize_handle_el.style.display = "none";
+					this.resize_handle_el.setCssStyles({ display: "none" });
 			} else {
 				icon.ariaLabel = "Fold gutter";
 				if (this.resize_handle_el)
-					this.resize_handle_el.style.display = "";
+					this.resize_handle_el.setCssStyles({ display: "" });
 			}
 			this.updateFoldButtonPosition();
 		}
@@ -626,7 +626,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 					this.view.contentDOM.removeAttribute("style");
 					this.view.scrollDOM.children[0].removeAttribute("style");
 					if (this.folded)
-						this.view.dom.style.setProperty("--cmtr-anno-gutter-width", "0px");
+						this.view.dom.setCssProps({ "--cmtr-anno-gutter-width": "0px" });
 				}, { once: true });
 			});
 		}
@@ -666,7 +666,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			if (hide_empty !== undefined) {
 				this.hide_on_empty = hide_empty;
 				if (this.hide_on_empty && !has_content)
-					this.dom.style.width = "0";
+					this.dom.setCssStyles({ width: "0" });
 				else
 					this.dom.style.width = this.width + "px";
 				this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.width + "px");
@@ -699,16 +699,16 @@ class AnnotationSingleGutterView extends SingleGutterView {
 		if (has_content !== has_gutter_content(update.startState)) {
 			if (!has_content) {
 				if (this.fold_button_el)
-					this.fold_button_el.style.display = "none";
+					this.fold_button_el.setCssStyles({ display: "none" });
 				if (this.resize_handle_el)
-					this.resize_handle_el.style.display = "none";
+					this.resize_handle_el.setCssStyles({ display: "none" });
 				if (this.hide_on_empty)
-					this.dom.style.width = "0";
+					this.dom.setCssStyles({ width: "0" });
 			} else {
 				if (this.fold_button_el)
-					this.fold_button_el.style.display = "";
+					this.fold_button_el.setCssStyles({ display: "" });
 				if (this.resize_handle_el)
-					this.resize_handle_el.style.display = "";
+					this.resize_handle_el.setCssStyles({ display: "" });
 				if (!this.folded)
 					this.dom.style.width = this.width + "px";
 			}

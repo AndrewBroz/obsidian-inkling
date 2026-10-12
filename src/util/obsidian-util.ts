@@ -35,15 +35,21 @@ export async function getObsidianData(app: App) {
 			operating_system =
 				`${device_info.platform} ${device_info.osVersion} (${device_info.manufacturer} ${device_info.model})`;
 		} else {
-			operating_system = navigator.userAgent.match(/(Android|iOS) ([\d.]+)/)?.[0] || "unknown";
+			operating_system = Platform.isAndroidApp ? "Android" : Platform.isIosApp ? "iOS" : "unknown";
 		}
 	} else if (Platform.isDesktopApp) {
 		const os = require("os") as typeof import("os");
 		operating_system = os.version() + " " + os.release();
-		framework_version = navigator.userAgent.match(/obsidian\/([\d.]+\d+)/)?.[1] || "unknown";
+		try {
+			// EXPL: Obsidian's main process answers "version" with the installer version.
+			framework_version = String(window.electron.ipcRenderer.sendSync("version"));
+		} catch {
+			framework_version = "unknown";
+		}
 	} else {
-		operating_system = navigator.userAgent.match(/(Windows|Mac OS X|Linux) ([\d.]+)/)?.[0] || "unknown";
-		framework_version = navigator.userAgent.match(/obsidian\/([\d.]+\d+)/)?.[1] || "unknown";
+		// EXPL: Obsidian's directory review forbids sniffing navigator for the OS; Platform only gives the family.
+		operating_system = Platform.isMacOS ? "macOS" : Platform.isWin ? "Windows" : Platform.isLinux ? "Linux" : "unknown";
+		framework_version = "unknown";
 	}
 
 	const other_plugins = Object.values(app.plugins.plugins)

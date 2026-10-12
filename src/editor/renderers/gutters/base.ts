@@ -341,7 +341,7 @@ export class SingleGutterView {
 		if (config.initialSpacer) {
 			this.spacer = new GutterElement(view, 0, 0, [config.initialSpacer(view)]);
 			this.dom.appendChild(this.spacer.dom);
-			this.spacer.dom.style.cssText += "visibility: hidden; pointer-events: none";
+			this.spacer.dom.setCssStyles({ visibility: "hidden", pointerEvents: "none" });
 		}
 	}
 
@@ -392,7 +392,7 @@ export class GutterView {
 			// FIXME IE11 fallback, which doesn't support position: sticky,
 			// 	by using position: relative + event handlers that realign the
 			// 	gutter (or just force fixed=false on IE11?)
-			this.dom.style.position = "sticky";
+			this.dom.setCssStyles({ position: "sticky" });
 		}
 		this.syncGutters(false);
 		this.insertGutters(view);

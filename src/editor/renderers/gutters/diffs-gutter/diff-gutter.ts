@@ -29,7 +29,7 @@ export class DiffGutterView extends GutterView {
 		// FIXME: this still causes a layout shift
 		if (!view.dom.parentElement!.classList.contains("markdown-source-view")) {
 			// Prevent gutter from appearing for a brief second (until setImmediate kicks in)
-			this.dom.style.display = "none";
+			this.dom.setCssStyles({ display: "none" });
 			// Codemirror doesn't allow state changes during updates, so reconfiguration needs to be delayed
 			setImmediate(() => {
 				view.dispatch(view.state.update({

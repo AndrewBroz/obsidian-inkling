@@ -139,11 +139,11 @@ export class HeaderButton {
 				//       step ahead of the adjacent label (e.g. label "Editing" with the Suggesting icon).
 				setIcon(elements.button, icon);
 				elements.button.setAttribute("aria-label", tooltip);
-				elements.button.style.display = "";
+				elements.button.setCssStyles({ display: "" });
 				if (this.has_label)
 					elements.status!.innerText = text;
 			} else {
-				elements.button.style.display = "none";
+				elements.button.setCssStyles({ display: "none" });
 			}
 		}
 	}
@@ -205,7 +205,7 @@ export class HeaderButton {
 				//       visual text reinforcement (e.g. "Editing").
 			}
 
-			if (index === -1) button.style.display = "none";
+			if (index === -1) button.setCssStyles({ display: "none" });
 
 			button.oncontextmenu = (e: MouseEvent) => this.openMenu(view, e);
 

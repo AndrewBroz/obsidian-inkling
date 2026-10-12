@@ -35,6 +35,16 @@ function createElHelper(tag: string) {
 (global as any).createSpan = createElHelper("span");
 (global as any).createDiv = createElHelper("div");
 
+// Obsidian's style helpers on HTMLElement (used instead of direct `el.style.x = ...`
+// assignments, which its plugin review rejects).
+(HTMLElement.prototype as any).setCssStyles = function(styles: Partial<CSSStyleDeclaration>) {
+	Object.assign(this.style, styles);
+};
+(HTMLElement.prototype as any).setCssProps = function(props: Record<string, string>) {
+	for (const [key, value] of Object.entries(props))
+		this.style.setProperty(key, value);
+};
+
 // `pluginSettingsField` (used by rangeParser) is only populated once the real
 // plugin calls `providePluginSettingsExtension(plugin)` from its onload().
 // Outside the running app nothing does that, so populate it here with the
