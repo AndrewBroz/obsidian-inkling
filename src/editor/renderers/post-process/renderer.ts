@@ -138,11 +138,12 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 	// If code lands here, the element includes a transition of a range (either in/out of a range, or passing middle arrow)
 
 	// Revert markdown rendering of stricken through text and other incorrectly applied markup (that normally would be rendered as <del>...</del>)
-	element_contents = element_contents.replaceAll(/{<del>|{<\/del>/g, "{~~")
-		.replaceAll(/<del>}|<\/del>}/g, "~~}")
-		.replaceAll(/{<mark>|{<\/mark>/g, "{==")
-		.replaceAll(/<mark>}|<\/mark>}/g, "==}")
-		.replaceAll(/{=<mark>=}|{=<\/mark>=}/g, "{====}");
+	// EXPL: Opening tags may carry attributes: Obsidian 1.13 renders highlights as <mark data-highlight="">.
+	element_contents = element_contents.replaceAll(/{<del(?:\s[^>]*)?>|{<\/del>/g, "{~~")
+		.replaceAll(/<del(?:\s[^>]*)?>}|<\/del>}/g, "~~}")
+		.replaceAll(/{<mark(?:\s[^>]*)?>|{<\/mark>/g, "{==")
+		.replaceAll(/<mark(?:\s[^>]*)?>}|<\/mark>}/g, "==}")
+		.replaceAll(/{=<mark(?:\s[^>]*)?>=}|{=<\/mark>=}/g, "{====}");
 
 	// Part of the block is one or more CriticMarkup ranges
 

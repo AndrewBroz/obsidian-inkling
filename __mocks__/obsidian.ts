@@ -405,3 +405,5 @@ export class App {
 	embedRegistry: any = {};
 	scope: any = new Scope();
 }
+
+export class MarkdownView {}
