@@ -8,7 +8,7 @@ export function text_copy(settings: PluginSettings, event: ClipboardEvent, view:
 		const selection = view.state.selection.main;
 		const ranges = view.state.field(rangeParser).ranges;
 
-		const removed_syntax = ranges.unwrap_in_range(view.state.doc, selection.from, selection.to).output;
+		const removed_syntax = ranges.unwrap_in_range(view.state.doc, selection.from, selection.to, null, false, true).output;
 		event.clipboardData.setData("text/plain", removed_syntax);
 		event.preventDefault();
 	}

@@ -119,6 +119,7 @@ export class CriticMarkupRanges {
 		to = doc.length,
 		ranges: CriticMarkupRange[] | null = null,
 		drop_pending_additions = false,
+		drop_comments = false,
 	): { output: string; from: number; to: number; front_range?: CriticMarkupRange; back_range?: CriticMarkupRange } {
 		let front_range: undefined | CriticMarkupRange, back_range: undefined | CriticMarkupRange;
 
@@ -138,7 +139,9 @@ export class CriticMarkupRanges {
 		for (const range of ranges) {
 			if (prev_range !== -1)
 				output += doc.sliceString(prev_range, range.from);
-			if (drop_pending_additions && range.overlaps(from, to)) {
+			if (drop_comments && range.type === SuggestionType.COMMENT) {
+				// EXPL: Comment text is not document text; copying prose must not inline it.
+			} else if (drop_pending_additions && range.overlaps(from, to)) {
 				// EXPL: A pending addition consumed by a deletion/substitution mark is a RETRACTED
 				//       suggestion — its text was never in the base document, so folding it into the new
 				//       range would make reject-all resurrect it.
