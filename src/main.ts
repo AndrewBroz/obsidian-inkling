@@ -470,6 +470,11 @@ export default class CommentatorPlugin extends Plugin {
 			if (!("diff_gutter_migrated" in new_settings))
 				await this.setSettings();
 		}
+
+		// EXPL: Settings imported from a pre-rename plugin id exist only in memory until saved here;
+		//       the legacy data.json disappears once the old copy is uninstalled (plugin-id.ts).
+		if (this.legacy_import_id)
+			await this.setSettings();
 	}
 
 	async onExternalSettingsChange() {
