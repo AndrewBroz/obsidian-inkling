@@ -15,6 +15,7 @@ import { pluginSettingsField } from "../../uix";
 import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 import { annotationGutterFocusAnnotation } from "../gutters";
 
+import { PLUGIN_ID } from "../../../plugin-id";
 import { EmbeddableMarkdownEditor } from "../../../ui/embeddable-editor";
 import { PreviewEditor } from "../../../ui/preview-editor";
 import { createMetadataInfoElement } from "../../../ui/snippets";
@@ -163,14 +164,14 @@ export class CommentIconWidget extends WidgetType {
 
 				click_container: rangeContainer,
 
-				filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
+				filteredExtensions: [app.plugins.plugins[PLUGIN_ID].editorExtensions],
 
 				onSubmit: (editor) => this.commitRangeEdit(range, editor.get(), was_empty, rangeContainer, editorComponent),
 
 				onBlur: (editor) => this.commitRangeEdit(range, editor.get(), was_empty, rangeContainer, editorComponent),
 
 				isEditable: (editor) => {
-					if (range.fields.author && range.fields.author !== app.plugins.plugins.inkling.settings.author) {
+					if (range.fields.author && range.fields.author !== app.plugins.plugins[PLUGIN_ID].settings.author) {
 						new Notice("[Inkling] You cannot edit comments from other authors.");
 						return false;
 					}
@@ -223,7 +224,7 @@ export class CommentIconWidget extends WidgetType {
 							new EmbeddableMarkdownEditor(app, replyContainer, {
 								value: "",
 								cls: ["markdown-source-view", "mod-cm6", "cmtr-comment-tooltip-editor"],
-								filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
+								filteredExtensions: [app.plugins.plugins[PLUGIN_ID].editorExtensions],
 
 								onSubmit: (editor) => {
 									// EXPL: Refuse a body that cannot be written verbatim, keeping the reply box open

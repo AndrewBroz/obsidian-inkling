@@ -15,6 +15,19 @@ All credit for the plugin's foundation belongs to them.
 2. In BRAT: **Add beta plugin** → `AndrewBroz/obsidian-inkling`
 3. Enable **Inkling** in Settings → Community plugins
 
+### Upgrading from 0.11.x or older (plugin id `inkling`)
+
+From 0.12.0 the plugin id is **`inkling-markup`**. The old id `inkling` now belongs to an unrelated
+plugin in the community store, so Obsidian offers that plugin's releases as an "update" to old installs.
+**Do not click Update on an Inkling 0.11.x install** (or "Update all"): it replaces Inkling with a
+different plugin.
+
+1. In BRAT, check for updates (or re-add `AndrewBroz/obsidian-inkling`); this installs `inkling-markup`
+   alongside the old copy
+2. Enable the new **Inkling** in Settings → Community plugins. On first load it imports your settings and
+   hotkeys from the old copy and disables it
+3. Click **Uninstall old copy** in the notice that appears (or uninstall the 0.11.x **Inkling** manually)
+
 > [!WARNING]
 > This fork is in beta. It carries an extensive automated regression suite (1,100+ tests, including
 > round-trip safety tests for accept/reject), but has not yet finished manual validation in live vaults.
@@ -169,7 +182,7 @@ Items may be dropped for any reason.
 Other plugins can turn CriticMarkup into the note's original text: suggestions shown as rejected, comments removed, highlights unwrapped.
 
 ```ts
-const api = app.plugins.getPlugin("inkling")?.api;
+const api = app.plugins.getPlugin("inkling-markup")?.api;
 if (api && api.version >= 1) {
 	const original = api.toOriginalText(markdown);
 }

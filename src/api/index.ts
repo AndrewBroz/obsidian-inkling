@@ -2,7 +2,7 @@ import type { PluginSettings } from "../types";
 import { toOriginalText } from "./original-text";
 
 /**
- * Stable API for other plugins: `app.plugins.getPlugin("inkling")?.api`.
+ * Stable API for other plugins: `app.plugins.getPlugin("inkling-markup")?.api`.
  * EXPL: `version` only changes on a breaking change; consumers should check `version >= 1`.
  */
 export interface InklingApi {

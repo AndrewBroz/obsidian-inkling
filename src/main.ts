@@ -97,6 +97,14 @@ import {
 	updateCompartment,
 } from "./util/cm-util";
 import { objectDifference } from "./util/util";
+import {
+	disableLegacyPlugin,
+	LEGACY_PLUGIN_ID,
+	migrateLegacyHotkeys,
+	noticeLegacyInstall,
+	PLUGIN_ID,
+	readLegacySettings,
+} from "./plugin-id";
 
 export default class CommentatorPlugin extends Plugin {
 	editorExtensions: Extension[] = [];
@@ -110,6 +118,9 @@ export default class CommentatorPlugin extends Plugin {
 	// EXPL: True only when loadData() returned null, i.e. no saved data.json existed yet.
 	//       Used to gate the first-run author-name prompt (see onload()).
 	first_install: boolean = false;
+
+	// EXPL: The pre-rename plugin id whose data.json seeded this install's settings, if any.
+	legacy_import_id: string | null = null;
 
 	previewModeHeaderButton!: HeaderButton;
 	editModeHeaderModeButton!: HeaderButton;
@@ -276,6 +287,14 @@ export default class CommentatorPlugin extends Plugin {
 			};
 		}
 
+		// EXPL: Must precede every registration below: an enabled pre-rename copy ("inkling") would
+		//       otherwise make registerView throw on the shared view type. See plugin-id.ts.
+		try {
+			await disableLegacyPlugin(this.app);
+		} catch (e) {
+			console.error("Inkling: failed to disable the legacy plugin copy", e);
+		}
+
 		this.registerView(COMMENTATOR_ANNOTATIONS_VIEW, (leaf) => new CommentatorAnnotationsView(leaf, this));
 
 		await this.migrateSettings(await this.loadData());
@@ -287,6 +306,10 @@ export default class CommentatorPlugin extends Plugin {
 		//       Skipping (or an existing vault with settings.author already set) leaves settings
 		//       untouched; generate_metadata() simply omits the author field while it is empty.
 		this.app.workspace.onLayoutReady(() => {
+			if (this.legacy_import_id === LEGACY_PLUGIN_ID)
+				migrateLegacyHotkeys(this.app);
+			noticeLegacyInstall(this.app);
+
 			if (this.first_install && !this.settings.author) {
 				new AuthorNameModal(this.app, async (author) => {
 					if (author) {
@@ -345,7 +368,7 @@ export default class CommentatorPlugin extends Plugin {
 		for (const command of commands(this))
 			this.addCommand(command);
 
-		this.register(beforePluginUninstallPatch(this, "inkling", () => {
+		this.register(beforePluginUninstallPatch(this, PLUGIN_ID, () => {
 			return this.database.dropDatabase();
 		}));
 	}
@@ -354,14 +377,12 @@ export default class CommentatorPlugin extends Plugin {
 		const original_settings = this.settings;
 
 		if (new_settings == null) {
-			// EXPL: One-time import from the pre-rename plugin id, so existing
-			//       Commentator-fork testers keep their settings across the rename
-			try {
-				const legacy_path = `${this.app.vault.configDir}/plugins/commentator/data.json`;
-				if (await this.app.vault.adapter.exists(legacy_path))
-					new_settings = JSON.parse(await this.app.vault.adapter.read(legacy_path));
-			} catch (e) {
-				console.error("Inkling: failed to import legacy Commentator settings", e);
+			// EXPL: One-time import from a pre-rename plugin id ("inkling", then "commentator"),
+			//       so existing users keep their settings across the rename. See plugin-id.ts.
+			const legacy = await readLegacySettings(this.app);
+			if (legacy) {
+				new_settings = legacy.settings as PluginSettings;
+				this.legacy_import_id = legacy.id;
 			}
 		}
 

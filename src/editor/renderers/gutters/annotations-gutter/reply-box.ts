@@ -1,5 +1,6 @@
 import { type App, Component } from "obsidian";
 
+import { PLUGIN_ID } from "../../../../plugin-id";
 import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 
 export interface ReplyBoxOptions {
@@ -83,7 +84,7 @@ export class ReplyBox extends Component {
 				cls: "cmtr-anno-gutter-reply-editor",
 				placeholder: this.options.placeholder,
 				focus: this.options.focus ?? true,
-				filteredExtensions: [this.app.plugins.plugins["inkling"].editorExtensions],
+				filteredExtensions: [this.app.plugins.plugins[PLUGIN_ID].editorExtensions],
 
 				onEnter: (editor, _mod, shift) => {
 					if (shift)

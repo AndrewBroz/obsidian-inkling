@@ -5,10 +5,10 @@
 	"description": "A CriticMarkup plugin for Obsidian",
 	"main": "main.js",
 	"scripts": {
-		"dev": "bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=inkling",
+		"dev": "bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=inkling-markup",
 		"build": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts production",
 		"build:dev": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development",
-		"build:dev:hr": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=inkling",
+		"build:dev:hr": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=inkling-markup",
 		"lint": "bun eslint src/",
 		"format": "bun dprint fmt",
 		"test": "jest --verbose",

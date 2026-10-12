@@ -3,6 +3,7 @@ import { EditorView, GutterMarker } from "@codemirror/view";
 
 import { Component, editorEditorField, editorInfoField, MarkdownRenderer, Menu, Notice, setIcon } from "obsidian";
 
+import { PLUGIN_ID } from "../../../../plugin-id";
 import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 
 import {
@@ -109,7 +110,7 @@ class AnnotationNode extends Component {
 			if (this.currentMode === "source") return;
 
 			const { app } = this.marker.view.state.field(editorInfoField);
-			if (this.range.fields.author && this.range.fields.author !== app.plugins.plugins.inkling.settings.author) {
+			if (this.range.fields.author && this.range.fields.author !== app.plugins.plugins[PLUGIN_ID].settings.author) {
 				new Notice("[Inkling] You cannot edit comments from other authors.");
 				return;
 			}
@@ -126,7 +127,7 @@ class AnnotationNode extends Component {
 						this.new_text = editor.get();
 						this.renderPreview();
 					},
-					filteredExtensions: [app.plugins.plugins["inkling"].editorExtensions],
+					filteredExtensions: [app.plugins.plugins[PLUGIN_ID].editorExtensions],
 					onBlur: (editor) => {
 						// Save on blur (same as onSubmit)
 						this.new_text = editor.get();
