@@ -33,9 +33,11 @@ jobs:
       contents: write
     env:
       IS_BETA: ${{ contains(github.ref_name, '-') }}
-      # Fine-grained token with Contents read/write on BETA_REPO. Secrets can't be tested in `if:`,
-      # so it is exposed as an env var and checked for emptiness.
-      BETA_TOKEN: ${{ secrets.BETA_REPO_TOKEN }}
+      # Whether the BETA_REPO_TOKEN secret (fine-grained, Contents read/write on BETA_REPO) exists.
+      # Secrets can't be tested in `if:`, and the token itself must not sit in job-level env, where
+      # every step -- including `bun install` and the dependency scripts it runs -- could read it.
+      # Only the beta publish step receives the token.
+      HAS_BETA_TOKEN: ${{ secrets.BETA_REPO_TOKEN != '' }}
     steps:
       - name: Check the ref is a version tag
         run: |
@@ -44,14 +46,15 @@ jobs:
             echo "::error::$GITHUB_REF_NAME is not a version tag; run with --ref <tag>"
             exit 1
           fi
-          if [ "$IS_BETA" = "true" ] && [ -z "$BETA_TOKEN" ]; then
+          if [ "$IS_BETA" = "true" ] && [ "$HAS_BETA_TOKEN" != "true" ]; then
             echo "::error::Beta tag but no BETA_REPO_TOKEN secret: a beta can only publish to $BETA_REPO"
             exit 1
           fi
-      - uses: actions/checkout@v4
+      # Actions are pinned to commit SHAs: a moved tag can't swap in code that sees the token.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - name: Stamp the release manifest
         run: |
           # manifest.json on the default branch only ever names a stable version (Obsidian's
@@ -85,7 +88,7 @@ jobs:
           fi
       - name: Create release
         if: env.IS_BETA != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           body_path: release_notes.md
           files: |
@@ -95,8 +98,8 @@ jobs:
             styles.css
       - name: Create release in the beta repo
         # Stable releases are mirrored when the token exists; a beta without it failed above.
-        if: env.BETA_TOKEN != ''
-        uses: softprops/action-gh-release@v2
+        if: env.HAS_BETA_TOKEN == 'true'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           repository: ${{ env.BETA_REPO }}
           token: ${{ secrets.BETA_REPO_TOKEN }}
