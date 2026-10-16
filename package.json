@@ -15,7 +15,7 @@
 		"release-patch": "bun run scripts/release/bump-version.ts --type patch",
 		"release-minor": "bun run scripts/release/bump-version.ts --type minor",
 		"release-major": "bun run scripts/release/bump-version.ts --type major",
-		"release-rc": "bun run scripts/release/bump-version.ts --rc",
+		"release-beta": "bun run scripts/release/bump-version.ts --beta",
 		"postinstall": "bun run scripts/postinstall.ts"
 	},
 	"keywords": [],
