@@ -15,6 +15,14 @@ All credit for the plugin's foundation belongs to them.
 2. In BRAT: **Add beta plugin** → `AndrewBroz/obsidian-inkling`
 3. Enable **Inkling Markup** in Settings → Community plugins
 
+### Beta channel
+
+Betas are published to a separate, release-only repository,
+[`AndrewBroz/obsidian-inkling-beta`](https://github.com/AndrewBroz/obsidian-inkling-beta), never to this
+one. To test them, remove `AndrewBroz/obsidian-inkling` from BRAT and add the beta repository instead.
+List only one of the two. Every stable release is published to the beta repository too, so testers move
+onto it when a beta ends.
+
 ### Upgrading from 0.11.x or older (plugin id `inkling`)
 
 From 0.12.0 the plugin id is **`inkling-markup`**. The old id `inkling` now belongs to an unrelated
@@ -100,7 +108,13 @@ To set up a development environment:
 Other commands: `bun run test` (jest suite), `bun run lint` (ESLint), `bun run format` (dprint).
 
 Releases: `bun run release-minor` (or `-patch`/`-major`) bumps versions, commits, and tags; pushing the tag
-builds the GitHub release via CI (fallback: `gh workflow run releases.yml --ref <tag>`).
+builds the GitHub release via CI (fallback: `gh workflow run releases.yml --ref <tag>`). Push `main` and
+the tag separately, never with `--follow-tags`.
+
+Betas: `bun run release-beta --type minor` makes `0.13.0-beta.0` from `0.12.4`; run `bun run release-beta`
+again for `-beta.1`, and `bun run release-minor` to promote it to `0.13.0`. Beta tags publish only to the
+beta repository, because BRAT installs pre-releases for everyone tracking "latest". CI needs a
+`BETA_REPO_TOKEN` secret: a fine-grained token with Contents read/write on the beta repository.
 
 ## Roadmap
 
