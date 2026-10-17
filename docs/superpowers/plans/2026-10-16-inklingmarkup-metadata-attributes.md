@@ -65,7 +65,8 @@ The five failure modes most likely to bite a user that no single feature test co
 | `src/editor/base/edit-logic/resolve.ts` | Base-only resolve; reopen cleanup; `range_source_with_fields(…, syntax)`; `anchor_inheritance_changes`. |
 | `src/editor/base/edit-logic/convert-metadata.ts` (new) | `convert_metadata(ranges, target)`. |
 | `src/ui/modals/confirm-modal.ts` (new) | A small yes/no modal for the convert commands. |
-| `src/editor/uix/commands.ts` | Two convert commands. |
+| `src/editor/uix/commands.ts` | Two convert commands; "Remove resolved comments in this note" (Task 12). |
+| `src/editor/base/edit-logic/resolve.ts` (Task 12) | `remove_thread`, `remove_resolved_threads`, `resolve_action`, `resolve_source`. Independent of the metadata syntax. |
 | Renderers / UI call sites | Listed per task. |
 
 ---
@@ -1657,9 +1658,9 @@ Rewrite the doc comment on `thread_resolved`. Imports: `write_syntax` from `../e
 - `marker.ts:336` ("Remove comment"): `changes: remove_comment(this.range, settings.metadata_syntax)`.
 - `comment-widget.ts:290` ("Remove comment"): `changes: remove_comment(range, settings.metadata_syntax)`.
 - `marker.ts:253-257` and `comment-widget.ts:111-115` (comment text rewrites): changes become `[...anchor_inheritance_changes(range, undefined, settings.metadata_syntax), { from, to, insert: create_range(…) }]`. Keep each site's existing ordering of the snapshot and dispatch. The `marker.ts` EXPL about a synchronous dispatch still applies.
-- Annotations view, `context-menu.ts:102` and `AnnotationThreadQuickActions.svelte:124` (resolve):
-  `range_source_with_fields(range, { ...range.own_fields, done: true }, write_syntax(plugin.settings.metadata_syntax, range))`.
-- Same files, `:116-118` and `:108-110` (reopen): `const fields = { ...range.own_fields }; delete fields.done; return range_source_with_fields(range, fields, write_syntax(plugin.settings.metadata_syntax, range));`. Reading `own_fields` stops a resolve from writing the inherited author into an elided anchor. These entries are thread bases (see `context-menu.ts:32`), so replies are not touched. That is rule 1.
+- Annotations view, `context-menu.ts:102` and `AnnotationThreadQuickActions.svelte:124` (resolve). `applyRangeEditsToVault` defaults `include_replies` to `true`, so the per-range function also runs on every reply. It must leave replies untouched, which is rule 1:
+  `(range, text) => range === range.base_range ? range_source_with_fields(range, { ...range.own_fields, done: true }, write_syntax(plugin.settings.metadata_syntax, range, range.replies[0])) : text.slice(range.from, range.to)`.
+- Same files, `:116-118` and `:108-110` (reopen): `const fields = { ...range.own_fields }; delete fields.done; return range_source_with_fields(range, fields, write_syntax(plugin.settings.metadata_syntax, range));`. Here, running on replies is wanted, because it removes legacy `done` copies. Reading `own_fields` stops a resolve from writing the inherited author into an elided anchor. Add a test case to `tests/resolve.test.ts` that runs the resolve function through `applyToText(doc, fn, [base, ...base.replies])` (from `edit-util/range-operations`) on `{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`. It must yield `{=={"author":"A","done":true}@@x==}{>>{"author":"A"}@@c<<}`.
 
 - [ ] **Step 5: Run the suite.**
 
@@ -2138,6 +2139,288 @@ Expected: PASS, with roughly double the test count in those files. A failure und
 bun run format
 git add -A tests src
 git commit -m "test(metadata): run legacy fixtures over both syntaxes
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 12: Remove resolved comments (command and remove-on-resolve setting)
+
+This task was added after the spec, at the user's request. It does not depend on the metadata syntax. It comes last because it reuses Task 7's resolve routing, Task 9's `ConfirmModal`, and Task 11's `withSyntax`.
+
+Decisions (approved in chat):
+- "Resolved CriticMarkup" means resolvable comment threads only (`thread_resolvable && thread_resolved`). A suggestion carrying a legacy `done` flag still awaits accept/reject and is never removed.
+- Removing a thread follows the gutter's existing `removeThreadChanges` semantics. A standalone comment thread is removed completely. A highlight thread keeps its text and loses its markup and comments. A suggestion would keep its markup and lose its comments, but it is never resolvable, so the command doesn't reach it.
+- The command is per note only, behind a confirmation that gives the count. It is one transaction, so a single undo restores everything.
+- The `remove_on_resolve` setting defaults to off. When on, every Resolve action removes the thread instead of writing `done`. There is no confirmation (the user opted in and undo works), but every label says "Resolve and remove".
+
+**Files:**
+- Modify: `src/editor/base/edit-logic/resolve.ts` (move `removeThreadChanges` here as `remove_thread`; add three functions)
+- Modify: `src/editor/renderers/gutters/annotations-gutter/marker.ts:38-58` (delete the private helper), `:304`, `:358` (use `remove_thread`), `:387`, `:595-614` (resolve routing, label, EXPL)
+- Modify: `src/editor/uix/context-menu.ts:118-124`
+- Modify: `src/ui/pages/annotations-view/context-menu.ts:91-104`, `src/ui/pages/annotations-view/AnnotationThreadQuickActions.svelte:118-128`
+- Modify: `src/types.ts` (`PluginSettings`), `src/constants.ts` (`DEFAULT_SETTINGS`)
+- Modify: `src/ui/pages/settings/tabs/EditorSettings.svelte` (toggle next to the comment rendering setting)
+- Modify: `src/editor/uix/commands.ts` (one command in `editor_commands`)
+- Modify: `README.md` (one paragraph)
+- Test: new `tests/remove_resolved.test.ts`
+
+**Interfaces:**
+- Consumes: `resolve_thread(range, setting)`, `write_syntax` (Tasks 5 and 7); `range_source_with_fields(…, syntax)` (Task 5); `ConfirmModal` (Task 9); `withSyntax` (Task 11); `applyToText` (`src/editor/base/edit-util/range-operations.ts`)
+- Produces:
+  - `remove_thread(range: CriticMarkupRange): EditorChange[]`
+  - `remove_resolved_threads(ranges: CriticMarkupRange[]): { changes: EditorChange[]; count: number }`
+  - `type ResolveSettings = Pick<PluginSettings, "metadata_syntax" | "remove_on_resolve">`
+  - `resolve_action(range: CriticMarkupRange, settings: ResolveSettings): EditorChange[]` (editor Resolve actions)
+  - `resolve_source(range: CriticMarkupRange, text: string, settings: ResolveSettings): string` (Annotations view Resolve, for `applyToFile`)
+  - Setting `remove_on_resolve: boolean`, default `false`
+
+- [ ] **Step 1: Write the failing tests.** Create `tests/remove_resolved.test.ts`:
+
+```ts
+import { DEFAULT_SETTINGS } from "../src/constants";
+import { rangeParser } from "../src/editor/base";
+import type { EditorChange } from "../src/editor/base/edit-handler";
+import {
+	remove_resolved_threads,
+	remove_thread,
+	resolve_action,
+	resolve_source,
+	resolve_thread,
+} from "../src/editor/base/edit-logic/resolve";
+import { applyToText } from "../src/editor/base/edit-util/range-operations";
+import type { CriticMarkupRange } from "../src/editor/base/ranges";
+import { createRangeState, withSyntax } from "./helpers";
+
+function apply(doc: string, changes: EditorChange[]): string {
+	const ordered = [...changes].sort((a, b) => a.from - b.from);
+	for (let i = 1; i < ordered.length; i++) expect(ordered[i].from).toBeGreaterThanOrEqual(ordered[i - 1].to);
+	return [...ordered].reverse().reduce((out, c) => out.slice(0, c.from) + c.insert + out.slice(c.to), doc);
+}
+
+function ranges(doc: string): CriticMarkupRange[] {
+	return createRangeState(doc, { enable_metadata: true }).field(rangeParser).ranges.ranges;
+}
+
+const KEEP = { ...DEFAULT_SETTINGS, remove_on_resolve: false };
+const REMOVE = { ...DEFAULT_SETTINGS, remove_on_resolve: true };
+
+describe.each(["legacy", "attributes"] as const)("%s metadata", (syntax) => {
+	const doc = (legacy: string) => withSyntax(legacy, syntax);
+
+	describe("remove_thread", () => {
+		test.each([
+			["standalone comment thread", `x{>>{"author":"A"}@@a<<}{>>b<<}y`, `xy`],
+			["highlight thread keeps its text", `a {=={"author":"A"}@@b==}{>>{"author":"A"}@@c<<}{>>d<<} e`, `a b e`],
+			["suggestion keeps its markup", `a{++{"author":"A"}@@b++}{>>c<<}d`, `a{++{"author":"A"}@@b++}d`],
+		])("%s", (_name, input, expected) => {
+			const source = doc(input);
+			expect(apply(source, remove_thread(ranges(source)[0]))).toBe(doc(expected));
+		});
+	});
+
+	describe("remove_resolved_threads", () => {
+		const NOTE = `p {=={"done":true}@@h==}{>>{"author":"A"}@@c<<} q {>>open<<} r{>>{"done":true}@@gone<<}{>>reply<<} s`
+			+ ` {++{"done":true}@@kept++}{>>why<<} t`;
+
+		test("removes resolved comment threads only, in one non-overlapping set of changes", () => {
+			const source = doc(NOTE);
+			const { changes, count } = remove_resolved_threads(ranges(source));
+			expect(count).toBe(2);
+			expect(apply(source, changes))
+				.toBe(doc(`p h q {>>open<<} r s {++{"done":true}@@kept++}{>>why<<} t`));
+		});
+
+		test("does nothing in a note without resolved threads", () => {
+			expect(remove_resolved_threads(ranges(doc(`a {==b==}{>>c<<} {>>d<<}`)))).toEqual({ changes: [], count: 0 });
+		});
+	});
+
+	describe("resolve_action", () => {
+		const THREAD = `a {=={"author":"A"}@@b==}{>>{"author":"A"}@@c<<} e`;
+
+		test("marks the thread done when remove_on_resolve is off", () => {
+			const source = doc(THREAD);
+			const [base] = ranges(source);
+			expect(resolve_action(base, { ...KEEP, metadata_syntax: syntax }))
+				.toEqual(resolve_thread(base, syntax));
+		});
+
+		test("removes the thread when remove_on_resolve is on", () => {
+			const source = doc(THREAD);
+			expect(apply(source, resolve_action(ranges(source)[0], REMOVE))).toBe(`a b e`);
+		});
+	});
+
+	describe("resolve_source (Annotations view, visits base and replies)", () => {
+		const run = (source: string, settings: typeof KEEP) => {
+			const [base] = ranges(source);
+			return applyToText(source, (range, text) => resolve_source(range, text, settings), [base, ...base.replies]);
+		};
+
+		test("remove mode unwraps a highlight thread", () => {
+			expect(run(doc(`a {=={"author":"A"}@@b==}{>>{"author":"A"}@@c<<}{>>d<<} e`), REMOVE)).toBe(`a b e`);
+		});
+
+		test("remove mode drops a standalone comment thread", () => {
+			expect(run(doc(`x{>>{"author":"A"}@@a<<}{>>b<<}y`), REMOVE)).toBe(`xy`);
+		});
+
+		test("keep mode writes done on the base and leaves replies untouched", () => {
+			expect(run(`{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`, KEEP))
+				.toBe(`{=={"author":"A","done":true}@@x==}{>>{"author":"A"}@@c<<}`);
+		});
+	});
+});
+```
+
+(If `createRangeState`'s settings argument does not take `remove_on_resolve`, that is fine: the parser ignores it. The settings objects above are passed only to the functions under test.)
+
+- [ ] **Step 2: Run them to confirm they fail.**
+
+Run: `bun run test -- tests/remove_resolved.test.ts`
+Expected: FAIL (the functions are not exported; `remove_on_resolve` is not a setting).
+
+- [ ] **Step 3: Add the setting.** In `src/types.ts`, add `remove_on_resolve: boolean;` to `PluginSettings`, next to the other comment settings. In `src/constants.ts`, add `remove_on_resolve: false,` to `DEFAULT_SETTINGS`. The setting needs no editor reload and no reindex, so don't add it to `REQUIRES_EDITOR_RELOAD` or `REQUIRES_DATABASE_REINDEX`.
+
+- [ ] **Step 4: Implement in `resolve.ts`.** Move the body of `removeThreadChanges` out of `marker.ts` unchanged, then add the rest:
+
+```ts
+/**
+ * The changes that delete an entire thread.
+ * - COMMENT base: the whole thread span (base + replies) is removed.
+ * - HIGHLIGHT base: the highlight is unwrapped to plain text and its replies are removed.
+ * - Suggestion bases (addition/deletion/substitution): only the attached comments are removed,
+ *   the suggestion markup itself is kept.
+ */
+export function remove_thread(range: CriticMarkupRange): EditorChange[] {
+	const base = range.base_range;
+	if (base.type === SuggestionType.COMMENT)
+		return [{ from: base.full_range_front, to: base.full_range_back, insert: "" }];
+	if (base.type === SuggestionType.HIGHLIGHT)
+		return [{ from: base.from, to: base.full_range_back, insert: base.unwrap() }];
+	if (base.replies.length) {
+		return [{
+			from: base.replies[0].from,
+			to: base.replies[base.replies.length - 1].to,
+			insert: "",
+		}];
+	}
+	return [];
+}
+
+/**
+ * Removes every resolved comment thread in a note. `ranges` is the note's flat range list, replies
+ * included, so each thread is taken once from its base: threads never overlap, so neither do the changes.
+ * Suggestions with a legacy `done` flag are not resolvable (see `thread_resolvable`) and are kept.
+ */
+export function remove_resolved_threads(ranges: CriticMarkupRange[]): { changes: EditorChange[]; count: number } {
+	const bases = [...new Set(ranges.map(range => range.base_range))]
+		.filter(base => thread_resolvable(base) && thread_resolved(base));
+	return { changes: bases.flatMap(remove_thread), count: bases.length };
+}
+
+export type ResolveSettings = Pick<PluginSettings, "metadata_syntax" | "remove_on_resolve">;
+
+/** What an editor Resolve action does: mark the thread done or, with `remove_on_resolve`, remove it. */
+export function resolve_action(range: CriticMarkupRange, settings: ResolveSettings): EditorChange[] {
+	return settings.remove_on_resolve ? remove_thread(range) : resolve_thread(range, settings.metadata_syntax);
+}
+
+/**
+ * The same for the Annotations view, which rewrites each range's own span through `applyToFile` and visits every
+ * reply as well as the base (`include_replies`). `text` is the file's contents. Removing returns the highlight's
+ * text for a HIGHLIGHT base and nothing for every other member. Since replies sit directly after their base,
+ * the whole thread disappears. Resolving rewrites the base only and returns replies as they are (thread rule 1).
+ */
+export function resolve_source(range: CriticMarkupRange, text: string, settings: ResolveSettings): string {
+	const base = range.base_range;
+	if (settings.remove_on_resolve)
+		return range === base && base.type === SuggestionType.HIGHLIGHT ? base.unwrap() : "";
+	if (range !== base) return text.slice(range.from, range.to);
+	return range_source_with_fields(
+		range,
+		{ ...range.own_fields, done: true },
+		write_syntax(settings.metadata_syntax, range, range.replies[0]),
+	);
+}
+```
+
+Import `type PluginSettings` from `../../../types` alongside `MetadataSyntax`.
+
+Run: `bun run test -- tests/remove_resolved.test.ts`
+Expected: PASS. If the attributes `remove_thread` case for a highlight leaves `{author=A}` behind, Task 3's "a range's `to` includes its trailing block" is broken for `full_range_back`. Fix that in the range model, not here.
+
+- [ ] **Step 5: Route the callers.** Settings come from `view.state.field(pluginSettingsField)` in editor code and `plugin.settings` in the Annotations view.
+- `marker.ts`: delete the private `removeThreadChanges` (lines 38-58) and import `remove_thread`. Use it at `:304` ("Close comment thread") and `:358` ("Remove all comments").
+- `marker.ts:387` (card menu "Resolve thread"): `changes: resolve_action(this.range, settings)`, with the title `settings.remove_on_resolve ? "Resolve and remove thread" : "Resolve thread"`.
+- `marker.ts:600-614` (hover Resolve button): `changes: resolve_action(this.annotation, settings)`, with the `aria-label` chosen the same way. Add a sentence to the EXPL at `:595`: "With `remove_on_resolve` on, this button deletes the thread. The user opted into that in settings, the label says so, and editor undo restores it."
+- `uix/context-menu.ts:118-124`: `changes: resolve_action(range, settings)`, with the same title switch.
+- Annotations view `context-menu.ts:91-104`: change the function passed to `applyToFile` to `(range, text) => resolve_source(range, text, plugin.settings)`, and use the title `Resolve and remove selected threads` / `Resolve and remove thread` when the setting is on. Leave `include_replies` at its default (`true`), which `resolve_source` relies on in remove mode.
+- `AnnotationThreadQuickActions.svelte:118-128`: the same function, and `tooltip={plugin.settings.remove_on_resolve ? "Resolve and remove thread" : "Resolve thread"}`.
+- Reopen is untouched: a removed thread has nothing to reopen.
+
+- [ ] **Step 6: Command.** In `src/editor/uix/commands.ts`, add to `editor_commands`:
+
+```ts
+	{
+		id: "remove-resolved-comments",
+		name: "Remove resolved comments in this note",
+		icon: "message-square-x",
+		editor_context: true,
+		regular_callback: (editor: Editor, _: MarkdownView) => {
+			const { changes, count } = remove_resolved_threads(editor.cm.state.field(rangeParser).ranges.ranges);
+			if (!count) {
+				new Notice("Inkling: no resolved comments in this note.");
+				return;
+			}
+			new ConfirmModal(plugin.app, {
+				title: "Remove resolved comments",
+				body: `Remove ${count} resolved thread${count === 1 ? "" : "s"}? Highlighted text is kept. Undo restores them.`,
+				confirm: "Remove",
+				onConfirm: () =>
+					editor.cm.dispatch(editor.cm.state.update({ changes, annotations: [pluginEditAnnotation.of(true)] })),
+			}).open();
+		},
+	},
+```
+
+The ranges are read when the command runs and dispatched when it's confirmed. The modal is modal, so the document cannot change in between. If the reviewer disagrees, recompute inside `onConfirm`.
+
+- [ ] **Step 7: Settings UI.** In `EditorSettings.svelte`, directly after the comment rendering `SettingItem` (the one ending around line 167), add:
+
+```svelte
+<SettingItem
+	name="Remove comments on resolve"
+	description="Resolving a thread deletes it instead of marking it done. Highlighted text is kept. Undo restores it."
+	type="toggle"
+>
+	{#snippet control()}
+		<Toggle
+			value={plugin.settings.remove_on_resolve}
+			onChange={(value) => {
+				plugin.settings.remove_on_resolve = value;
+				plugin.saveSettings();
+			}}
+		/>
+	{/snippet}
+</SettingItem>
+```
+
+Import `Toggle` if the file does not already.
+
+- [ ] **Step 8: README.** Next to where resolving threads is described, add one short paragraph covering the "Remove resolved comments in this note" command and the "Remove comments on resolve" setting. Say that highlighted text is kept, and that only comment threads are affected, never suggestions.
+
+- [ ] **Step 9: Run the full suite, build and lint, then commit.**
+
+Run: `bun run test && bun run build && bun run lint`
+Expected: all pass. Gutter tests that import `removeThreadChanges` indirectly through `marker.ts` behaviour must still pass unchanged, because the semantics moved without changes.
+
+```bash
+bun run format
+git add -A src tests README.md
+git commit -m "feat(comments): remove resolved comments command and remove-on-resolve setting
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
