@@ -50,3 +50,27 @@ describe("reading view post-processing of Obsidian's highlight markup", () => {
 		expect(attributed.querySelector(".cmtr-comment-icon")).not.toBeNull();
 	});
 });
+
+describe("trailing attribute blocks in reading view", () => {
+	const ATTR_SOURCE = `This is {==some==}{>>This is a comment on the text<<}{author="Andrew B" time=1791819807} text`;
+	const attrRendered = (mark: string) =>
+		`<p dir="auto">This is {${mark}some</mark>}{&gt;&gt;This is a comment on the text&lt;&lt;}{author="Andrew B" time=1791819807} text</p>`;
+
+	test.each([
+		["bare <mark>", "<mark>"],
+		["Obsidian 1.13 <mark data-highlight>", `<mark data-highlight="">`],
+	])("highlight + comment + block renders cleanly with %s", async (_name, mark) => {
+		const el = await render(attrRendered(mark), ATTR_SOURCE);
+		expect(el.textContent).toBe("This is some text");
+		expect(el.querySelector(".cmtr-highlight")?.textContent).toBe("some");
+		expect(el.querySelector(".cmtr-comment-icon")).not.toBeNull();
+		expect(el.innerHTML).not.toContain("author=");
+	});
+
+	test("a suggestion's block is not rendered", async () => {
+		const source = `a {++b++}{author=A} c`;
+		const el = await render(`<p dir="auto">a {++b++}{author=A} c</p>`, source);
+		expect(el.innerHTML).not.toContain("author=");
+		expect(el.querySelector(".cmtr-addition")?.textContent).toBe("b");
+	});
+});
