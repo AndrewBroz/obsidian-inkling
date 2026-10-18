@@ -75,7 +75,7 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 						undefined;
 					if (touches_bracket !== undefined) {
 						let cursor = editor_change.from;
-						if (cursor !== range.to - 3)
+						if (cursor !== range.closer_to - 3)
 							cursor = touches_bracket ? range.from : range.to;
 						changes.push({
 							from: cursor,

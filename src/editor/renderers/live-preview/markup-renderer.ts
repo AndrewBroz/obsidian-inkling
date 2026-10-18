@@ -36,7 +36,7 @@ function hideBracket(
 	if (side === -1)
 		decorations.push(hideMarkupDecoration.range(range.from, range.from + 3));
 	else if (side === 1)
-		decorations.push(hideMarkupDecoration.range(range.to - 3, range.to));
+		decorations.push(hideMarkupDecoration.range(range.closer_to - 3, range.closer_to));
 	else {
 		decorations.push(
 			hideMarkupDecoration.range((range as SubstitutionRange).middle, (range as SubstitutionRange).middle + 2),
@@ -49,9 +49,9 @@ function hideMetadata(
 	range: CriticMarkupRange,
 	show_metadata: boolean = false,
 ) {
-	if (!range.metadata || show_metadata) return;
+	if (!range.meta || show_metadata) return;
 
-	decorations.push(hideMarkupDecoration.range(range.from + 3, range.metadata + 2));
+	decorations.push(hideMarkupDecoration.range(range.meta.from, range.meta.to));
 }
 
 function hideRange(decorations: Range<Decoration>[], range: CriticMarkupRange) {

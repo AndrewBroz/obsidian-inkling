@@ -25,8 +25,8 @@ import {
 } from "../../../base";
 
 import { AnnotationInclusionType } from "../../../../constants";
-import { pluginEditAnnotation } from "../../../uix/extensions/editing-modes";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../../../settings";
+import { pluginEditAnnotation } from "../../../uix/extensions/editing-modes";
 import { annotationGutterFocusThreadAnnotation, annotationGutterFoldAnnotation } from "./annotation-gutter";
 import { ReplyBox } from "./reply-box";
 
@@ -81,7 +81,7 @@ class AnnotationNode extends Component {
 		this.annotation_container.addEventListener("dblclick", this.renderSource.bind(this));
 		this.annotation_container.addEventListener("contextmenu", this.onCommentContextmenu.bind(this));
 
-		if (this.range.metadata) {
+		if (this.range.meta) {
 			this.metadata_view = createMetadataInfoElement(this.range);
 			this.annotation_container.appendChild(this.metadata_view);
 		}

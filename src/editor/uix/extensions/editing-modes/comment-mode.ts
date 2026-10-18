@@ -19,9 +19,8 @@ export const commentMode = (settings: PluginSettings): Extension =>
 			return tr;
 		// EXPL: Only gate direct user edits; programmatic transactions (accept/reject from the
 		//       gutter, comment-widget submissions, undo of allowed edits) pass through
-		if (is_exempt_from_tracking(tr)) {
+		if (is_exempt_from_tracking(tr))
 			return tr;
-		}
 
 		const ranges = tr.startState.field(rangeParser).ranges;
 		let allowed = true;
@@ -30,7 +29,7 @@ export const commentMode = (settings: PluginSettings): Extension =>
 			// EXPL: The whole changed region must sit inside ONE comment range's content span
 			if (
 				!(range && range.type === SuggestionType.COMMENT &&
-					range.range_start <= fromA && toA <= range.to - 3)
+					range.range_start <= fromA && toA <= range.closer_to - 3)
 			) {
 				allowed = false;
 			}

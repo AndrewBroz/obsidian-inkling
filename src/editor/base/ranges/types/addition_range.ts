@@ -1,10 +1,10 @@
 import { PreviewMode } from "../../../../types";
-import { CriticMarkupRange } from "../base_range";
+import { CriticMarkupRange, type MetaLocation } from "../base_range";
 import { CM_All_Brackets, SuggestionType } from "../definitions";
 
 export class AdditionRange extends CriticMarkupRange {
-	constructor(from: number, to: number, text: string, metadata?: number) {
-		super(from, to, SuggestionType.ADDITION, "Addition", text, metadata);
+	constructor(from: number, to: number, text: string, meta?: MetaLocation) {
+		super(from, to, SuggestionType.ADDITION, "Addition", text, meta);
 	}
 
 	accept() {

@@ -59,6 +59,9 @@ export enum RANGE_BRACKET_MOVEMENT_OPTION {
 	STAY_OUTSIDE = "stay_outside",
 }
 
+/** How range metadata is written: `{json}@@` inside the opener, or a trailing `{key=value}` attribute block. */
+export type MetadataSyntax = "legacy" | "attributes";
+
 export type CursorOptionsMap = Record<SuggestionType, RANGE_CURSOR_MOVEMENT_OPTION>;
 
 export type BracketOptionsMap = Record<SuggestionType, RANGE_BRACKET_MOVEMENT_OPTION>;

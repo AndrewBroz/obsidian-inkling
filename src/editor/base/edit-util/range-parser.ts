@@ -6,6 +6,7 @@ import {
 	CriticMarkupRange,
 	DeletionRange,
 	HighlightRange,
+	type MetaLocation,
 	SubstitutionRange,
 	SuggestionType,
 } from "../ranges";
@@ -20,18 +21,20 @@ function constructRangeFromSyntaxNode(
 	offset = 0,
 	to = range.to + offset,
 ) {
-	const metadata = (settings.enable_metadata && range.firstChild?.type.name.startsWith("MDSep")) ?
-		range.firstChild!.from + offset :
+	const from = range.from + offset;
+	const legacy = settings.enable_metadata && !!range.firstChild?.type.name.startsWith("MDSep");
+	// EXPL: The MDSep node starts at the `@@`, so the JSON lies between the opener and it.
+	const meta: MetaLocation | undefined = legacy ?
+		{ syntax: "legacy", from: from + 3, to: range.firstChild!.from + offset + 2 } :
 		undefined;
 	let middle = undefined;
 	if (range.type.name === "Substitution") {
-		const child = metadata ? range.firstChild?.nextSibling : range.firstChild;
+		const child = legacy ? range.firstChild?.nextSibling : range.firstChild;
 		if (!child || child.type.name !== "MSub") return;
 		middle = child.from + offset;
 	}
 
-	const from = range.from + offset;
-	return constructRange(from, to, range.type.name, text.slice(from, to), middle, metadata);
+	return constructRange(from, to, range.type.name, text.slice(from, to), middle, meta);
 }
 
 // EXPL: The closing bracket that ends a well-formed node of each range type.
@@ -125,22 +128,22 @@ export function constructRange(
 	type: string,
 	text: string,
 	middle?: number,
-	metadata?: number,
+	meta?: MetaLocation,
 ) {
 	switch (type) {
 		case "Addition":
-			return new AdditionRange(from, to, text, metadata);
+			return new AdditionRange(from, to, text, meta);
 		case "Deletion":
-			return new DeletionRange(from, to, text, metadata);
+			return new DeletionRange(from, to, text, meta);
 		case "Substitution":
-			return new SubstitutionRange(from, middle!, to, text, metadata);
+			return new SubstitutionRange(from, middle!, to, text, meta);
 		case "Highlight":
-			return new HighlightRange(from, to, text, metadata);
+			return new HighlightRange(from, to, text, meta);
 		case "Comment":
-			return new CommentRange(from, to, text, metadata);
+			return new CommentRange(from, to, text, meta);
 		default:
 			// Will never get called
-			return new AdditionRange(from, to, text, metadata);
+			return new AdditionRange(from, to, text, meta);
 	}
 }
 

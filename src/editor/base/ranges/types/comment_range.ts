@@ -1,4 +1,4 @@
-import { CriticMarkupRange } from "../base_range";
+import { CriticMarkupRange, type MetaLocation } from "../base_range";
 import { SuggestionType } from "../definitions";
 
 export class CommentRange extends CriticMarkupRange {
@@ -42,7 +42,7 @@ export class CommentRange extends CriticMarkupRange {
 		this.attached_comment = range;
 	}
 
-	constructor(from: number, to: number, text: string, metadata?: number) {
-		super(from, to, SuggestionType.COMMENT, "Comment", text, metadata);
+	constructor(from: number, to: number, text: string, meta?: MetaLocation) {
+		super(from, to, SuggestionType.COMMENT, "Comment", text, meta);
 	}
 }

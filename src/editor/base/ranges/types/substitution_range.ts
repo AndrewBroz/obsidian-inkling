@@ -1,14 +1,14 @@
 import { PreviewMode } from "../../../../types";
-import { CriticMarkupRange } from "../base_range";
+import { CriticMarkupRange, type MetaLocation } from "../base_range";
 import { CM_All_Brackets, SuggestionType } from "../definitions";
 
 export class SubstitutionRange extends CriticMarkupRange {
-	constructor(from: number, public middle: number, to: number, text: string, metadata?: number) {
-		super(from, to, SuggestionType.SUBSTITUTION, "Substitution", text, metadata);
+	constructor(from: number, public middle: number, to: number, text: string, meta?: MetaLocation) {
+		super(from, to, SuggestionType.SUBSTITUTION, "Substitution", text, meta);
 	}
 
 	get length() {
-		return this.to - this.from - 8;
+		return this.closer_to - 3 - this.range_start - 2;
 	}
 
 	get char_middle() {
@@ -111,14 +111,14 @@ export class SubstitutionRange extends CriticMarkupRange {
 	cursor_pass_syntax(cursor: number, right: boolean, skip_metadata: boolean = false): number {
 		if (right) {
 			if (this.touches_left_bracket(cursor, true, false, skip_metadata))
-				cursor = (skip_metadata && this.metadata) ? (this.metadata! + 2) : (this.from + 3);
+				cursor = skip_metadata ? this.range_start : this.from + 3;
 			if (this.touches_separator(cursor, false, true))
 				cursor = this.middle + 2;
 			if (this.touches_right_bracket(cursor, false, true))
 				cursor = this.to;
 		} else {
 			if (this.touches_right_bracket(cursor, true, false))
-				cursor = this.to - 3;
+				cursor = this.closer_to - 3;
 			if (this.touches_separator(cursor, false, true))
 				cursor = this.middle;
 			if (this.touches_left_bracket(cursor, false, true, skip_metadata))
@@ -135,11 +135,11 @@ export class SubstitutionRange extends CriticMarkupRange {
 	}
 
 	empty(): boolean {
-		return this.from + 3 === this.middle && this.middle + 2 === this.to - 3;
+		return this.range_start === this.middle && this.middle + 2 === this.closer_to - 3;
 	}
 
 	part_is_empty(left: boolean) {
-		return left ? this.from + 3 === this.middle : this.middle + 2 === this.to - 3;
+		return left ? this.range_start === this.middle : this.middle + 2 === this.closer_to - 3;
 	}
 
 	postprocess(
@@ -189,7 +189,7 @@ export class SubstitutionRange extends CriticMarkupRange {
 		this.from += offset;
 		this.middle += offset;
 		this.to += offset;
-		if (this.metadata !== undefined) this.metadata += offset;
+		if (this.meta) this.meta = { ...this.meta, from: this.meta.from + offset, to: this.meta.to + offset };
 	}
 
 	split_range(cursor: number): [string, string] {

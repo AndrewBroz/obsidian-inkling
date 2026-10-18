@@ -68,7 +68,7 @@ describe("constructDecorations for resolved threads (live preview)", () => {
 		const replaces = replaceSpans(decorations);
 		expect(replaces).toContainEqual({ from: highlight.from, to: highlight.from + 3, widget: false });
 		expect(replaces).toContainEqual({ from: highlight.to - 3, to: highlight.to, widget: false });
-		expect(replaces).toContainEqual({ from: highlight.from + 3, to: highlight.metadata! + 2, widget: false });
+		expect(replaces).toContainEqual({ from: highlight.meta!.from, to: highlight.meta!.to, widget: false });
 	});
 
 	test("unresolved standalone comment renders the comment icon widget", () => {

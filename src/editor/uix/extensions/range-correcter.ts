@@ -50,7 +50,7 @@ export const rangeCorrecter = EditorState.transactionFilter.of(tr => {
 						// EXPL: unwrap()/unwrap_parts() strip the metadata block, so the replacement must
 						//       start at range_start (after the metadata) — from + 3 would delete it
 						from: start_range.range_start,
-						to: start_range.to - 3,
+						to: start_range.closer_to - 3,
 						// EXPL: unwrap_parts() also strips the "~>" separator; rejoin so it survives
 						insert: parts.join("~>"),
 					}];

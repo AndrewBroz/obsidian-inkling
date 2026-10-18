@@ -1,15 +1,8 @@
-import { PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
+import { type MetadataSyntax, PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
 import type { EditorChange } from "../edit-handler";
+import { SHORTHAND_KEYS } from "../edit-util/attributes";
 import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, SuggestionType } from "./definitions";
 import type { CommentRange } from "./types";
-
-const shortHandMapping = {
-	"a": "author",
-	"t": "time",
-	"d": "done",
-	"s": "style",
-	"c": "color",
-};
 
 export interface MetadataFields {
 	author?: string;
@@ -20,10 +13,17 @@ export interface MetadataFields {
 	[prop: string]: any;
 }
 
+/**
+ * Where a range's metadata is written. Legacy: `{json}@@` just inside the opener (`from` is after the opener,
+ * `to` after `@@`). Attributes: the `{key=value}` block just after the closer.
+ */
+export type MetaLocation = { syntax: MetadataSyntax; from: number; to: number };
+
 export type CriticMarkupRangeEntry = { path: string; range: CriticMarkupRange };
 
 export abstract class CriticMarkupRange {
-	fields: MetadataFields = {};
+	/** The metadata this range's own markup states. The only thing writers serialise. */
+	own_fields: MetadataFields = {};
 	replies: CommentRange[] = [];
 
 	protected constructor(
@@ -32,31 +32,30 @@ export abstract class CriticMarkupRange {
 		public type: SuggestionType,
 		public repr: STRING_SUGGESTION_TYPE,
 		public text: string,
-		public metadata?: number,
+		public meta?: MetaLocation,
 	) {
-		if (metadata !== undefined) {
-			const metadata_separator = metadata - from;
-			const metadata_text = text.slice(3, metadata_separator);
-			this.text = text.slice(0, 3) + text.slice(metadata_separator + 2);
+		if (meta?.syntax === "legacy") {
+			const json = text.slice(3, meta.to - 2 - from);
+			this.text = text.slice(0, 3) + text.slice(meta.to - from);
 			try {
-				// TODO: Determine whether metadata specification should have quotes around keywords
-				//   + Cleaner, shorter
-				//   - Not valid JSON
 				// TODO: JS can be injected here, possible security risk
-				// this.fields = JSON.parse(`{${metadata_text}}`);
-				this.fields = JSON.parse(metadata_text);
-				for (const key in this.fields) {
-					if (key in shortHandMapping) {
-						// @ts-expect-error (This is a pain to type, the ts-ignore is 100% worth it)
-						this.fields[shortHandMapping[key]] = this.fields[key];
-						delete this.fields[key as keyof typeof this.fields];
+				this.own_fields = JSON.parse(json);
+				for (const key in this.own_fields) {
+					if (Object.hasOwn(SHORTHAND_KEYS, key)) {
+						this.own_fields[SHORTHAND_KEYS[key]] = this.own_fields[key];
+						delete this.own_fields[key];
 					}
 				}
 			} catch (e) {
 				// TODO: Mark as invalid markdown (this can happen when separator @@ exists, but {} is not given
-				this.fields = {};
+				this.own_fields = {};
 			}
 		}
+	}
+
+	/** The metadata in effect for this range: its own, plus anything the thread rules let it inherit. */
+	get fields(): MetadataFields {
+		return this.own_fields;
 	}
 
 	get base_range(): CriticMarkupRange {
@@ -71,8 +70,14 @@ export abstract class CriticMarkupRange {
 		return [...this.replies];
 	}
 
+	/** End of the closing bracket: `to`, minus a trailing attribute block if there is one. */
+	get closer_to(): number {
+		return this.meta?.syntax === "attributes" ? this.meta.from : this.to;
+	}
+
+	/** Length of the content, without brackets or metadata of either syntax. */
 	get length() {
-		return this.to - this.from - 6;
+		return this.closer_to - 3 - this.range_start;
 	}
 
 	get full_text() {
@@ -81,16 +86,18 @@ export abstract class CriticMarkupRange {
 
 	/**
 	 * Location: {**{"meta": "data"}@@░some;text**}, {**░some text**}
+	 * Only the legacy syntax puts metadata ahead of the content.
 	 */
 	get range_start() {
-		return this.metadata ? this.metadata + 2 : this.from + 3;
+		return this.meta?.syntax === "legacy" ? this.meta.to : this.from + 3;
 	}
 
 	/**
 	 * Location: {**{"meta": "data"}░@@some;text**}, ░{**some text**}
+	 * Only the legacy syntax puts metadata ahead of the content.
 	 */
 	get range_front() {
-		return this.metadata ? this.metadata - 1 : this.from;
+		return this.meta?.syntax === "legacy" ? this.meta.to - 3 : this.from;
 	}
 
 	/**
@@ -114,47 +121,33 @@ export abstract class CriticMarkupRange {
 	}
 
 	remove_metadata(): EditorChange[] {
-		if (!this.metadata) return [];
-		return [{
-			from: this.from + 3,
-			to: this.metadata + 2,
-			insert: "",
-		}];
+		if (!this.meta) return [];
+		return [{ from: this.meta.from, to: this.meta.to, insert: "" }];
 	}
 
 	delete_metadata(key: string): EditorChange[] {
-		if (key in shortHandMapping) key = shortHandMapping[key as keyof typeof shortHandMapping];
+		if (Object.hasOwn(SHORTHAND_KEYS, key)) key = SHORTHAND_KEYS[key];
 
-		if (!(key in this.fields))
+		if (!(key in this.own_fields))
 			return [];
 
-		delete this.fields[key as keyof typeof this.fields];
-		if (Object.keys(this.fields).length === 0)
+		delete this.own_fields[key as keyof typeof this.own_fields];
+		if (Object.keys(this.own_fields).length === 0)
 			return this.remove_metadata();
-		return this.set_metadata(this.fields);
+		return this.set_metadata(this.own_fields);
 	}
 
 	add_metadata(key: string, value: unknown): EditorChange[] {
-		this.fields[key as keyof typeof this.fields] = value;
-		return this.set_metadata(this.fields);
+		this.own_fields[key as keyof typeof this.own_fields] = value;
+		return this.set_metadata(this.own_fields);
 	}
 
 	set_metadata(fields: MetadataFields): EditorChange[] {
 		// TODO: Possibly redundant assignment, ranges will automatically get re-constructed with the EditorChange
-		this.fields = fields;
-		if (this.metadata !== undefined) {
-			return [{
-				from: this.from + 3,
-				to: this.metadata,
-				insert: JSON.stringify(fields),
-			}];
-		} else {
-			return [{
-				from: this.from + 3,
-				to: this.from + 3,
-				insert: JSON.stringify(fields) + "@@",
-			}];
-		}
+		this.own_fields = fields;
+		const blob = JSON.stringify(fields) + "@@";
+		if (this.meta) return [{ from: this.meta.from, to: this.meta.to, insert: blob }];
+		return [{ from: this.from + 3, to: this.from + 3, insert: blob }];
 	}
 
 	has_comment(range: CriticMarkupRange): boolean {
@@ -183,7 +176,7 @@ export abstract class CriticMarkupRange {
 	}
 
 	empty() {
-		return 6 === this.to - this.from;
+		return this.range_start === this.closer_to - 3;
 	}
 
 	unwrap() {
@@ -282,20 +275,20 @@ export abstract class CriticMarkupRange {
 	 */
 	cursor_move_inside(cursor: number, skip_metadata = false) {
 		return Math.min(
-			Math.max((skip_metadata && this.metadata) ? this.metadata + 2 : this.from + 3, cursor),
-			this.to - 3,
+			Math.max(skip_metadata ? this.range_start : this.from + 3, cursor),
+			this.closer_to - 3,
 		);
 	}
 
 	cursor_pass_syntax(cursor: number, right: boolean, skip_metadata: boolean = false) {
 		if (right) {
 			if (this.touches_left_bracket(cursor, true, false, skip_metadata))
-				cursor = (skip_metadata && this.metadata) ? (this.metadata! + 2) : (this.from + 3);
+				cursor = skip_metadata ? this.range_start : this.from + 3;
 			if (this.touches_right_bracket(cursor, false, true))
 				cursor = this.to;
 		} else {
 			if (this.touches_right_bracket(cursor, true, false))
-				cursor = this.to - 3;
+				cursor = this.closer_to - 3;
 			if (this.touches_left_bracket(cursor, false, true, skip_metadata))
 				cursor = this.from;
 		}
@@ -314,7 +307,7 @@ export abstract class CriticMarkupRange {
 	touches_left_bracket(cursor: number, outside_loose = false, inside_loose = false, include_metadata = false) {
 		return cursor + (outside_loose ? 0 : 1) >= this.from &&
 			cursor + (inside_loose ? 0 : 1) <=
-				((include_metadata && this.metadata) ? this.metadata + 2 : this.from + 3);
+				((include_metadata && this.meta) ? this.range_start : this.from + 3);
 	}
 
 	touches_separator(cursor: number, left_loose = false, right_loose = false) {
@@ -322,7 +315,7 @@ export abstract class CriticMarkupRange {
 	}
 
 	touches_right_bracket(cursor: number, outside_loose = false, inside_loose = false) {
-		return cursor - (inside_loose ? 0 : 1) >= this.to - 3 && cursor - (outside_loose ? 0 : 1) <= this.to;
+		return cursor - (inside_loose ? 0 : 1) >= this.closer_to - 3 && cursor - (outside_loose ? 0 : 1) <= this.to;
 	}
 
 	touches_bracket(cursor: number, left: boolean, outside_loose = false, inside_loose = false) {
@@ -359,7 +352,7 @@ export abstract class CriticMarkupRange {
 	apply_offset(offset: number) {
 		this.from += offset;
 		this.to += offset;
-		if (this.metadata !== undefined) this.metadata += offset;
+		if (this.meta) this.meta = { ...this.meta, from: this.meta.from + offset, to: this.meta.to + offset };
 	}
 
 	/**
@@ -367,6 +360,9 @@ export abstract class CriticMarkupRange {
 	 * @param cursor Cursor position to split at
 	 */
 	split_range(cursor: number): [string, string] {
-		return [this.text.slice(-3), this.text.slice(0, 3) + (this.metadata ? JSON.stringify(this.fields) + "@@" : "")];
+		return [
+			this.text.slice(-3),
+			this.text.slice(0, 3) + (this.meta?.syntax === "legacy" ? JSON.stringify(this.own_fields) + "@@" : ""),
+		];
 	}
 }

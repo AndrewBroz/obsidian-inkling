@@ -150,7 +150,7 @@ export class CommentIconWidget extends WidgetType {
 
 	renderRange(app: App, range: CommentRange, cls: string[] = []) {
 		const rangeContainer = createDiv({ cls });
-		if (range.metadata)
+		if (range.meta)
 			rangeContainer.appendChild(createMetadataInfoElement(range, "cmtr-comment-tooltip-metadata"));
 
 		const was_empty = !range.unwrap().trim();

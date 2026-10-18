@@ -15,14 +15,14 @@ describe("delete_metadata", () => {
 
 		const changes = range.delete_metadata("author");
 		// EXPL: metadata block spans from after "{~~" to after "@@"
-		expect(changes).toEqual([{ from: range.from + 3, to: range.metadata! + 2, insert: "" }]);
+		expect(changes).toEqual([{ from: range.meta!.from, to: range.meta!.to, insert: "" }]);
 	});
 
 	test("deleting one of several keys rewrites the remaining metadata", () => {
 		const range = parseFirstRange(`x{~~{"author":"A","time":1}@@a~>b~~}y`);
 
 		const changes = range.delete_metadata("time");
-		expect(changes).toEqual([{ from: range.from + 3, to: range.metadata!, insert: `{"author":"A"}` }]);
+		expect(changes).toEqual([{ from: range.meta!.from, to: range.meta!.to, insert: `{"author":"A"}@@` }]);
 	});
 
 	test("deleting an absent key is a no-op", () => {
