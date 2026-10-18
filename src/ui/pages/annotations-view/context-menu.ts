@@ -8,11 +8,11 @@ import {
 	CommentRange,
 	type CriticMarkupRangeEntry,
 	groupRangeEntryByPath,
-	range_source_with_fields,
+	reopen_source,
+	resolve_source,
 	SuggestionType,
 	thread_resolvable,
 	thread_resolved,
-	write_syntax,
 } from "../../../editor/base";
 import { annotationGutterFocusAnnotation } from "../../../editor/renderers/gutters";
 import { applyRangeEditsToVault, centerRangeInEditorView } from "../../../editor/uix";
@@ -100,14 +100,7 @@ export function onContextMenu(
 							resolvable_entries,
 							applyToFile.bind(
 								null,
-								(range, text) =>
-									range === range.base_range ?
-										range_source_with_fields(
-											range,
-											{ ...range.own_fields, done: true },
-											write_syntax(plugin.settings.metadata_syntax, range, range.replies[0]),
-										) :
-										text.slice(range.from, range.to),
+								(range, text) => resolve_source(range, text, plugin.settings.metadata_syntax),
 							),
 						)
 					);
@@ -120,15 +113,7 @@ export function onContextMenu(
 						applyRangeEditsToVault(
 							plugin,
 							resolvable_entries,
-							applyToFile.bind(null, (range, _) => {
-								const fields = { ...range.own_fields };
-								delete fields.done;
-								return range_source_with_fields(
-									range,
-									fields,
-									write_syntax(plugin.settings.metadata_syntax, range),
-								);
-							}),
+							applyToFile.bind(null, (range, text) => reopen_source(range, text, plugin.settings.metadata_syntax)),
 						)
 					);
 			}

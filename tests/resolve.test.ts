@@ -5,7 +5,9 @@ import {
 	cancel_empty_comment,
 	range_source_with_fields,
 	remove_comment,
+	reopen_source,
 	reopen_thread,
+	resolve_source,
 	resolve_thread,
 	thread_resolved,
 } from "../src/editor/base/edit-logic/resolve";
@@ -173,12 +175,17 @@ describe("thread rule 1: done is written on the base only", () => {
 	test("the annotations-view resolve function leaves replies untouched when run over the whole thread", () => {
 		const doc = `{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`;
 		const [base] = topRanges(doc);
-		const fn = (range: CriticMarkupRange, text: string) =>
-			range === range.base_range ?
-				range_source_with_fields(range, { ...range.own_fields, done: true }, "legacy") :
-				text.slice(range.from, range.to);
-		expect(applyToText(doc, fn, [base, ...base.replies]))
+		expect(applyToText(doc, (range, text) => resolve_source(range, text, "legacy"), [base, ...base.replies]))
 			.toBe(`{=={"author":"A","done":true}@@x==}{>>{"author":"A"}@@c<<}`);
+	});
+});
+
+describe("vault-wide reopen", () => {
+	test("a reply without its own done stays byte-identical, even under the attributes setting", () => {
+		const doc = `{=={"done":true}@@x==}{>>{"a":"A"}@@c<<}{>>{bad json}@@r<<}`;
+		const [base] = topRanges(doc);
+		expect(applyToText(doc, (range, text) => reopen_source(range, text, "attributes"), [base, ...base.replies]))
+			.toBe(`{==x==}{>>{"a":"A"}@@c<<}{>>{bad json}@@r<<}`);
 	});
 });
 

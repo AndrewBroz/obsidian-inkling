@@ -47,8 +47,33 @@ export function resolve_thread(range: CriticMarkupRange, setting: MetadataSyntax
  */
 export function reopen_thread(range: CriticMarkupRange, setting: MetadataSyntax = "legacy"): EditorChange[] {
 	return range.base_range.full_thread.flatMap(member =>
-		"done" in member.own_fields ? member.delete_metadata("done", write_syntax(setting, member)) : []
+		Object.hasOwn(member.own_fields, "done") ? member.delete_metadata("done", write_syntax(setting, member)) : []
 	);
+}
+
+/**
+ * Per-range source for the vault-wide "resolve" edit (`applyToFile` runs it on replies too): only the base is
+ * rewritten, replies come back byte-identical (thread rule 1).
+ */
+export function resolve_source(range: CriticMarkupRange, text: string, setting: MetadataSyntax): string {
+	if (range !== range.base_range) return text.slice(range.from, range.to);
+	return range_source_with_fields(
+		range,
+		{ ...range.own_fields, done: true },
+		write_syntax(setting, range, range.replies[0]),
+	);
+}
+
+/**
+ * Per-range source for the vault-wide "reopen" edit (`applyToFile` runs it on replies too, to clean legacy `done`
+ * copies). A range without its own `done` comes back byte-identical, so reopening never migrates or normalises
+ * members it has no reason to touch.
+ */
+export function reopen_source(range: CriticMarkupRange, text: string, setting: MetadataSyntax): string {
+	if (!Object.hasOwn(range.own_fields, "done")) return text.slice(range.from, range.to);
+	const fields = { ...range.own_fields };
+	delete fields.done;
+	return range_source_with_fields(range, fields, write_syntax(setting, range));
 }
 
 /**
