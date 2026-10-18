@@ -12,6 +12,7 @@ import {
 	create_range,
 	CriticMarkupRange,
 	remove_comment,
+	write_syntax,
 } from "../../base";
 import { pluginSettingsField } from "../../uix";
 import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
@@ -117,7 +118,7 @@ export class CommentIconWidget extends WidgetType {
 					{
 						from: range.from,
 						to: range.to,
-						insert: create_range(settings, range.type, content),
+						insert: create_range(settings, range.type, content, "", write_syntax(settings.metadata_syntax, range)),
 					},
 				],
 				annotations: [pluginEditAnnotation.of(true)],

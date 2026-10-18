@@ -65,8 +65,18 @@ export function create_suggestion(settings: PluginSettings, inserted: string, de
 	return construct_suggestion(inserted, deleted, generate_metadata(settings), 0, 0, settings.metadata_syntax).insert;
 }
 
-export function create_range(settings: PluginSettings, type: SuggestionType, inserted: string, deleted: string = "") {
-	return construct_range(inserted, deleted, type, generate_metadata(settings), 0, 0, settings.metadata_syntax).insert;
+/**
+ * A new range with freshly generated metadata. `syntax` defaults to the setting; a caller rewriting an existing range
+ * passes `write_syntax(setting, range)` so an attribute-form range is never written back as legacy.
+ */
+export function create_range(
+	settings: PluginSettings,
+	type: SuggestionType,
+	inserted: string,
+	deleted: string = "",
+	syntax: MetadataSyntax = settings.metadata_syntax,
+) {
+	return construct_range(inserted, deleted, type, generate_metadata(settings), 0, 0, syntax).insert;
 }
 
 /**

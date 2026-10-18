@@ -92,3 +92,26 @@ describe("CommentIconWidget empty-cancel reentrancy guard", () => {
 		expect(view.state.doc.toString()).toBe("xy");
 	});
 });
+
+// EXPL: Touch-to-migrate: an edit writes legacy only when nothing it touches is already attribute form. The comment's
+//       own metadata is regenerated on save, so its syntax must come from the comment, not the setting.
+describe("CommentIconWidget comment edits", () => {
+	test("editing an attributes comment under the legacy setting keeps attribute form", () => {
+		const state = createRangeState("x{>>old<<}{author=A}y", {
+			add_metadata: true,
+			add_author_metadata: true,
+			add_timestamp_metadata: false,
+			author: "Z",
+			metadata_syntax: "legacy",
+		});
+		const view = new EditorView({ state });
+		const comment = view.state.field(rangeParser).ranges.ranges[0] as CommentRange;
+		const widget = new CommentIconWidget(view, comment, false);
+		const editorStub = { unload: () => {} } as unknown as PreviewEditor;
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		(widget as any).commitRangeEdit(comment, "edited", false, document.createElement("div"), editorStub);
+
+		expect(view.state.doc.toString()).toBe("x{>>edited<<}{author=Z}y");
+	});
+});

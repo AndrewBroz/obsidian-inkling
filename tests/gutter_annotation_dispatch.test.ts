@@ -189,6 +189,26 @@ describe("annotation gutter blur-path dispatches are synchronous", () => {
 		expect(view.state.doc.toString()).toBe("x{>>see a b<<}y");
 	});
 
+	// EXPL: Touch-to-migrate: an edit writes legacy only when nothing it touches is already attribute form. The
+	//       comment's own metadata is regenerated on save, so its syntax must come from the comment, not the setting.
+	test("editing an attributes comment under the legacy setting keeps attribute form", () => {
+		const state = createRangeState("x{>>old<<}{author=A}y", {
+			add_metadata: true,
+			add_author_metadata: true,
+			add_timestamp_metadata: false,
+			author: "Z",
+			metadata_syntax: "legacy",
+		}, [editorInfoField]);
+		const view = new EditorView({ state });
+		const { node } = mountThread(view, view.state.field(rangeParser).ranges.ranges[0]);
+
+		node.currentMode = "source";
+		node.new_text = "edited";
+		node.renderPreview();
+
+		expect(view.state.doc.toString()).toBe("x{>>edited<<}{author=Z}y");
+	});
+
 	test("cancelling the only empty reply of an anchored thread unwraps the anchor synchronously", () => {
 		const { view, ranges } = setup("x{==sel==}{>><<}y");
 		const highlight = ranges[0];

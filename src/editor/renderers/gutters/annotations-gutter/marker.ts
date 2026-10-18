@@ -24,6 +24,7 @@ import {
 	SuggestionType,
 	thread_resolvable,
 	thread_resolved,
+	write_syntax,
 } from "../../../base";
 
 import { AnnotationInclusionType } from "../../../../constants";
@@ -235,7 +236,13 @@ class AnnotationNode extends Component {
 				{
 					from: this.range.from,
 					to: this.range.to,
-					insert: create_range(settings, SuggestionType.COMMENT, this.new_text),
+					insert: create_range(
+						settings,
+						SuggestionType.COMMENT,
+						this.new_text,
+						"",
+						write_syntax(settings.metadata_syntax, this.range),
+					),
 				},
 			];
 			this.text = this.new_text;
