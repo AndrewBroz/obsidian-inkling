@@ -12,6 +12,7 @@ import {
 	SuggestionType,
 	thread_resolvable,
 	thread_resolved,
+	write_syntax,
 } from "../../../editor/base";
 import { annotationGutterFocusAnnotation } from "../../../editor/renderers/gutters";
 import { applyRangeEditsToVault, centerRangeInEditorView } from "../../../editor/uix";
@@ -99,7 +100,14 @@ export function onContextMenu(
 							resolvable_entries,
 							applyToFile.bind(
 								null,
-								(range, _) => range_source_with_fields(range, { ...range.fields, done: true }),
+								(range, text) =>
+									range === range.base_range ?
+										range_source_with_fields(
+											range,
+											{ ...range.own_fields, done: true },
+											write_syntax(plugin.settings.metadata_syntax, range, range.replies[0]),
+										) :
+										text.slice(range.from, range.to),
 							),
 						)
 					);
@@ -113,9 +121,13 @@ export function onContextMenu(
 							plugin,
 							resolvable_entries,
 							applyToFile.bind(null, (range, _) => {
-								const fields = { ...range.fields };
+								const fields = { ...range.own_fields };
 								delete fields.done;
-								return range_source_with_fields(range, fields);
+								return range_source_with_fields(
+									range,
+									fields,
+									write_syntax(plugin.settings.metadata_syntax, range),
+								);
 							}),
 						)
 					);

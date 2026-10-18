@@ -1,11 +1,18 @@
 import type { MetadataSyntax } from "../../../types";
 import type { EditorChange } from "../edit-handler";
 import { serializeAttrBlock, unconvertibleReason } from "../edit-util/attributes";
-import { type CommentRange, CriticMarkupRange, type MetadataFields, SuggestionType } from "../ranges";
+import { write_syntax } from "../edit-util/metadata";
+import {
+	type CommentRange,
+	CriticMarkupRange,
+	INHERITED_KEYS,
+	type MetadataFields,
+	SuggestionType,
+} from "../ranges";
 
 /**
  * A thread is resolved iff its base range (the HIGHLIGHT for anchored threads, the first
- * COMMENT otherwise) carries `done: true` in its metadata.
+ * COMMENT otherwise) carries `done: true` in its metadata. Replies never count: `done` on a reply is ignored.
  */
 export function thread_resolved(range: CriticMarkupRange): boolean {
 	return range.base_range.fields.done === true;
@@ -23,19 +30,58 @@ export function thread_resolvable(range: CriticMarkupRange): boolean {
 }
 
 /**
- * Marks every member of the thread (base + replies) as done. Reversible — only metadata
- * changes, markup is never deleted. Each member edits its own metadata blob, so the returned
- * changes never overlap and are safe to dispatch together.
+ * Marks the thread resolved. Thread rule 1: `done` is written on the base only, which is the only place
+ * `thread_resolved` (and every older version) reads it. Reversible: only metadata changes.
  */
-export function resolve_thread(range: CriticMarkupRange): EditorChange[] {
-	return range.base_range.full_thread.flatMap(member => member.add_metadata("done", true));
+export function resolve_thread(range: CriticMarkupRange, setting: MetadataSyntax = "legacy"): EditorChange[] {
+	const base = range.base_range;
+	// EXPL: An attributes-era anchor usually has no block of its own (it inherits), so its first comment's syntax
+	//       says which form the thread is in.
+	return base.add_metadata("done", true, write_syntax(setting, base, base.replies[0]));
 }
 
 /**
- * Removes `done` from every member of the thread (base + replies).
+ * Reopens the thread: removes `done` from the base, and from any reply still carrying a copy written by an older
+ * version, so legacy threads are cleaned up when reopened. Each member edits its own metadata, so the changes never
+ * overlap.
  */
-export function reopen_thread(range: CriticMarkupRange): EditorChange[] {
-	return range.base_range.full_thread.flatMap(member => member.delete_metadata("done"));
+export function reopen_thread(range: CriticMarkupRange, setting: MetadataSyntax = "legacy"): EditorChange[] {
+	return range.base_range.full_thread.flatMap(member =>
+		"done" in member.own_fields ? member.delete_metadata("done", write_syntax(setting, member)) : []
+	);
+}
+
+/**
+ * Changes that write a HIGHLIGHT anchor's inherited author/time into its own metadata, needed when `comment`
+ * (its first comment) is about to be removed or rewritten. `next_first` is the fields of whatever will be the first
+ * comment afterwards (undefined if unknown or none). A key is written only if the anchor does not state it and
+ * the new first comment would give it a different value. Otherwise the anchor would silently change author.
+ */
+export function anchor_inheritance_changes(
+	comment: CriticMarkupRange,
+	next_first: MetadataFields | undefined,
+	setting: MetadataSyntax,
+): EditorChange[] {
+	const base = comment.base_range;
+	if (base.type !== SuggestionType.HIGHLIGHT || base.replies[0] !== comment) return [];
+	const missing: MetadataFields = {};
+	for (const key of INHERITED_KEYS) {
+		if (key in base.own_fields) continue;
+		const inherited = comment.own_fields[key];
+		if (inherited === undefined || next_first?.[key] === inherited) continue;
+		(missing as Record<string, unknown>)[key] = inherited;
+	}
+	if (!Object.keys(missing).length) return [];
+	return base.set_metadata({ ...missing, ...base.own_fields }, write_syntax(setting, base, comment));
+}
+
+/** Removes one comment, keeping its anchor's authorship if the comment was the one it inherited from. */
+export function remove_comment(comment: CriticMarkupRange, setting: MetadataSyntax): EditorChange[] {
+	const next = comment.base_range.replies[1];
+	return [
+		...anchor_inheritance_changes(comment, next?.own_fields, setting),
+		{ from: comment.from, to: comment.to, insert: "" },
+	];
 }
 
 /**
@@ -73,5 +119,5 @@ export function cancel_empty_comment(range: CommentRange): EditorChange[] {
 	if (is_only_reply)
 		return [{ from: base.from, to: range.to, insert: base.unwrap() }];
 
-	return [{ from: range.from, to: range.to, insert: "" }];
+	return remove_comment(range, "legacy");
 }

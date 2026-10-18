@@ -9,6 +9,7 @@ import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 import {
 	acceptSuggestions,
 	addCommentToView,
+	anchor_inheritance_changes,
 	cancel_empty_comment,
 	comment_text_rejected,
 	type CommentRange,
@@ -18,6 +19,7 @@ import {
 	type EditorChange,
 	rangeParser,
 	rejectSuggestions,
+	remove_comment,
 	resolve_thread,
 	SuggestionType,
 	thread_resolvable,
@@ -251,11 +253,14 @@ class AnnotationNode extends Component {
 			//       SYNCHRONOUSLY. The previous deferred dispatch raced the card buttons' synchronous
 			//       resolve/delete dispatches (mousedown blurs the open editor before click fires),
 			//       applying pre-resolve offsets to the post-resolve document and corrupting text.
-			const changes = {
-				from: this.range.from,
-				to: this.range.to,
-				insert: create_range(settings, SuggestionType.COMMENT, this.new_text),
-			};
+			const changes = [
+				...anchor_inheritance_changes(this.range, undefined, settings.metadata_syntax),
+				{
+					from: this.range.from,
+					to: this.range.to,
+					insert: create_range(settings, SuggestionType.COMMENT, this.new_text),
+				},
+			];
 			this.text = this.new_text;
 			this.marker.view.dispatch({ changes, annotations: [pluginEditAnnotation.of(true)] });
 		}
@@ -333,7 +338,7 @@ class AnnotationNode extends Component {
 					.setSection("comment-handling")
 					.onClick(() => {
 						this.marker.view.dispatch({
-							changes: { from: this.range.from, to: this.range.to, insert: "" },
+							changes: remove_comment(this.range, this.marker.view.state.field(pluginSettingsField).metadata_syntax),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});
@@ -384,7 +389,7 @@ class AnnotationNode extends Component {
 					.setSection("close-annotation")
 					.onClick(() => {
 						this.marker.view.dispatch({
-							changes: resolve_thread(this.range),
+							changes: resolve_thread(this.range, this.marker.view.state.field(pluginSettingsField).metadata_syntax),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});
@@ -607,7 +612,7 @@ export class AnnotationMarker extends GutterMarker {
 			resolve_button.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.view.dispatch({
-					changes: resolve_thread(this.annotation),
+					changes: resolve_thread(this.annotation, this.view.state.field(pluginSettingsField).metadata_syntax),
 					annotations: [pluginEditAnnotation.of(true)],
 				});
 			});

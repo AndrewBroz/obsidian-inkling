@@ -15,9 +15,10 @@ import {
 } from "../base";
 
 import { AnnotationInclusionType } from "../../constants";
-import { pluginEditAnnotation } from "./extensions/editing-modes";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../settings";
+import { pluginEditAnnotation } from "./extensions/editing-modes";
+import { pluginSettingsField } from "./extensions/plugin-settings";
 
 import { stickyContextMenuPatch } from "../../patches";
 
@@ -109,7 +110,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 									.setIcon("lucide-rotate-ccw")
 									.onClick(() => {
 										editor.cm.dispatch(editor.cm.state.update({
-											changes: reopen_thread(range),
+											changes: reopen_thread(range, editor.cm.state.field(pluginSettingsField).metadata_syntax),
 											annotations: [pluginEditAnnotation.of(true)],
 										}));
 									});
@@ -118,7 +119,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 									.setIcon("lucide-check")
 									.onClick(() => {
 										editor.cm.dispatch(editor.cm.state.update({
-											changes: resolve_thread(range),
+											changes: resolve_thread(range, editor.cm.state.field(pluginSettingsField).metadata_syntax),
 											annotations: [pluginEditAnnotation.of(true)],
 										}));
 									});

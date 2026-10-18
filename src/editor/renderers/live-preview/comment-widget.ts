@@ -4,12 +4,14 @@ import { App, Component, editorInfoField, MarkdownRenderer, Menu, Notice, setIco
 
 import {
 	addCommentToView,
+	anchor_inheritance_changes,
 	cancel_empty_comment,
 	CM_All_Brackets,
 	comment_text_rejected,
 	CommentRange,
 	create_range,
 	CriticMarkupRange,
+	remove_comment,
 } from "../../base";
 import { pluginSettingsField } from "../../uix";
 import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
@@ -108,12 +110,16 @@ export class CommentIconWidget extends WidgetType {
 			if (comment_text_rejected(content))
 				return;
 
+			const settings = this.view.state.field(pluginSettingsField);
 			this.view.dispatch(this.view.state.update({
-				changes: {
-					from: range.from,
-					to: range.to,
-					insert: create_range(this.view.state.field(pluginSettingsField), range.type, content),
-				},
+				changes: [
+					...anchor_inheritance_changes(range, undefined, settings.metadata_syntax),
+					{
+						from: range.from,
+						to: range.to,
+						insert: create_range(settings, range.type, content),
+					},
+				],
 				annotations: [pluginEditAnnotation.of(true)],
 			}));
 			return;
@@ -287,7 +293,7 @@ export class CommentIconWidget extends WidgetType {
 					.onClick((e) => {
 						this.tooltip!.removeChild(rangeContainer);
 						this.view.dispatch({
-							changes: { from: range.from, to: range.to, insert: "" },
+							changes: remove_comment(range, this.view.state.field(pluginSettingsField).metadata_syntax),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 						editorComponent.unload();
