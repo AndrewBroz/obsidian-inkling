@@ -1,4 +1,4 @@
-import type { MetadataSyntax } from "../../../types";
+import type { MetadataSyntax, PluginSettings } from "../../../types";
 import type { EditorChange } from "../edit-handler";
 import { serializeAttrBlock, unconvertibleContent, unconvertibleReason } from "../edit-util/attributes";
 import { write_syntax } from "../edit-util/metadata";
@@ -52,15 +52,61 @@ export function reopen_thread(range: CriticMarkupRange, setting: MetadataSyntax 
 }
 
 /**
- * Per-range source for the vault-wide "resolve" edit (`applyToFile` runs it on replies too): only the base is
- * rewritten, replies come back byte-identical (thread rule 1).
+ * The changes that delete an entire thread.
+ * - COMMENT base: the whole thread span (base + replies) is removed.
+ * - HIGHLIGHT base: the highlight is unwrapped to plain text and its replies are removed.
+ * - Suggestion bases (addition/deletion/substitution): only the attached comments are removed,
+ *   the suggestion markup itself is kept.
  */
-export function resolve_source(range: CriticMarkupRange, text: string, setting: MetadataSyntax): string {
-	if (range !== range.base_range) return text.slice(range.from, range.to);
+export function remove_thread(range: CriticMarkupRange): EditorChange[] {
+	const base = range.base_range;
+	if (base.type === SuggestionType.COMMENT)
+		return [{ from: base.full_range_front, to: base.full_range_back, insert: "" }];
+	if (base.type === SuggestionType.HIGHLIGHT)
+		return [{ from: base.from, to: base.full_range_back, insert: base.unwrap() }];
+	if (base.replies.length) {
+		return [{
+			from: base.replies[0].from,
+			to: base.replies[base.replies.length - 1].to,
+			insert: "",
+		}];
+	}
+	return [];
+}
+
+/**
+ * Removes every resolved comment thread in a note. `ranges` is the note's flat range list, replies
+ * included, so each thread is taken once from its base: threads never overlap, so neither do the changes.
+ * Suggestions with a legacy `done` flag are not resolvable (see `thread_resolvable`) and are kept.
+ */
+export function remove_resolved_threads(ranges: CriticMarkupRange[]): { changes: EditorChange[]; count: number } {
+	const bases = [...new Set(ranges.map(range => range.base_range))]
+		.filter(base => thread_resolvable(base) && thread_resolved(base));
+	return { changes: bases.flatMap(remove_thread), count: bases.length };
+}
+
+export type ResolveSettings = Pick<PluginSettings, "metadata_syntax" | "remove_on_resolve">;
+
+/** What an editor Resolve action does: mark the thread done or, with `remove_on_resolve`, remove it. */
+export function resolve_action(range: CriticMarkupRange, settings: ResolveSettings): EditorChange[] {
+	return settings.remove_on_resolve ? remove_thread(range) : resolve_thread(range, settings.metadata_syntax);
+}
+
+/**
+ * Per-range source for the vault-wide "resolve" edit (`applyToFile` runs it on replies too, and the text is the
+ * file's contents). Marking done rewrites the base only, replies come back byte-identical (thread rule 1).
+ * With `remove_on_resolve` the base returns the highlight's text for a HIGHLIGHT base and nothing otherwise, and
+ * every reply returns nothing. Replies sit directly after their base, so the whole thread disappears.
+ */
+export function resolve_source(range: CriticMarkupRange, text: string, settings: ResolveSettings): string {
+	const base = range.base_range;
+	if (settings.remove_on_resolve)
+		return range === base && base.type === SuggestionType.HIGHLIGHT ? base.unwrap() : "";
+	if (range !== base) return text.slice(range.from, range.to);
 	return range_source_with_fields(
 		range,
 		{ ...range.own_fields, done: true },
-		write_syntax(setting, range, range.replies[0]),
+		write_syntax(settings.metadata_syntax, range, range.replies[0]),
 	);
 }
 

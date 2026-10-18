@@ -165,3 +165,19 @@ let comment_rendering_mode_notices = {
 		/>
 	{/snippet}
 </SettingItem>
+
+<SettingItem
+	name="Remove comments on resolve"
+	description="Resolving a thread deletes it instead of marking it done. Highlighted text is kept. Undo restores it."
+	type="toggle"
+>
+	{#snippet control()}
+		<Toggle
+			value={plugin.settings.remove_on_resolve}
+			onChange={(value) => {
+				plugin.settings.remove_on_resolve = value;
+				plugin.saveSettings();
+			}}
+		/>
+	{/snippet}
+</SettingItem>

@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import type { EditorChange } from "../src/editor/base/edit-handler";
 import {
@@ -186,7 +187,17 @@ describe("thread rule 1: done is written on the base only", () => {
 	test("the annotations-view resolve function leaves replies untouched when run over the whole thread", () => {
 		const doc = `{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`;
 		const [base] = topRanges(doc);
-		expect(applyToText(doc, (range, text) => resolve_source(range, text, "legacy"), [base, ...base.replies]))
+		expect(
+			applyToText(
+				doc,
+				(range, text) =>
+					resolve_source(range, text, { ...DEFAULT_SETTINGS, metadata_syntax: "legacy", remove_on_resolve: false }),
+				[
+					base,
+					...base.replies,
+				],
+			),
+		)
 			.toBe(`{=={"author":"A","done":true}@@x==}{>>{"author":"A"}@@c<<}`);
 	});
 });

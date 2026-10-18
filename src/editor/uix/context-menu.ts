@@ -9,7 +9,7 @@ import {
 	rangeParser,
 	rejectSuggestions,
 	reopen_thread,
-	resolve_thread,
+	resolve_action,
 	thread_resolvable,
 	thread_resolved,
 } from "../base";
@@ -115,11 +115,15 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 										}));
 									});
 							} else {
-								item.setTitle("Resolve thread")
+								item.setTitle(
+									editor.cm.state.field(pluginSettingsField).remove_on_resolve ?
+										"Resolve and remove thread" :
+										"Resolve thread",
+								)
 									.setIcon("lucide-check")
 									.onClick(() => {
 										editor.cm.dispatch(editor.cm.state.update({
-											changes: resolve_thread(range, editor.cm.state.field(pluginSettingsField).metadata_syntax),
+											changes: resolve_action(range, editor.cm.state.field(pluginSettingsField)),
 											annotations: [pluginEditAnnotation.of(true)],
 										}));
 									});

@@ -16,11 +16,11 @@ import {
 	commitReply,
 	create_range,
 	CriticMarkupRange,
-	type EditorChange,
 	rangeParser,
 	rejectSuggestions,
 	remove_comment,
-	resolve_thread,
+	remove_thread,
+	resolve_action,
 	SuggestionType,
 	thread_resolvable,
 	thread_resolved,
@@ -35,29 +35,6 @@ import { ReplyBox } from "./reply-box";
 import { stickyContextMenuPatch } from "../../../../patches";
 import { createMetadataInfoElement } from "../../../../ui/snippets";
 import { pluginSettingsField } from "../../../uix";
-
-/**
- * Computes the changes that delete an entire annotation thread.
- * - COMMENT base: the whole thread span (base + replies) is removed.
- * - HIGHLIGHT base: the highlight is unwrapped to plain text and its replies are removed.
- * - Suggestion bases (addition/deletion/substitution): only the attached comments are removed,
- *   the suggestion markup itself is kept.
- */
-function removeThreadChanges(range: CriticMarkupRange): EditorChange[] {
-	const base = range.base_range;
-	if (base.type === SuggestionType.COMMENT)
-		return [{ from: base.full_range_front, to: base.full_range_back, insert: "" }];
-	if (base.type === SuggestionType.HIGHLIGHT)
-		return [{ from: base.from, to: base.full_range_back, insert: base.unwrap() }];
-	if (base.replies.length) {
-		return [{
-			from: base.replies[0].from,
-			to: base.replies[base.replies.length - 1].to,
-			insert: "",
-		}];
-	}
-	return [];
-}
 
 class AnnotationNode extends Component {
 	text: string;
@@ -306,7 +283,7 @@ class AnnotationNode extends Component {
 						.setSection("close-annotation")
 						.onClick(() => {
 							this.marker.view.dispatch({
-								changes: removeThreadChanges(this.range),
+								changes: remove_thread(this.range),
 								annotations: [pluginEditAnnotation.of(true)],
 							});
 						});
@@ -360,7 +337,7 @@ class AnnotationNode extends Component {
 						.setSection("comment-handling")
 						.onClick(() => {
 							this.marker.view.dispatch({
-								changes: removeThreadChanges(this.range),
+								changes: remove_thread(this.range),
 								annotations: [pluginEditAnnotation.of(true)],
 							});
 						});
@@ -384,12 +361,13 @@ class AnnotationNode extends Component {
 		//       reopen lives in the Annotations View (Resolved filter) and the editor context menu.
 		if (thread_resolvable(this.range)) {
 			menu.addItem((item) => {
-				item.setTitle("Resolve thread")
+				const settings = this.marker.view.state.field(pluginSettingsField);
+				item.setTitle(settings.remove_on_resolve ? "Resolve and remove thread" : "Resolve thread")
 					.setIcon("check")
 					.setSection("close-annotation")
 					.onClick(() => {
 						this.marker.view.dispatch({
-							changes: resolve_thread(this.range, this.marker.view.state.field(pluginSettingsField).metadata_syntax),
+							changes: resolve_action(this.range, settings),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});
@@ -597,22 +575,28 @@ export class AnnotationMarker extends GutterMarker {
 		//
 		// EXPL: There is deliberately NO delete button here. Resolving is reversible (reopen from the
 		//       Annotations View or the editor context menu); deleting a thread destroys the only copy
-		//       of what people wrote, and `removeThreadChanges` on a HIGHLIGHT base also unwraps the
+		//       of what people wrote, and `remove_thread` on a HIGHLIGHT base also unwraps the
 		//       anchor back into plain text. A one-click, hover-revealed control sitting a few pixels
 		//       from Resolve is the wrong affordance for an action that severe — the two were adjacent
 		//       icons distinguishable only by glyph. Deletion stays available, one step further away,
 		//       via the card's context menu ("Remove comment" / "Remove all comments" below).
+		//       With `remove_on_resolve` on, this button deletes the thread. The user opted into that in settings,
+		//       the label says so, and editor undo restores it.
 		if (thread_resolvable(this.annotation)) {
 			const actions = this.annotation_thread.createDiv({ cls: "cmtr-anno-gutter-thread-actions" });
 			const resolve_button = actions.createEl("button", {
 				cls: ["cmtr-anno-gutter-thread-action", "clickable-icon"],
-				attr: { "aria-label": "Resolve thread" },
+				attr: {
+					"aria-label": this.view.state.field(pluginSettingsField).remove_on_resolve ?
+						"Resolve and remove thread" :
+						"Resolve thread",
+				},
 			});
 			setIcon(resolve_button, "check");
 			resolve_button.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.view.dispatch({
-					changes: resolve_thread(this.annotation, this.view.state.field(pluginSettingsField).metadata_syntax),
+					changes: resolve_action(this.annotation, this.view.state.field(pluginSettingsField)),
 					annotations: [pluginEditAnnotation.of(true)],
 				});
 			});

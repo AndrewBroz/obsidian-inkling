@@ -112,12 +112,12 @@ let {
 			{:else}
 				<Button
 					icon="check"
-					tooltip="Resolve thread"
+					tooltip={plugin.settings.remove_on_resolve ? "Resolve and remove thread" : "Resolve thread"}
 					onClick={(() =>
 					applyRangeEditsToVault(
 						plugin,
 						[entry],
-						applyToFile.bind(null, (range, text) => resolve_source(range, text, plugin.settings.metadata_syntax)),
+						applyToFile.bind(null, (range, text) => resolve_source(range, text, plugin.settings)),
 						true,
 					))}
 				/>

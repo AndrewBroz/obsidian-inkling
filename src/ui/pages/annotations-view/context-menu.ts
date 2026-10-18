@@ -91,7 +91,11 @@ export function onContextMenu(
 			const any_unresolved = resolvable_entries.some((entry) => !thread_resolved(entry.range));
 			if (any_unresolved) {
 				item
-					.setTitle(multiple_ranges ? "Resolve selected threads" : "Resolve thread")
+					.setTitle(
+						plugin.settings.remove_on_resolve ?
+							(multiple_ranges ? "Resolve and remove selected threads" : "Resolve and remove thread") :
+							(multiple_ranges ? "Resolve selected threads" : "Resolve thread"),
+					)
 					.setIcon("check")
 					.setSection("close-annotation")
 					.onClick(async () =>
@@ -100,7 +104,7 @@ export function onContextMenu(
 							resolvable_entries,
 							applyToFile.bind(
 								null,
-								(range, text) => resolve_source(range, text, plugin.settings.metadata_syntax),
+								(range, text) => resolve_source(range, text, plugin.settings),
 							),
 						)
 					);

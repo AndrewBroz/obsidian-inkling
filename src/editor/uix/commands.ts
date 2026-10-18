@@ -15,6 +15,7 @@ import {
 	mark_editor_ranges,
 	rangeParser,
 	rejectSuggestions,
+	remove_resolved_threads,
 	selectionContainsRanges,
 } from "../base";
 import { addCommentToView, generateCriticMarkupPatchFromDiff } from "../base";
@@ -97,6 +98,26 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 			}).open();
 		},
 	})),
+	{
+		id: "remove-resolved-comments",
+		name: "Remove resolved comments in this note",
+		icon: "message-square-x",
+		editor_context: true,
+		regular_callback: (editor: Editor, _: MarkdownView) => {
+			const { changes, count } = remove_resolved_threads(editor.cm.state.field(rangeParser).ranges.ranges);
+			if (!count) {
+				new Notice("Inkling: no resolved comments in this note.");
+				return;
+			}
+			new ConfirmModal(plugin.app, {
+				title: "Remove resolved comments",
+				body: `Remove ${count} resolved thread${count === 1 ? "" : "s"}? Highlighted text is kept. Undo restores them.`,
+				confirm: "Remove",
+				onConfirm: () =>
+					editor.cm.dispatch(editor.cm.state.update({ changes, annotations: [pluginEditAnnotation.of(true)] })),
+			}).open();
+		},
+	},
 	{
 		id: "accept-all-suggestions",
 		name: "Accept all suggestions",

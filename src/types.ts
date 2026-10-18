@@ -292,6 +292,10 @@ export interface PluginSettings {
 	 * Governs new ranges and ranges Inkling rewrites anyway (touch-to-migrate). Both are always read.
 	 */
 	metadata_syntax: MetadataSyntax;
+	/**
+	 * Whether resolving a comment thread removes it instead of marking it done
+	 */
+	remove_on_resolve: boolean;
 
 	/**
 	 * Author name to use for metadata

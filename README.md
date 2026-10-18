@@ -123,6 +123,11 @@ already in attribute blocks is never silently written back as legacy. Two comman
 
 A range whose fields cannot be converted losslessly stays as it is.
 
+To clear finished discussions, run **Remove resolved comments in this note**. It asks for confirmation, then deletes
+every resolved comment thread in the note in one step (a single undo restores them). Highlighted text is kept, and
+suggestions are never touched. **Settings, Editor, Remove comments on resolve** makes every Resolve action delete the
+thread instead of marking it done.
+
 Thread rules for attribute blocks: a highlight takes its author and time from its first comment, so the same fact is
 not written twice. The resolved state (`done`) is written once, on the thread's base.
 
