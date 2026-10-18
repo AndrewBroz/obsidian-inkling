@@ -1,6 +1,6 @@
 import { type MetadataSyntax, PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
 import type { EditorChange } from "../edit-handler";
-import { parseAttrBlock, serializeAttrBlock, SHORTHAND_KEYS } from "../edit-util/attributes";
+import { parseAttrBlock, serializeAttrBlock, SHORTHAND_KEYS, unconvertibleReason } from "../edit-util/attributes";
 import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, SuggestionType } from "./definitions";
 import type { CommentRange } from "./types";
 
@@ -134,7 +134,7 @@ export abstract class CriticMarkupRange {
 	delete_metadata(key: string, syntax?: MetadataSyntax): EditorChange[] {
 		if (Object.hasOwn(SHORTHAND_KEYS, key)) key = SHORTHAND_KEYS[key];
 
-		if (!(key in this.own_fields))
+		if (!Object.hasOwn(this.own_fields, key))
 			return [];
 
 		const fields = { ...this.own_fields };
@@ -154,6 +154,8 @@ export abstract class CriticMarkupRange {
 	set_metadata(fields: MetadataFields, syntax: MetadataSyntax = this.meta?.syntax ?? "legacy"): EditorChange[] {
 		// TODO: Possibly redundant assignment, ranges will automatically get re-constructed with the EditorChange
 		this.own_fields = fields;
+		// EXPL: Lossless or untouched: fields that would not read back from an attribute block stay legacy.
+		if (syntax === "attributes" && unconvertibleReason(fields)) syntax = "legacy";
 		const has_fields = Object.values(fields).some(value => value !== undefined);
 		const legacy = this.meta?.syntax === "legacy" ? this.meta : undefined;
 		const attributes = this.meta?.syntax === "attributes" ? this.meta : undefined;

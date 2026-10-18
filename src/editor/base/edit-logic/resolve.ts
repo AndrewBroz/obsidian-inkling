@@ -1,6 +1,6 @@
 import type { MetadataSyntax } from "../../../types";
 import type { EditorChange } from "../edit-handler";
-import { serializeAttrBlock } from "../edit-util/attributes";
+import { serializeAttrBlock, unconvertibleReason } from "../edit-util/attributes";
 import { type CommentRange, CriticMarkupRange, type MetadataFields, SuggestionType } from "../ranges";
 
 /**
@@ -52,7 +52,8 @@ export function range_source_with_fields(
 ): string {
 	if (!Object.values(fields).some(value => value !== undefined))
 		return range.text;
-	if (syntax === "attributes")
+	// EXPL: Lossless or untouched: fields that would not read back from an attribute block stay legacy.
+	if (syntax === "attributes" && !unconvertibleReason(fields))
 		return range.text + serializeAttrBlock(fields);
 	return range.text.slice(0, 3) + JSON.stringify(fields) + "@@" + range.text.slice(3);
 }
