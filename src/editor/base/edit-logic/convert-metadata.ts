@@ -17,8 +17,11 @@ const is_anchor = (range: CriticMarkupRange) => range.type === SuggestionType.HI
 function attribute_fields(range: CriticMarkupRange): MetadataFields {
 	const fields = { ...range.own_fields };
 	if (is_reply(range)) delete fields.done;
-	if (is_anchor(range)) {
-		const first = range.replies[0].own_fields;
+	// EXPL: A first comment that stays legacy (unconvertible) cannot be inherited from on the way back, so the anchor
+	//       keeps its own fields.
+	const first_reply = is_anchor(range) ? range.replies[0] : undefined;
+	if (first_reply && (first_reply.meta?.syntax === "attributes" || !unconvertibleReason(first_reply.own_fields))) {
+		const first = first_reply.own_fields;
 		for (const key of INHERITED_KEYS)
 			if (key in fields && fields[key] === first[key]) delete fields[key];
 	}
@@ -56,7 +59,8 @@ export function convert_metadata(ranges: CriticMarkupRange[], target: MetadataSy
 		} else {
 			// EXPL: An anchor whose first comment is in attributes syntax may be relying on inheritance; legacy has no
 			//       inheritance (older versions read the anchor alone), so its inherited fields are written out in full.
-			const relies_on_inheritance = is_anchor(range) && range.replies[0].meta?.syntax === "attributes";
+			const relies_on_inheritance = is_anchor(range) &&
+				(range.meta?.syntax === "attributes" || range.replies[0].meta?.syntax === "attributes");
 			if (range.meta?.syntax !== "attributes" && !relies_on_inheritance) continue;
 			const fields = relies_on_inheritance ? { ...range.fields } : { ...range.own_fields };
 			if (range.meta?.syntax !== "attributes" && Object.keys(fields).length === Object.keys(range.own_fields).length)

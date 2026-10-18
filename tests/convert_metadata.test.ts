@@ -62,6 +62,7 @@ describe("round trip (spec: lossless conversion)", () => {
 
 	test.each([
 		...INKLING_SHAPED,
+		`{=={"author":"A","time":1}@@x==}{>>{"author":"A","time":1,"note":{"x":1}}@@c<<}`, // reply stays legacy
 		`{==x==}{>>{"author":"A","time":1}@@c<<}`, // anchor states nothing
 		`{=={"done":true}@@x==}{>>{"author":"A","done":true}@@c<<}`, // done on a reply
 		`{=={"author":"Z"}@@x==}{>>{"author":"A","time":1}@@c<<}`, // anchor differs
@@ -81,12 +82,30 @@ describe("round trip (spec: lossless conversion)", () => {
 	});
 });
 
-test("leaves the parsed ranges untouched", () => {
-	const doc = INKLING_SHAPED[1];
+test.each(["attributes", "legacy"] as const)("leaves the parsed ranges untouched (to %s)", (target) => {
+	const doc = target === "attributes" ?
+		INKLING_SHAPED[1] :
+		`{==x==}{done=true}{>>c<<}{author=A time=1}{>>r<<}{author=B}`;
 	const ranges = parse(doc);
 	const before = ranges.map(r => ({ ...r.own_fields }));
-	convert_metadata(ranges, "attributes");
+	expect(convert_metadata(ranges, target).converted).toBeGreaterThan(0);
 	expect(ranges.map(r => r.own_fields)).toEqual(before);
+});
+
+describe("mixed threads", () => {
+	// EXPL: The anchor's reply stays legacy (unconvertible), so the anchor must keep its own fields to stay reversible.
+	const stuck = `{=={"author":"A","time":1}@@x==}{>>{"author":"A","time":1,"note":{"x":1}}@@c<<}`;
+
+	test("an anchor keeps its fields while its first comment stays legacy", () => {
+		expect(convert(stuck, "attributes"))
+			.toBe(`{==x==}{author=A time=1}{>>{"author":"A","time":1,"note":{"x":1}}@@c<<}`);
+		expect(convert(convert(stuck, "attributes"), "legacy")).toBe(stuck);
+	});
+
+	test("an attributes anchor with a legacy reply gets its inherited fields written out", () => {
+		expect(convert(`{==x==}{done=true}{>>{"author":"A","time":1}@@c<<}`, "legacy"))
+			.toBe(`{=={"author":"A","time":1,"done":true}@@x==}{>>{"author":"A","time":1}@@c<<}`);
+	});
 });
 
 describe("mixed notes", () => {
