@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
-import { SubstitutionRange } from "../src/editor/base/ranges";
+import { type CriticMarkupRange, SubstitutionRange } from "../src/editor/base/ranges";
 import { createRangeState } from "./helpers";
 
 // EXPL: Fuzz guard for the interval tree's `max` augmentation (see range_state_tree.test.ts and
@@ -148,15 +148,35 @@ function touchesBracket(tokens: [number, number][], from: number, to: number): b
 type Edit = { from: number; to: number; insert: string };
 
 /**
+ * Every range's span, thread (its base and its replies, by position) and effective fields. Threads and fields are
+ * compared too: a block edit can make a comment the reply of a range it never touched, so the comment, and the
+ * author a highlight inherits from it, change without its span changing.
+ */
+function snapshot(ranges: CriticMarkupRange[]): string {
+	const at = (range: CriticMarkupRange) => [range.from, range.to];
+	return JSON.stringify(ranges.map(range => ({
+		span: [range.type, range.from, range.to],
+		base: at(range.base_range),
+		replies: range.replies.map(at),
+		fields: range.fields,
+	})));
+}
+
+/** The incremental ranges of `state` diverge from a full parse of its text. */
+function diverges(state: ReturnType<typeof createRangeState>): { incremental: string; full: string } | undefined {
+	const incremental = snapshot(state.field(rangeParser).ranges.ranges);
+	const full = snapshot(getRangesInText(state.doc.toString(), { ...DEFAULT_SETTINGS }));
+	return incremental === full ? undefined : { incremental, full };
+}
+
+/**
  * Random edit sequences over documents with attribute blocks; after each transaction the incremental ranges must
- * equal a full parse. Each transaction makes 1 to `max_edits` non-overlapping edits, none touching a bracket token.
+ * equal a full parse, threads and fields included. Each transaction makes 1 to `max_edits` non-overlapping edits, none touching a bracket token.
  * @returns the first failures found (at most 3), with their reproduction.
  */
 function incrementalVsFull(seed: number, max_edits: number): string[] {
 	const rng = mulberry32(seed);
 	const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
-	const spans = (ranges: { from: number; to: number; type: unknown }[]) =>
-		JSON.stringify(ranges.map(r => [r.type, r.from, r.to]));
 	const failures: string[] = [];
 	for (let seq = 0; seq < 500 && failures.length < 3; seq++) {
 		const initial = Array.from({ length: 6 + Math.floor(rng() * 6) }, () => pick(SEGMENTS)).join("");
@@ -178,13 +198,12 @@ function incrementalVsFull(seed: number, max_edits: number): string[] {
 			if (!edits.length) break;
 			transactions.push(edits);
 			state = state.update({ changes: edits }).state;
-			const doc = state.doc.toString();
-			const incremental = spans(state.field(rangeParser).ranges.ranges);
-			const full = spans(getRangesInText(doc, { ...DEFAULT_SETTINGS }));
-			if (incremental !== full) {
+			const divergence = diverges(state);
+			if (divergence) {
 				failures.push(
-					`initial=${JSON.stringify(initial)} transactions=${JSON.stringify(transactions)}\n`
-						+ `doc=${JSON.stringify(doc)}\nincremental=${incremental}\nfull=${full}`,
+					`initial=${JSON.stringify(initial)} transactions=${JSON.stringify(transactions)}\n` +
+						`doc=${JSON.stringify(state.doc.toString())}\nincremental=${divergence.incremental}\n` +
+						`full=${divergence.full}`,
 				);
 				break;
 			}
@@ -202,5 +221,33 @@ describe("fuzz: incremental parse equals a full parse", () => {
 	//       regenerated together; a range one change removed must still be seen by the others.
 	test("for transactions of up to three edits", () => {
 		expect(incrementalVsFull(0x4242, 3)).toEqual([]);
+	});
+});
+
+// EXPL: A block typed into place can end its owner exactly where an untouched comment starts. The comment then
+//       becomes the owner's reply (and a highlight owner inherits its author), though no edit touched it.
+describe("a block edit that makes a range adjacent to the next comment", () => {
+	test.each([
+		["typing a valid block into `{}`", "{==x==}{}{>>c<<}{author=B time=2}", { from: 8, to: 8, insert: "k=1" }],
+		["deleting the space that kept a block invalid", "{==x==}{k=1 }{>>c<<}{author=B time=2}", {
+			from: 11,
+			to: 12,
+			insert: "",
+		}],
+	])("%s threads the comment onto the range", (_name, doc, change) => {
+		const state = createRangeState(doc).update({ changes: change }).state;
+		expect(diverges(state)).toBeUndefined();
+		const [highlight, comment] = state.field(rangeParser).ranges.ranges;
+		expect(comment.base_range).toBe(highlight);
+		expect(highlight.fields.author).toBe("B");
+	});
+
+	test("making the block invalid again detaches the comment", () => {
+		const state = createRangeState("{==x==}{k=1}{>>c<<}{author=B time=2}")
+			.update({ changes: { from: 11, to: 11, insert: " " } }).state;
+		expect(diverges(state)).toBeUndefined();
+		const [highlight, comment] = state.field(rangeParser).ranges.ranges;
+		expect(comment.base_range).toBe(comment);
+		expect(highlight.fields.author).toBeUndefined();
 	});
 });

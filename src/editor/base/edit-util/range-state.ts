@@ -64,7 +64,9 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		// regenerate-ranges: 0.20 - 0.55 ms
 		const inserted_set = new Map<number, CriticMarkupRange>();
 		const offsets: [number, number][] = [];
-		const dangling_comments = new Map<number, CommentRange>();
+		// EXPL: Held by identity, not position: replies of invalidated ranges are added at their old position and
+		//       inserted comments at their new one, so position keys from the two documents could collide.
+		const dangling_comments = new Set<CommentRange>();
 		const deleted_ranges: Set<CriticMarkupRange> = new Set();
 		const to_old = tr.changes.invertedDesc;
 		// EXPL: A trailing attribute block is text after a range's closer, so an edit can turn the text after a
@@ -128,7 +130,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			value.ranges.tree.remove([range.from, range.to], range);
 			deleted_ranges.add(range);
 			for (const reply of range.base_range.thread)
-				dangling_comments.set(reply.from, reply);
+				dangling_comments.add(reply);
 			markDirty(tr.changes.mapPos(range.from, -1), tr.changes.mapPos(range.to, 1));
 		}
 
@@ -172,7 +174,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		}
 		for (const deleted_range of deleted_ranges) {
 			if (deleted_range.type === SuggestionType.COMMENT)
-				dangling_comments.delete(deleted_range.from);
+				dangling_comments.delete(deleted_range as CommentRange);
 		}
 
 		let cumulative_offset = 0;
@@ -222,16 +224,28 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			value.ranges.tree.insert([range.from, range.to], range);
 
 		// comments-thread-reconstruction: <0.01 - 0.05 ms
+		const commentAt = (from: number) =>
+			(value.ranges.tree.search([from, from]) as CriticMarkupRange[])
+				.find(range => range.type === SuggestionType.COMMENT && range.from === from) as CommentRange | undefined;
 		for (const range of inserted_ranges) {
 			if (range.type === SuggestionType.COMMENT)
-				dangling_comments.set(range.from, range as CommentRange);
+				dangling_comments.add(range as CommentRange);
+			// EXPL: A regenerated range can now end exactly where an untouched comment starts: a block typed
+			//       into `{==x==}{}{>>c<<}` makes `c` the highlight's reply. That comment and the comments
+			//       adjacent after it (its replies, as it was its own base) are rebuilt too. They are found by
+			//       position in the tree, not through `replies`: regenerating a span also builds throwaway copies
+			//       of ranges still in the tree, and attaches them as replies of the inserted ranges. The reverse,
+			//       a range whose block stops being valid, needs nothing here: the edit is inside that range, so
+			//       `invalidate` already queued its replies.
+			for (let end = range.to, next = commentAt(end); next; end = next.to, next = commentAt(end))
+				dangling_comments.add(next);
 		}
 
 		if (dangling_comments.size) {
 			const comment_threads: CommentRange[][] = [];
 			let last_range: CommentRange | undefined = undefined;
 			let current_thread: CommentRange[] = [];
-			for (const range of Array.from(dangling_comments.values()).sort((a, b) => a.from - b.from)) {
+			for (const range of Array.from(dangling_comments).sort((a, b) => a.from - b.from)) {
 				range.clear_references();
 				range.replies.length = 0;
 
