@@ -3,6 +3,7 @@ import { type Editor, type MarkdownView, Notice, Platform } from "obsidian";
 import { type SelectionRange } from "@codemirror/state";
 import type CommentatorPlugin from "../../main";
 import { type ECommand, EditMode } from "../../types";
+import { ConfirmModal } from "../../ui/modals/confirm-modal";
 
 import { showProgressBarNotice } from "../../util/obsidian-util";
 import { pathWithoutExtension } from "../../util/util";
@@ -10,6 +11,7 @@ import {
 	acceptSuggestions,
 	applyToText,
 	CM_SuggestionTypes,
+	convert_metadata,
 	mark_editor_ranges,
 	rangeParser,
 	rejectSuggestions,
@@ -67,6 +69,34 @@ export const suggestion_commands: (plugin: CommentatorPlugin) => ECommand[] = (p
 	}));
 
 export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugin) => [
+	...([
+		["attributes", "convert-metadata-to-attributes", "Convert metadata in this note to attribute blocks"],
+		["legacy", "convert-metadata-to-legacy", "Convert metadata in this note back to legacy"],
+	] as const).map(([target, id, name]) => ({
+		id,
+		name,
+		icon: "replace-all",
+		editor_context: true,
+		regular_callback: (editor: Editor, _: MarkdownView) => {
+			const ranges = editor.cm.state.field(rangeParser).ranges.ranges;
+			const { changes, converted, skipped } = convert_metadata(ranges, target);
+			const left = skipped.length ? ` ${skipped.length} will stay legacy: ${skipped[0].reason}.` : "";
+			if (!converted) {
+				new Notice(`Inkling: nothing to convert.${left}`);
+				return;
+			}
+			new ConfirmModal(plugin.app, {
+				title: name,
+				body: `${converted} range${converted === 1 ? "" : "s"} will be rewritten.${left}` +
+					(target === "attributes" ?
+						" Collaborators on Inkling older than 0.13 or on Commentator will see stray metadata." :
+						""),
+				confirm: "Convert",
+				onConfirm: () =>
+					editor.cm.dispatch(editor.cm.state.update({ changes, annotations: [pluginEditAnnotation.of(true)] })),
+			}).open();
+		},
+	})),
 	{
 		id: "accept-all-suggestions",
 		name: "Accept all suggestions",
