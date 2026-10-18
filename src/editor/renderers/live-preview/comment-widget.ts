@@ -422,7 +422,8 @@ export class CommentIconWidget extends WidgetType {
 			};
 		}
 
-		if (this.range.length) {
+		// EXPL: Metadata-only comments (`{>>{"author":"A"}@@<<}`) have no content but still need the tooltip editor.
+		if (this.range.length || this.range.meta) {
 			this.icon.onmouseenter = () => {
 				this.renderTooltip();
 			};
