@@ -142,6 +142,17 @@ export function unconvertibleReason(fields: MetadataFields): string | undefined 
 }
 
 /**
+ * Why a range with this text (opener included, metadata excluded) cannot carry an attribute block, or undefined if
+ * it can. The grammar reads any `@@` in a range as a metadata separator, so with an `@@` in the content the text
+ * before it would be taken for legacy metadata and the block would be left behind.
+ */
+export function unconvertibleContent(text: string): string | undefined {
+	return text.slice(3).includes("@@") ?
+		"its text contains @@, which the grammar reads as the legacy separator" :
+		undefined;
+}
+
+/**
  * A warning when `author` would put an `@` after a non-alphanumeric character in an attribute block, which
  * Pandoc-grammar tools (ZotLit, Pandoc) read as a citation. `a@b.com` is fine.
  */

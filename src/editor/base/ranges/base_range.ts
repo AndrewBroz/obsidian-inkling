@@ -1,6 +1,12 @@
 import { type MetadataSyntax, PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
 import type { EditorChange } from "../edit-handler";
-import { parseAttrBlock, serializeAttrBlock, SHORTHAND_KEYS, unconvertibleReason } from "../edit-util/attributes";
+import {
+	parseAttrBlock,
+	serializeAttrBlock,
+	SHORTHAND_KEYS,
+	unconvertibleContent,
+	unconvertibleReason,
+} from "../edit-util/attributes";
 import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, SuggestionType } from "./definitions";
 import type { CommentRange } from "./types";
 
@@ -155,7 +161,7 @@ export abstract class CriticMarkupRange {
 		// TODO: Possibly redundant assignment, ranges will automatically get re-constructed with the EditorChange
 		this.own_fields = fields;
 		// EXPL: Lossless or untouched: fields that would not read back from an attribute block stay legacy.
-		if (syntax === "attributes" && unconvertibleReason(fields)) syntax = "legacy";
+		if (syntax === "attributes" && (unconvertibleReason(fields) || unconvertibleContent(this.text))) syntax = "legacy";
 		const has_fields = Object.values(fields).some(value => value !== undefined);
 		const legacy = this.meta?.syntax === "legacy" ? this.meta : undefined;
 		const attributes = this.meta?.syntax === "attributes" ? this.meta : undefined;

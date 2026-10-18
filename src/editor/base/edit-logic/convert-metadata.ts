@@ -1,6 +1,6 @@
 import type { MetadataSyntax } from "../../../types";
 import type { EditorChange } from "../edit-handler";
-import { unconvertibleReason } from "../edit-util/attributes";
+import { unconvertibleContent, unconvertibleReason } from "../edit-util/attributes";
 import { type CriticMarkupRange, INHERITED_KEYS, type MetadataFields, SuggestionType } from "../ranges";
 
 export interface MetadataConversion {
@@ -20,7 +20,11 @@ function attribute_fields(range: CriticMarkupRange): MetadataFields {
 	// EXPL: A first comment that stays legacy (unconvertible) cannot be inherited from on the way back, so the anchor
 	//       keeps its own fields.
 	const first_reply = is_anchor(range) ? range.replies[0] : undefined;
-	if (first_reply && (first_reply.meta?.syntax === "attributes" || !unconvertibleReason(first_reply.own_fields))) {
+	if (
+		first_reply &&
+		(first_reply.meta?.syntax === "attributes" ||
+			!(unconvertibleReason(first_reply.own_fields) || unconvertibleContent(first_reply.text)))
+	) {
 		const first = first_reply.own_fields;
 		for (const key of INHERITED_KEYS)
 			if (key in fields && fields[key] === first[key]) delete fields[key];
@@ -49,7 +53,7 @@ export function convert_metadata(ranges: CriticMarkupRange[], target: MetadataSy
 	for (const range of ranges) {
 		if (target === "attributes") {
 			if (range.meta?.syntax !== "legacy") continue;
-			const reason = unconvertibleReason(range.own_fields);
+			const reason = unconvertibleReason(range.own_fields) ?? unconvertibleContent(range.text);
 			if (reason) {
 				result.skipped.push({ range, reason });
 				continue;

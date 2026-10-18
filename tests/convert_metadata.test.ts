@@ -49,6 +49,16 @@ describe("legacy → attributes", () => {
 		expect(apply(doc, result.changes)).toBe(`{++{"author":"A","note":{"x":1}}@@a++} {++b++}{author=B}`);
 	});
 
+	test("a range whose text contains @@ stays legacy, since a block would not read back", () => {
+		const doc = `{++{"author":"A"}@@a@@b++} {++{"author":"B"}@@c++}`;
+		const result = convert_metadata(parse(doc), "attributes");
+		expect(result.converted).toBe(1);
+		expect(result.skipped.map(s => s.reason)).toEqual([expect.stringContaining("@@")]);
+		expect(apply(doc, result.changes)).toBe(`{++{"author":"A"}@@a@@b++} {++c++}{author=B}`);
+		const converted = parse(apply(doc, result.changes));
+		expect(converted.map(r => r.fields)).toEqual(parse(doc).map(r => r.fields));
+	});
+
 	test("an anchor keeps fields that differ from its first comment", () => {
 		expect(convert(`{=={"author":"Z","time":1}@@x==}{>>{"author":"A","time":1}@@c<<}`, "attributes"))
 			.toBe(`{==x==}{author=Z}{>>c<<}{author=A time=1}`);

@@ -1,4 +1,5 @@
 import { hasCriticMarkup, toOriginalText } from "../src/api/original-text";
+import { withSyntax } from "./helpers";
 
 describe("toOriginalText", () => {
 	test("removes additions", () => {
@@ -20,12 +21,6 @@ describe("toOriginalText", () => {
 	test("removes whole reply threads", () => {
 		expect(toOriginalText("Text {==here==}{>>one<<}{>>two<<} end")).toBe("Text here end");
 		expect(toOriginalText("Text{>>one<<}{>>two<<} end")).toBe("Text end");
-	});
-
-	test("never leaks metadata", () => {
-		expect(toOriginalText(`x {++{"author":"A","time":1}@@added ++}y`)).toBe("x y");
-		expect(toOriginalText(`{--{"a":"B"}@@gone--} here`)).toBe("gone here");
-		expect(toOriginalText(`{~~{"author":"A"}@@old~>new~~}`)).toBe("old");
 	});
 
 	test("drops a comment at the end of a line without a trailing space", () => {
@@ -105,18 +100,31 @@ B"
 		expect(toOriginalText("a {~~x~>y~>z~~} b")).toBe("a x b");
 		expect(toOriginalText("a {~~x~>y~>z~~} b {++c++} d")).toBe("a x b d");
 		expect(toOriginalText("a {~~x~>y~>z~~}{>>why<<} b")).toBe("a x b");
-		expect(toOriginalText(`{~~{"author":"A"}@@x~>y~>z~~}`)).toBe("x");
 		// EXPL: without a closer it is an unclosed opener, and the markup after it still counts.
 		expect(toOriginalText("x {~~a~>b~>c {--d--}")).toBe("x {~~a~>b~>c d");
 	});
 
-	test("never leaks metadata when the content repeats `@@`", () => {
-		expect(toOriginalText(`x {++{"author":"A"}@@a@@b++} y`)).toBe("x y");
-		expect(toOriginalText(`{--{"author":"A"}@@a@@b--} here`)).toBe("a@@b here");
-	});
-
 	test("pins behaviour for markup inside inline code", () => {
 		expect(toOriginalText("Use `{++x++}` literally")).toMatchInlineSnapshot(`"Use \`\` literally"`);
+	});
+});
+
+describe.each(["legacy", "attributes"] as const)("%s metadata: toOriginalText", (syntax) => {
+	const original = (doc: string) => toOriginalText(withSyntax(doc, syntax));
+
+	test("never leaks metadata", () => {
+		expect(original(`x {++{"author":"A","time":1}@@added ++}y`)).toBe("x y");
+		expect(original(`{--{"a":"B"}@@gone--} here`)).toBe("gone here");
+		expect(original(`{~~{"author":"A"}@@old~>new~~}`)).toBe("old");
+	});
+
+	test("ends a substitution with a repeated `~>` at its closer", () => {
+		expect(original(`{~~{"author":"A"}@@x~>y~>z~~}`)).toBe("x");
+	});
+
+	test("never leaks metadata when the content repeats `@@`", () => {
+		expect(original(`x {++{"author":"A"}@@a@@b++} y`)).toBe("x y");
+		expect(original(`{--{"author":"A"}@@a@@b--} here`)).toBe("a@@b here");
 	});
 });
 

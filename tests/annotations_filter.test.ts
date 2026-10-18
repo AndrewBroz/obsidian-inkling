@@ -9,7 +9,7 @@ import {
 	ResolvedFilter,
 	SuggestionTypeFilter,
 } from "../src/ui/pages/annotations-view/filter-ranges";
-import { createRangeState } from "./helpers";
+import { createRangeState, withSyntax } from "./helpers";
 
 // EXPL: filterRanges only reads `plugin.settings` — a bare settings object is enough to drive
 // the pure filtering pipeline under test.
@@ -41,7 +41,7 @@ function filterByResolved(plugin: ReturnType<typeof fakePlugin>, items: any, res
 	);
 }
 
-describe("filterRanges / ResolvedFilter", () => {
+describe.each(["legacy", "attributes"] as const)("%s metadata: filterRanges / ResolvedFilter", (syntax) => {
 	// EXPL: One vault with two files:
 	//  - a.md: an unresolved plain comment thread, and a resolved plain comment thread.
 	//  - b.md: an unresolved anchored (HIGHLIGHT) thread, a resolved anchored thread, and a
@@ -51,8 +51,8 @@ describe("filterRanges / ResolvedFilter", () => {
 	const doc_b = `x{==sel1==}{>>reply1<<}y{=={"done":true}@@sel2==}{>>{"done":true}@@reply2<<}z{==standalone==}w`;
 
 	const items = [
-		["a.md", { data: rangesFor(doc_a), mtime: 0 }],
-		["b.md", { data: rangesFor(doc_b), mtime: 0 }],
+		["a.md", { data: rangesFor(withSyntax(doc_a, syntax)), mtime: 0 }],
+		["b.md", { data: rangesFor(withSyntax(doc_b, syntax)), mtime: 0 }],
 	] as any;
 
 	test("ALL returns every top-level thread regardless of resolved state", () => {
@@ -107,7 +107,7 @@ describe("filterRanges / ResolvedFilter", () => {
 		// done-flagged SUGGESTION ranges from appearing in RESOLVED, while preserving
 		// correct behavior for resolvable threads.
 		const doc = `x{>>{"done":true}@@comment<<}y`;
-		const state = createRangeState(doc, { enable_metadata: true });
+		const state = createRangeState(withSyntax(doc, syntax), { enable_metadata: true });
 		const ranges = state.field(rangeParser).ranges.ranges;
 		const items = [["d.md", { data: ranges, mtime: 0 }]] as any;
 		const plugin = fakePlugin();

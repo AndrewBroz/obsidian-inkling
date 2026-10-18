@@ -2,7 +2,7 @@ import { EditorView } from "@codemirror/view";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { text_copy } from "../src/editor/base/edit-handler/copy";
-import { createRangeState } from "./helpers";
+import { createRangeState, withSyntax } from "./helpers";
 
 // EXPL: Copy with `clipboard_remove_syntax` strips CriticMarkup. Comment text is not document
 //       text (reading view hides resolved comments for the same reason), so a comment must not
@@ -19,11 +19,11 @@ function copy(doc: string, from = 0, to = doc.length) {
 	return copied;
 }
 
-describe("copy strips CriticMarkup", () => {
+describe.each(["legacy", "attributes"] as const)("%s metadata: copy strips CriticMarkup", (syntax) => {
 	test("drops comments and their metadata", () => {
 		const doc = `This is {=={"author":"Andrew","time":1791819807}@@some==}`
 			+ `{>>{"author":"Andrew","time":1791819807}@@This is a comment on the text<<} text`;
-		expect(copy(doc)).toBe("This is some text");
+		expect(copy(withSyntax(doc, syntax))).toBe("This is some text");
 	});
 
 	test("drops a comment thread with replies", () => {
