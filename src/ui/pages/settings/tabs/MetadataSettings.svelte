@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { Input, SettingItem, Toggle } from "../../../components";
+	import { author_at_warning } from "../../../../editor/base/edit-util/attributes";
+import { Dropdown, Input, SettingItem, Toggle } from "../../../components";
 
 import type CommentatorPlugin from "../../../../main";
+import type { MetadataSyntax } from "../../../../types";
 
 let { plugin }: { plugin: CommentatorPlugin } = $props();
 </script>
@@ -12,6 +14,25 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			value={plugin.settings.enable_metadata}
 			onChange={(value) => {
 				plugin.settings.enable_metadata = value;
+				plugin.saveSettings();
+			}}
+		/>
+	{/snippet}
+</SettingItem>
+
+<SettingItem
+	name="Metadata format"
+	description="How Inkling writes author, time and resolution. Both formats are always read. Attribute blocks avoid ZotLit citation false positives, but collaborators need Inkling 0.13 or later, and Commentator does not read them."
+>
+	{#snippet control()}
+		<Dropdown
+			value={plugin.settings.metadata_syntax}
+			options={[
+				{ value: "legacy", text: "Legacy ({json}@@)" },
+				{ value: "attributes", text: "Attribute blocks" },
+			]}
+			onChange={(value) => {
+				plugin.settings.metadata_syntax = value as MetadataSyntax;
 				plugin.saveSettings();
 			}}
 		/>
@@ -52,7 +73,16 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 		{/snippet}
 	</SettingItem>
 
-	<SettingItem name="Name" depth={1}>
+	<SettingItem
+		name="Name"
+		depth={1}
+		notices={[
+			{
+				type: "warning" as const,
+				text: author_at_warning(plugin.settings.author) ?? "",
+			},
+		].filter((notice) => notice.text)}
+	>
 		{#snippet control()}
 			<Input
 				type="text"

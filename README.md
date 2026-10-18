@@ -95,6 +95,49 @@ so existing notes from before the rename don't need to be updated.
 > [!NOTE]
 > This is not hard technical enforcement. Inkling is only appropriate for high-trust teams.
 
+## Metadata format
+
+Inkling stores author, time and resolution state with each range. Two formats exist, and both are always read.
+
+Legacy (the default) puts JSON ahead of the content, ended by `@@`:
+
+```
+{=={"author":"Andrew","time":1791819807}@@some==}{>>{"author":"Andrew","time":1791819807}@@note<<}
+```
+
+Attribute blocks put a Pandoc-style block after the range's closer:
+
+```
+{==some==}{>>note<<}{author="Andrew" time=1791819807}
+```
+
+Pandoc-grammar tools such as ZotLit read `@@some` as a citation; attribute blocks avoid that. Other CriticMarkup
+readers also show a trailing block as stray text after a correct range, rather than inside the highlighted content.
+
+Choose the format you write in **Settings, Metadata, Metadata format**. The default is **Legacy**. Opening a note never
+changes it. Ranges that Inkling rewrites anyway (an edit, a reply, a resolve) switch to the chosen format, and a range
+already in attribute blocks is never silently written back as legacy. Two commands convert a whole note on request:
+
+- **Convert metadata in this note to attribute blocks**
+- **Convert metadata in this note back to legacy**
+
+A range whose fields cannot be converted losslessly stays as it is.
+
+Thread rules for attribute blocks: a highlight takes its author and time from its first comment, so the same fact is
+not written twice. The resolved state (`done`) is written once, on the thread's base.
+
+If an author name has an `@` at the start of a word (such as `@andrew`), Pandoc-grammar tools read it as a citation even
+in attribute blocks, and the Name setting shows a warning.
+
+> [!WARNING]
+> Every collaborator must be on Inkling 0.13 or later (the release that reads attribute blocks) before anyone
+> switches to attribute blocks. Older versions and Commentator do not read them.
+
+### Upgrade note
+
+Update in this order: first every collaborator's Inkling to 0.13 or later, then any tooling that parses the metadata
+itself (for the CRI build, `config/critic.py`). Only then should anyone change the Metadata format setting.
+
 ## Developing
 
 To set up a development environment:

@@ -140,3 +140,12 @@ export function unconvertibleReason(fields: MetadataFields): string | undefined 
 	}
 	return undefined;
 }
+
+/**
+ * A warning when `author` would put an `@` after a non-alphanumeric character in an attribute block, which
+ * Pandoc-grammar tools (ZotLit, Pandoc) read as a citation. `a@b.com` is fine.
+ */
+export function author_at_warning(author: string | undefined): string | undefined {
+	if (!author || !/(^|[^\p{L}\p{N}])@/u.test(author)) return undefined;
+	return "An @ at the start of a word is read as a citation by Pandoc and ZotLit when written in attribute blocks.";
+}
