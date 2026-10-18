@@ -1,6 +1,6 @@
 import { type MetadataSyntax, PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
 import type { EditorChange } from "../edit-handler";
-import { SHORTHAND_KEYS } from "../edit-util/attributes";
+import { parseAttrBlock, SHORTHAND_KEYS } from "../edit-util/attributes";
 import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, SuggestionType } from "./definitions";
 import type { CommentRange } from "./types";
 
@@ -50,6 +50,9 @@ export abstract class CriticMarkupRange {
 				// TODO: Mark as invalid markdown (this can happen when separator @@ exists, but {} is not given
 				this.own_fields = {};
 			}
+		} else if (meta?.syntax === "attributes") {
+			this.own_fields = parseAttrBlock(text, meta.from - from)?.fields ?? {};
+			this.text = text.slice(0, meta.from - from);
 		}
 	}
 

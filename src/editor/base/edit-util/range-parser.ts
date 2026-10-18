@@ -13,6 +13,7 @@ import {
 
 import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import type { PluginSettings } from "../../../types";
+import { parseAttrBlock } from "./attributes";
 
 function constructRangeFromSyntaxNode(
 	settings: PluginSettings,
@@ -34,7 +35,19 @@ function constructRangeFromSyntaxNode(
 		middle = child.from + offset;
 	}
 
-	return constructRange(from, to, range.type.name, text.slice(from, to), middle, meta);
+	let end = to;
+	let location = meta;
+	// EXPL: A trailing attribute block sits outside the grammar's node, right after the closer. A range with legacy
+	//       metadata never takes one (one range, one syntax).
+	if (settings.enable_metadata && !legacy) {
+		const block = parseAttrBlock(text, to);
+		if (block) {
+			location = { syntax: "attributes", from: block.from, to: block.to };
+			end = block.to;
+		}
+	}
+
+	return constructRange(from, end, range.type.name, text.slice(from, end), middle, location);
 }
 
 // EXPL: The closing bracket that ends a well-formed node of each range type.
@@ -86,13 +99,20 @@ export function cursorGenerateRanges(tree: Tree, text: string, settings: PluginS
 		do {
 			const range = cursor.node;
 			if (range.type.name === "⚠") continue;
+			// EXPL: The grammar does not know attribute blocks and scans their text, so a quoted value such as
+			//       `author="{++x"` can open a node inside the previous range's block. Such a node is not a range;
+			//       re-parse from the end of the block instead of trusting the grammar past it.
+			if (previous_range?.meta?.syntax === "attributes" && range.from + offset < previous_range.to) {
+				resume = previous_range.to;
+				break;
+			}
 			const end = rangeEnd(range, text, offset);
 			const new_range = end === undefined ?
 				undefined :
 				constructRangeFromSyntaxNode(settings, range, text, offset, end);
 			if (end !== range.to + offset) {
 				// EXPL: A malformed node that is not a range is left as written; parsing continues after its opener.
-				resume = new_range ? end : range.from + offset + 3;
+				resume = new_range ? new_range.to : range.from + offset + 3;
 			}
 			if (new_range) {
 				if (

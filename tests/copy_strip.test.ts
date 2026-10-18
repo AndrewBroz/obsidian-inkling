@@ -38,4 +38,9 @@ describe("copy strips CriticMarkup", () => {
 	test("still unwraps suggestions and highlights", () => {
 		expect(copy("a{++b++}c{==d==}e")).toBe("abcde");
 	});
+
+	test("drops attribute blocks with their ranges", () => {
+		expect(copy(`This is {==some==}{>>note<<}{author=Andrew time=1} text`)).toBe("This is some text");
+		expect(copy(`a{++b++}{author=A}c`)).toBe("abc");
+	});
 });

@@ -1,4 +1,7 @@
+import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
+import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
+import { SubstitutionRange } from "../src/editor/base/ranges";
 import { createRangeState } from "./helpers";
 
 // EXPL: Fuzz guard for the interval tree's `max` augmentation (see range_state_tree.test.ts and
@@ -38,9 +41,12 @@ const SEGMENTS = [
 	" plain text ",
 	" one ",
 	" two words ",
+	"{++added++}{author=A time=1}",
+	"{==x==}{>>c<<}{author=\"B b\" time=2}",
+	"{~~o~>n~~}{done=true}",
 ];
 
-const INSERTS = ["z", "x", "ab", " ", "qq"];
+const INSERTS = ["z", "x", "ab", " ", "qq", "}", "{a=1}", "="];
 
 const SEQUENCES = 1000;
 const EDITS_PER_SEQUENCE = 6;
@@ -107,5 +113,69 @@ describe("fuzz: interval tree never leaves two range objects at one position", (
 
 		expect(duplicate_failures).toBe(0);
 		expect(throws).toBe(0);
+	});
+});
+
+// EXPL: Review focus 1. The incremental parser must agree with a fresh parse after every edit, including edits
+//       inside, at the edge of, and right after an attribute block, which lies past the grammar node.
+//       Edits never touch a CriticMarkup bracket token (opener, closer, `~>`): breaking one produces malformed
+//       markup, where the incremental parse diverges from a full one for a pre-existing reason unrelated to
+//       attribute blocks (a malformed node stretched to the next closer keeps stale ranges nested inside it;
+//       see .superpowers/sdd/2026-10-16-inklingmarkup-metadata-attributes/task-3-report.md). Edits inside and
+//       around blocks are unrestricted, which is what this oracle is for.
+const MAX_REROLLS = 50;
+
+/** The bracket tokens of every range in `doc`, as [from, to) spans. */
+function bracketTokens(doc: string): [number, number][] {
+	const tokens: [number, number][] = [];
+	for (const range of getRangesInText(doc, { ...DEFAULT_SETTINGS })) {
+		tokens.push([range.from, range.from + 3], [range.closer_to - 3, range.closer_to]);
+		if (range instanceof SubstitutionRange) tokens.push([range.middle, range.middle + 2]);
+	}
+	return tokens;
+}
+
+/** True if the edit inserts strictly inside a bracket token, or deletes any part of one. */
+function touchesBracket(tokens: [number, number][], from: number, to: number): boolean {
+	return tokens.some(([start, end]) => from === to ? start < from && from < end : from < end && start < to);
+}
+
+describe("fuzz: incremental parse equals a full parse", () => {
+	test("for random edits over documents with attribute blocks", () => {
+		const rng = mulberry32(0xB10C);
+		const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
+		const spans = (ranges: { from: number; to: number; type: unknown }[]) =>
+			JSON.stringify(ranges.map(r => [r.type, r.from, r.to]));
+		const failures: string[] = [];
+		for (let seq = 0; seq < 500 && failures.length < 3; seq++) {
+			const initial = Array.from({ length: 6 + Math.floor(rng() * 6) }, () => pick(SEGMENTS)).join("");
+			let state = createRangeState(initial);
+			const edits: { from: number; to: number; insert: string }[] = [];
+			for (let i = 0; i < EDITS_PER_SEQUENCE; i++) {
+				const tokens = bracketTokens(state.doc.toString());
+				let edit: { from: number; to: number; insert: string } | undefined;
+				for (let roll = 0; roll < MAX_REROLLS && !edit; roll++) {
+					const from = Math.floor(rng() * (state.doc.length + 1));
+					const is_insert = rng() < 0.7;
+					const to = is_insert ? from : Math.min(state.doc.length, from + 1 + Math.floor(rng() * 4));
+					const insert = is_insert ? pick(INSERTS) : "";
+					if (!touchesBracket(tokens, from, to)) edit = { from, to, insert };
+				}
+				if (!edit) break;
+				edits.push(edit);
+				state = state.update({ changes: edit }).state;
+				const doc = state.doc.toString();
+				const incremental = spans(state.field(rangeParser).ranges.ranges);
+				const full = spans(getRangesInText(doc, { ...DEFAULT_SETTINGS }));
+				if (incremental !== full) {
+					failures.push(
+						`initial=${JSON.stringify(initial)} edits=${JSON.stringify(edits)}\n`
+							+ `doc=${JSON.stringify(doc)}\nincremental=${incremental}\nfull=${full}`,
+					);
+					break;
+				}
+			}
+		}
+		expect(failures).toEqual([]);
 	});
 });

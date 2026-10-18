@@ -126,3 +126,15 @@ describe("hasCriticMarkup", () => {
 		expect(hasCriticMarkup("plain {text}")).toBe(false);
 	});
 });
+
+describe("attribute blocks", () => {
+	test("toOriginalText strips them with their ranges", () => {
+		expect(toOriginalText(`This is {==some==}{>>note<<}{author=Andrew time=1} text`)).toBe("This is some text");
+		expect(toOriginalText(`a {++b++}{author=A} c{--d--}{author=B}`)).toBe("a cd");
+		expect(toOriginalText(`x{~~old~>new~~}{author=A}y`)).toBe("xoldy");
+	});
+
+	test("hasCriticMarkup sees ranges with blocks", () => {
+		expect(hasCriticMarkup(`{++b++}{author=A}`)).toBe(true);
+	});
+});

@@ -65,18 +65,59 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		const offsets: [number, number][] = [];
 		const dangling_comments = new Map<number, CommentRange>();
 		const deleted_ranges: Set<CriticMarkupRange> = new Set();
+		// EXPL: A trailing attribute block is text after the range's closer, so an edit can change a range without
+		//       touching it: editing `{++a++}{k=1 x}` to `{++a++}{k=1}` makes the block valid and grows the range.
+		//       A block starts right at the closer, so the nearest range to the left of an edit is invalidated too
+		//       when a `{` follows it.
+		const old_ranges = value.ranges.ranges;
+		const to_old = tr.changes.invertedDesc;
+		function rangeBefore(pos: number): CriticMarkupRange | undefined {
+			let low = 0, high = old_ranges.length;
+			while (low < high) {
+				const mid = (low + high) >> 1;
+				if (old_ranges[mid].from < pos) low = mid + 1;
+				else high = mid;
+			}
+			const range = old_ranges[low - 1];
+			return range && range.to < pos && tr.startState.doc.sliceString(range.to, range.to + 1) === "{" ?
+				range :
+				undefined;
+		}
+
 		for (const changed_range of changed_ranges) {
+			// EXPL: Regenerate from the start of every range the edit invalidated (mapped into the new document),
+			//       not from `fromB`: the edit may lie in a trailing attribute block, past the range's grammar node.
+			//       Starting earlier re-collects ranges the edit did not touch: the parser is left-inclusive, so it
+			//       yields the left neighbour that ends at an invalidated range's `from`, and ranges left stale
+			//       inside a malformed node are yielded again too. Those are still in the tree, so inserting them
+			//       would put two range objects at one position; a regenerated range identical to one still in the
+			//       tree (at its position before this transaction) is skipped.
+			let regenerate_from = changed_range.fromB;
+			const invalidate = (range: CriticMarkupRange, key: Interval | [number, number]) => {
+				value.ranges.tree.remove(key, range);
+				deleted_ranges.add(range);
+				for (const reply of range.base_range.thread)
+					dangling_comments.set(reply.from, reply);
+				regenerate_from = Math.min(regenerate_from, tr.changes.mapPos(range.from, -1));
+			};
 			value.ranges.tree
 				.search([changed_range.fromA, changed_range.toA], (range: CriticMarkupRange, key: Interval) => {
-					value.ranges.tree.remove(key, range);
-					deleted_ranges.add(range);
-					for (const reply of range.base_range.thread)
-						dangling_comments.set(reply.from, reply);
+					invalidate(range, key);
 					return true;
 				});
+			const before = settings.enable_metadata ? rangeBefore(changed_range.fromA) : undefined;
+			if (before && !deleted_ranges.has(before))
+				invalidate(before, [before.from, before.to]);
 
-			for (const range of cursorGenerateRanges(tree, text, settings, changed_range.fromB, changed_range.toB))
-				inserted_set.set(range.from, range);
+			const untouched = (range: CriticMarkupRange) => {
+				const from = to_old.mapPos(range.from, 1), to = to_old.mapPos(range.to, -1);
+				return (value.ranges.tree.search([from, to]) as CriticMarkupRange[])
+					.some(old => old.from === from && old.to === to && old.type === range.type);
+			};
+			for (const range of cursorGenerateRanges(tree, text, settings, regenerate_from, changed_range.toB)) {
+				if (!untouched(range))
+					inserted_set.set(range.from, range);
+			}
 			offsets.push([
 				changed_range.toA,
 				changed_range.toB - changed_range.fromB - (changed_range.toA - changed_range.fromA),

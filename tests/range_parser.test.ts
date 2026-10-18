@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
+import { applyToText } from "../src/editor/base/edit-util/range-operations";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
 import { SubstitutionRange, SuggestionType } from "../src/editor/base/ranges";
 import { createRangeState } from "./helpers";
@@ -66,5 +67,113 @@ describe("editing", () => {
 		state = state.update({ changes: { from: 0, insert: "{++" } }).state;
 		const ranges = state.field(rangeParser).ranges.ranges;
 		expect(ranges.map(range => [range.type, range.from, range.to])).toEqual([[SuggestionType.DELETION, 7, 16]]);
+	});
+});
+
+describe("trailing attribute blocks", () => {
+	const meta = (doc: string) => rangesOf(doc, true);
+
+	test("extend the range and become its fields", () => {
+		const doc = `a {++new++}{author="Bea" time=5} b`;
+		const [range] = meta(doc);
+		expect([range.from, range.closer_to, range.to]).toEqual([2, 11, doc.indexOf(" b")]);
+		expect(range.meta).toEqual({ syntax: "attributes", from: 11, to: doc.indexOf(" b") });
+		expect(range.fields).toEqual({ author: "Bea", time: 5 });
+		expect(range.unwrap()).toBe("new");
+		expect(range.text).toBe("{++new++}");
+	});
+
+	test("are not read when metadata is disabled", () => {
+		const [range] = rangesOf(`{++new++}{author=Bea}`, false);
+		expect(range.to).toBe(9);
+		expect(range.meta).toBeUndefined();
+	});
+
+	test("keep a highlight and its comment adjacent, so the comment is a reply", () => {
+		const doc = `{==some==}{>>note<<}{author=Andrew time=1}`;
+		const [highlight, comment] = meta(doc);
+		expect(comment.base_range).toBe(highlight);
+		expect(highlight.replies).toEqual([comment]);
+	});
+
+	test("chain through a thread", () => {
+		const doc = `{==x==}{done=true}{>>c<<}{author=A}{>>r<<}{author=B}`;
+		const ranges = meta(doc);
+		expect(ranges.map(r => r.type)).toEqual([
+			SuggestionType.HIGHLIGHT,
+			SuggestionType.COMMENT,
+			SuggestionType.COMMENT,
+		]);
+		expect(ranges[0].replies.length).toBe(2);
+		expect(ranges[0].own_fields).toEqual({ done: true });
+	});
+
+	test("a substitution keeps its separator", () => {
+		const [range] = meta(`{~~old~>new~~}{author=A}`) as SubstitutionRange[];
+		expect(range.unwrap_parts()).toEqual(["old", "new"]);
+		expect(range.closer_to).toBe(14);
+	});
+
+	test("a range with legacy metadata does not take a trailing block", () => {
+		const doc = `{=={"author":"A"}@@t==}{author=B}`;
+		const [range] = meta(doc);
+		expect(range.meta!.syntax).toBe("legacy");
+		expect(range.to).toBe(doc.indexOf("{author=B}"));
+	});
+
+	test("an invalid block is ordinary text", () => {
+		for (const doc of ["{++a++}{}", "{++a++}{author}", "{++a++}{.c a=1}", "{++a++} {a=1}"]) {
+			const [range] = meta(doc);
+			expect(range.to).toBe(7);
+			expect(range.meta).toBeUndefined();
+		}
+	});
+
+	// EXPL: Spec pre-fork caveat. The grammar scans the block's text and can open a range inside a quoted value;
+	//       the parser re-parses after the block instead of trusting that node.
+	test("an opener inside a quoted value is not a range", () => {
+		const doc = `{++a++}{author="{++x"} after {--gone--}`;
+		const ranges = meta(doc);
+		expect(ranges.map(r => [r.type, r.from])).toEqual([
+			[SuggestionType.ADDITION, 0],
+			[SuggestionType.DELETION, doc.indexOf("{--")],
+		]);
+		expect(ranges[0].fields).toEqual({ author: "{++x" });
+	});
+
+	// EXPL: Decision 5 in the plan. Literal `{k=v}` prose directly after a range reads as that range's metadata.
+	//       Documented limitation, pinned so a change to it is deliberate.
+	test("literal {k=v} right after a range is read as metadata", () => {
+		const [range] = meta(`{++a++}{width=3} px`);
+		expect(range.fields).toEqual({ width: 3 });
+	});
+
+	// EXPL: The block lies past the grammar node, so the incremental parser must reach it on its own.
+	test("an edit inside a block re-creates the range that owns it", () => {
+		let state = createRangeState(`x {++a++}{author=A} y`);
+		const [before] = state.field(rangeParser).ranges.ranges;
+		state = state.update({ changes: { from: 17, to: 18, insert: "Bea" } }).state;
+		const ranges = state.field(rangeParser).ranges.ranges;
+		expect(ranges.length).toBe(1);
+		expect(ranges[0]).not.toBe(before);
+		expect([ranges[0].from, ranges[0].to]).toEqual([2, 21]);
+		expect(ranges[0].fields).toEqual({ author: "Bea" });
+	});
+
+	test("an edit that makes the text after a range a valid block grows the range", () => {
+		let state = createRangeState(`{++a++}{k=1 x} y`);
+		expect(state.field(rangeParser).ranges.ranges.map(r => r.to)).toEqual([7]);
+		state = state.update({ changes: { from: 11, to: 13, insert: "" } }).state;
+		const ranges = state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(r => [r.from, r.to])).toEqual([[0, 12]]);
+		expect(ranges[0].fields).toEqual({ k: 1 });
+	});
+
+	test("accept and reject replace the whole span, block included", () => {
+		const doc = `a{++b++}{author=A}c{--d--}{author=B}e{~~f~>g~~}{author=C}h`;
+		const ranges = meta(doc);
+		const apply = (fn: (r: typeof ranges[0]) => string) => applyToText(doc, fn, ranges);
+		expect(apply(r => r.accept())).toBe("abceg" + "h");
+		expect(apply(r => r.reject())).toBe("acdefh");
 	});
 });
