@@ -80,3 +80,41 @@ describe("create_anchored_comment", () => {
 		expect(anchor.own_fields.author).toBe("A");
 	});
 });
+
+// EXPL: Task 11b. Content with an @@ round-trips in attribute form; only content whose text before its first @@ is a
+//       JSON object would read back as legacy metadata, so it is written legacy.
+describe("@@ in the content", () => {
+	test("attributes keep content with an @@ and read back", () => {
+		const { insert } = construct_range("a@@b", "", SuggestionType.ADDITION, { author: "A" }, 0, 0, "attributes");
+		expect(insert).toBe("{++a@@b++}{author=A}");
+		const [range] = parse(insert);
+		expect(range.fields).toEqual({ author: "A" });
+		expect(range.unwrap()).toBe("a@@b");
+	});
+
+	test("content that starts with a JSON object then @@ falls back to legacy", () => {
+		const content = `{"x":1}@@b`;
+		const { insert, start_offset } = construct_range(
+			content,
+			"",
+			SuggestionType.ADDITION,
+			{ author: "A" },
+			0,
+			0,
+			"attributes",
+		);
+		expect(insert).toBe(`{++{"author":"A"}@@${content}++}`);
+		expect(start_offset).toBe(insert.indexOf(content));
+		const [range] = parse(insert);
+		expect(range.fields).toEqual({ author: "A" });
+		expect(range.unwrap()).toBe(content);
+	});
+
+	test("set_metadata writes a block on a range whose content has an @@", () => {
+		const doc = "{++a@@b++}";
+		const [range] = parse(doc);
+		const changes = range.set_metadata({ author: "A" }, "attributes");
+		const out = changes.reduceRight((text, c) => text.slice(0, c.from) + c.insert + text.slice(c.to), doc);
+		expect(out).toBe("{++a@@b++}{author=A}");
+	});
+});

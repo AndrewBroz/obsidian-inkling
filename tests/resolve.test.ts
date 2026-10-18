@@ -105,6 +105,17 @@ describe("range_source_with_fields", () => {
 		expect(range_source_with_fields(substitution, { author: "A" }))
 			.toBe(`{~~{"author":"A"}@@a~>b~~}`);
 	});
+
+	test("attributes keep content with an @@", () => {
+		const addition = topRanges("x{++a@@b++}y")[0];
+		expect(range_source_with_fields(addition, { author: "A" }, "attributes")).toBe("{++a@@b++}{author=A}");
+	});
+
+	test("attributes fall back to legacy when the content starts with a JSON object then @@", () => {
+		const addition = topRanges(`x{++{"author":"A"}@@{"x":1}@@b++}y`)[0];
+		expect(range_source_with_fields(addition, { author: "B" }, "attributes"))
+			.toBe(`{++{"author":"B"}@@{"x":1}@@b++}`);
+	});
 });
 
 describe("cancel_empty_comment", () => {

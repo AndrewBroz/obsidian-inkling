@@ -285,3 +285,85 @@ describe("trailing attribute blocks", () => {
 		expect(apply(r => r.reject())).toBe("acdefh");
 	});
 });
+
+// EXPL: Task 11b. The grammar marks the first `@@` in any range as a metadata separator. The text before it is
+//       legacy metadata only if it is a JSON object; otherwise the `@@` is content and a trailing block may attach.
+describe("legacy metadata is only a JSON object before the first @@", () => {
+	const meta = (doc: string) => rangesOf(doc, true);
+
+	test("a range without metadata keeps an @@ in its content", () => {
+		const [range] = meta("{++a@@b++}");
+		expect(range.meta).toBeUndefined();
+		expect(range.unwrap()).toBe("a@@b");
+		expect(range.length).toBe(4);
+		expect(range.text).toBe("{++a@@b++}");
+	});
+
+	test("an @@ in the content does not stop a trailing block from attaching", () => {
+		const doc = "{++a@@b++}{author=A}";
+		const [range] = meta(doc);
+		expect(range.meta).toEqual({ syntax: "attributes", from: 10, to: doc.length });
+		expect(range.fields).toEqual({ author: "A" });
+		expect(range.to).toBe(doc.length);
+		expect(range.unwrap()).toBe("a@@b");
+	});
+
+	test("a substitution finds its middle by name, with or without legacy metadata", () => {
+		const [plain] = meta("{~~a@@b~>c~~}") as SubstitutionRange[];
+		expect(plain.meta).toBeUndefined();
+		expect(plain.unwrap_parts()).toEqual(["a@@b", "c"]);
+
+		const doc = `{~~{"author":"A"}@@a~>b~~}`;
+		const [legacy] = meta(doc) as SubstitutionRange[];
+		expect(legacy.meta?.syntax).toBe("legacy");
+		expect(legacy.fields).toEqual({ author: "A" });
+		expect(legacy.middle).toBe(doc.indexOf("~>"));
+		expect(legacy.unwrap_parts()).toEqual(["a", "b"]);
+	});
+
+	test("with metadata off, a substitution with an @@ is still a range", () => {
+		const [range] = rangesOf(`{~~{"author":"A"}@@a~>b~~}`) as SubstitutionRange[];
+		expect(range.meta).toBeUndefined();
+		expect(range.unwrap_parts()).toEqual([`{"author":"A"}@@a`, "b"]);
+	});
+
+	test("text before @@ that is not a JSON object is content", () => {
+		for (
+			const [doc, content] of [
+				["{++{bad json}@@x++}", "{bad json}@@x"],
+				["{++[1]@@x++}", "[1]@@x"],
+				["{++null@@x++}", "null@@x"],
+				["{++3@@x++}", "3@@x"],
+				["{++@@x++}", "@@x"],
+			]
+		) {
+			const [range] = meta(doc);
+			expect(range.meta).toBeUndefined();
+			expect(range.unwrap()).toBe(content);
+		}
+	});
+
+	test("an empty object is still legacy metadata", () => {
+		const [range] = meta("{++{}@@x++}");
+		expect(range.meta).toEqual({ syntax: "legacy", from: 3, to: 7 });
+		expect(range.fields).toEqual({});
+		expect(range.unwrap()).toBe("x");
+	});
+
+	test("typing @@ into a range with a block keeps the block and the content", () => {
+		const doc = "{++a++}{author=A}";
+		let state = createRangeState(doc, { enable_metadata: true });
+		for (const insert of ["@", "@", "b"]) {
+			const at = state.doc.toString().indexOf("++}");
+			state = state.update({ changes: { from: at, insert } }).state;
+			const text = state.doc.toString();
+			const incremental = state.field(rangeParser).ranges.ranges;
+			const fresh = getRangesInText(text, { ...DEFAULT_SETTINGS, enable_metadata: true });
+			expect(incremental.map(r => [r.type, r.from, r.to, r.meta, r.fields]))
+				.toEqual(fresh.map(r => [r.type, r.from, r.to, r.meta, r.fields]));
+		}
+		const [range] = state.field(rangeParser).ranges.ranges;
+		expect(range.fields.author).toBe("A");
+		expect(range.unwrap()).toBe("a@@b");
+	});
+});

@@ -49,12 +49,19 @@ describe("legacy → attributes", () => {
 		expect(apply(doc, result.changes)).toBe(`{++{"author":"A","note":{"x":1}}@@a++} {++b++}{author=B}`);
 	});
 
-	test("a range whose text contains @@ stays legacy, since a block would not read back", () => {
-		const doc = `{++{"author":"A"}@@a@@b++} {++{"author":"B"}@@c++}`;
+	test("a range whose text contains @@ converts and reads back", () => {
+		const doc = `{++{"author":"A"}@@a@@b++}`;
+		expect(convert(doc, "attributes")).toBe("{++a@@b++}{author=A}");
+		expect(convert(convert(doc, "attributes"), "legacy")).toBe(doc);
+		expect(effective(convert(doc, "attributes"))).toEqual(effective(doc));
+	});
+
+	test("a range whose text starts with a JSON object then @@ stays legacy, since a block would not read back", () => {
+		const doc = `{++{"author":"A"}@@{"x":1}@@b++} {++{"author":"B"}@@c++}`;
 		const result = convert_metadata(parse(doc), "attributes");
 		expect(result.converted).toBe(1);
 		expect(result.skipped.map(s => s.reason)).toEqual([expect.stringContaining("@@")]);
-		expect(apply(doc, result.changes)).toBe(`{++{"author":"A"}@@a@@b++} {++c++}{author=B}`);
+		expect(apply(doc, result.changes)).toBe(`{++{"author":"A"}@@{"x":1}@@b++} {++c++}{author=B}`);
 		const converted = parse(apply(doc, result.changes));
 		expect(converted.map(r => r.fields)).toEqual(parse(doc).map(r => r.fields));
 	});

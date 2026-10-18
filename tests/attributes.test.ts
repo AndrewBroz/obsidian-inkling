@@ -1,4 +1,9 @@
-import { parseAttrBlock, serializeAttrBlock, unconvertibleReason } from "../src/editor/base/edit-util/attributes";
+import {
+	parseAttrBlock,
+	serializeAttrBlock,
+	unconvertibleContent,
+	unconvertibleReason,
+} from "../src/editor/base/edit-util/attributes";
 
 describe("parseAttrBlock", () => {
 	test("reads a block at the given position and reports its span", () => {
@@ -119,5 +124,16 @@ describe("unconvertibleReason", () => {
 		[JSON.parse("{\"__proto__\":\"x\"}"), "field name"],
 	])("rejects %j", (fields, reason) => {
 		expect(unconvertibleReason(fields as any)).toContain(reason);
+	});
+});
+
+describe("unconvertibleContent", () => {
+	test.each(["{++a++}", "{++a@@b++}", "{++@@b++}", "{++{bad}@@b++}", "{++[1]@@b++}", "{++null@@b++}"])(
+		"accepts %j",
+		(text) => expect(unconvertibleContent(text)).toBeUndefined(),
+	);
+
+	test.each([`{++{"x":1}@@b++}`, "{++{}@@b++}", `{~~{"x":1}@@a~>b~~}`])("rejects %j", (text) => {
+		expect(unconvertibleContent(text)).toContain("@@");
 	});
 });

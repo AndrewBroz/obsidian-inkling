@@ -47,6 +47,8 @@ const SEGMENTS = [
 	"{++a++}{author=\"{++x\"}", // quoted opener
 	"{==q==}{k=\"{>>x<<}\" time=3}", // quoted range
 	"{++a++}{author=\"{>>x\"} after\nmore {++b++} text <<} ", // quoted opener closed on the next line
+	"{++a@@b++}{author=A}", // @@ in the content
+	"{~~a@@b~>c~~}", // @@ in a substitution's content
 ];
 
 const INSERTS = ["z", "x", "ab", " ", "qq", "}", "{a=1}", "="];

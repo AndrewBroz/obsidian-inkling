@@ -1,6 +1,6 @@
 import type { MetadataSyntax, PluginSettings } from "../../../types";
 import { CM_All_Brackets, type MetadataFields, SuggestionType } from "../ranges";
-import { serializeAttrBlock, unconvertibleReason } from "./attributes";
+import { serializeAttrBlock, unconvertibleContent, unconvertibleReason } from "./attributes";
 import { generate_metadata } from "./metadata";
 
 export function construct_suggestion(
@@ -38,18 +38,22 @@ export function construct_range(
 
 	const brackets = CM_All_Brackets[type];
 	const has_fields = !!metadata_fields && Object.values(metadata_fields).some(value => value !== undefined);
-	// EXPL: Lossless or untouched. Merging into a legacy range can carry fields a block cannot hold; keep them legacy.
-	if (has_fields && syntax === "attributes" && unconvertibleReason(metadata_fields!))
+	const body = type === SuggestionType.SUBSTITUTION ?
+		deleted + brackets[1] + inserted + brackets[2] :
+		deleted + inserted + brackets[1];
+	// EXPL: Lossless or untouched. Merging into a legacy range can carry fields a block cannot hold, and content that
+	//       starts with a JSON object and `@@` would read back as legacy metadata; keep both legacy.
+	if (
+		has_fields && syntax === "attributes" &&
+		(unconvertibleReason(metadata_fields!) || unconvertibleContent(brackets[0] + body))
+	) {
 		syntax = "legacy";
+	}
 	// EXPL: Legacy metadata sits between the opener and the content, so it shifts every offset into the range.
 	//       An attribute block sits after the closer and shifts nothing the caller measures.
 	const prefix = has_fields && syntax === "legacy" ? JSON.stringify(metadata_fields) + "@@" : "";
 	const suffix = has_fields && syntax === "attributes" ? serializeAttrBlock(metadata_fields!) : "";
-	const output = brackets[0] + prefix +
-		(type === SuggestionType.SUBSTITUTION ?
-			deleted + brackets[1] + inserted + brackets[2] :
-			deleted + inserted + brackets[1]) +
-		suffix;
+	const output = brackets[0] + prefix + body + suffix;
 	start_offset += brackets[0].length + prefix.length;
 	// FIXME: end may not be offset if the bracket appears after the end
 	end_offset += type === SuggestionType.SUBSTITUTION ? brackets[1].length : 0;

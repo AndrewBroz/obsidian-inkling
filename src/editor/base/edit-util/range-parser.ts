@@ -13,7 +13,7 @@ import {
 
 import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import type { PluginSettings } from "../../../types";
-import { parseAttrBlock } from "./attributes";
+import { parseAttrBlock, parseLegacyMetadata } from "./attributes";
 
 function constructRangeFromSyntaxNode(
 	settings: PluginSettings,
@@ -23,15 +23,19 @@ function constructRangeFromSyntaxNode(
 	to = range.to + offset,
 ) {
 	const from = range.from + offset;
-	const legacy = settings.enable_metadata && !!range.firstChild?.type.name.startsWith("MDSep");
-	// EXPL: The MDSep node starts at the `@@`, so the JSON lies between the opener and it.
+	// EXPL: The grammar marks the first `@@` in any range with an MDSep node that starts at the `@@`. The text between
+	//       the opener and it is legacy metadata only if it is a JSON object; otherwise the `@@` is content.
+	const separator = settings.enable_metadata && range.firstChild?.type.name.startsWith("MDSep") ?
+		range.firstChild.from + offset :
+		undefined;
+	const legacy = separator !== undefined && parseLegacyMetadata(text.slice(from + 3, separator)) !== undefined;
 	const meta: MetaLocation | undefined = legacy ?
-		{ syntax: "legacy", from: from + 3, to: range.firstChild!.from + offset + 2 } :
+		{ syntax: "legacy", from: from + 3, to: separator! + 2 } :
 		undefined;
 	let middle = undefined;
 	if (range.type.name === "Substitution") {
-		const child = legacy ? range.firstChild?.nextSibling : range.firstChild;
-		if (!child || child.type.name !== "MSub") return;
+		const child = range.getChild("MSub");
+		if (!child) return;
 		middle = child.from + offset;
 	}
 

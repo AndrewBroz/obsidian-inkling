@@ -47,3 +47,15 @@ describe("live preview hides trailing attribute blocks", () => {
 		expect(hidden).toBe(false);
 	});
 });
+
+// EXPL: Task 11b. Only accepted metadata is hidden; an @@ in the content is text.
+describe("live preview with @@ in the content", () => {
+	test("only the brackets are hidden", () => {
+		const doc = "{++a@@b++}";
+		const { range, decorations } = decorate(doc, null);
+		expect(range.meta).toBeUndefined();
+		const spans = replaceSpans(decorations);
+		expect(spans).toEqual(expect.arrayContaining([{ from: 0, to: 3 }, { from: 7, to: 10 }]));
+		for (const span of spans) expect(span.to <= 3 || span.from >= 7).toBe(true);
+	});
+});

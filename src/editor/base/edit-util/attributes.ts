@@ -142,13 +142,30 @@ export function unconvertibleReason(fields: MetadataFields): string | undefined 
 }
 
 /**
+ * The fields of a legacy `{json}@@` blob, given the text between the opener and the `@@`, or undefined if that text
+ * is not legacy metadata. Only a JSON object is: the grammar marks the first `@@` in any range as a separator, so
+ * for any other text the `@@` is content. `{}` is an (empty) object, so `{}@@` is metadata.
+ */
+export function parseLegacyMetadata(json: string): MetadataFields | undefined {
+	let value: unknown;
+	try {
+		// TODO: JS can be injected here, possible security risk
+		value = JSON.parse(json);
+	} catch {
+		return undefined;
+	}
+	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as MetadataFields : undefined;
+}
+
+/**
  * Why a range with this text (opener included, metadata excluded) cannot carry an attribute block, or undefined if
- * it can. The grammar reads any `@@` in a range as a metadata separator, so with an `@@` in the content the text
- * before it would be taken for legacy metadata and the block would be left behind.
+ * it can. Content whose text before its first `@@` is a JSON object would read back as legacy metadata, and the
+ * block would be left behind.
  */
 export function unconvertibleContent(text: string): string | undefined {
-	return text.slice(3).includes("@@") ?
-		"its text contains @@, which the grammar reads as the legacy separator" :
+	const separator = text.indexOf("@@", 3);
+	return separator !== -1 && parseLegacyMetadata(text.slice(3, separator)) ?
+		"its text starts with a JSON object followed by @@, which reads back as legacy metadata" :
 		undefined;
 }
 

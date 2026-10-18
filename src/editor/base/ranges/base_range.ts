@@ -2,6 +2,7 @@ import { type MetadataSyntax, PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "
 import type { EditorChange } from "../edit-handler";
 import {
 	parseAttrBlock,
+	parseLegacyMetadata,
 	serializeAttrBlock,
 	SHORTHAND_KEYS,
 	unconvertibleContent,
@@ -46,18 +47,13 @@ export abstract class CriticMarkupRange {
 		if (meta?.syntax === "legacy") {
 			const json = text.slice(3, meta.to - 2 - from);
 			this.text = text.slice(0, 3) + text.slice(meta.to - from);
-			try {
-				// TODO: JS can be injected here, possible security risk
-				this.own_fields = JSON.parse(json);
-				for (const key in this.own_fields) {
-					if (Object.hasOwn(SHORTHAND_KEYS, key)) {
-						this.own_fields[SHORTHAND_KEYS[key]] = this.own_fields[key];
-						delete this.own_fields[key];
-					}
+			// EXPL: The parser only makes a legacy location for a JSON object; anything else reads as no fields.
+			this.own_fields = parseLegacyMetadata(json) ?? {};
+			for (const key in this.own_fields) {
+				if (Object.hasOwn(SHORTHAND_KEYS, key)) {
+					this.own_fields[SHORTHAND_KEYS[key]] = this.own_fields[key];
+					delete this.own_fields[key];
 				}
-			} catch (e) {
-				// TODO: Mark as invalid markdown (this can happen when separator @@ exists, but {} is not given
-				this.own_fields = {};
 			}
 		} else if (meta?.syntax === "attributes") {
 			this.own_fields = parseAttrBlock(text, meta.from - from)?.fields ?? {};
