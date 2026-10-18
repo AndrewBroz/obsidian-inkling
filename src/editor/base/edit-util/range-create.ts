@@ -1,6 +1,6 @@
 import type { MetadataSyntax, PluginSettings } from "../../../types";
 import { CM_All_Brackets, type MetadataFields, SuggestionType } from "../ranges";
-import { serializeAttrBlock } from "./attributes";
+import { serializeAttrBlock, unconvertibleReason } from "./attributes";
 import { generate_metadata } from "./metadata";
 
 export function construct_suggestion(
@@ -38,6 +38,9 @@ export function construct_range(
 
 	const brackets = CM_All_Brackets[type];
 	const has_fields = !!metadata_fields && Object.values(metadata_fields).some(value => value !== undefined);
+	// EXPL: Lossless or untouched. Merging into a legacy range can carry fields a block cannot hold; keep them legacy.
+	if (has_fields && syntax === "attributes" && unconvertibleReason(metadata_fields!))
+		syntax = "legacy";
 	// EXPL: Legacy metadata sits between the opener and the content, so it shifts every offset into the range.
 	//       An attribute block sits after the closer and shifts nothing the caller measures.
 	const prefix = has_fields && syntax === "legacy" ? JSON.stringify(metadata_fields) + "@@" : "";
@@ -60,4 +63,17 @@ export function create_suggestion(settings: PluginSettings, inserted: string, de
 
 export function create_range(settings: PluginSettings, type: SuggestionType, inserted: string, deleted: string = "") {
 	return construct_range(inserted, deleted, type, generate_metadata(settings), 0, 0, settings.metadata_syntax).insert;
+}
+
+/**
+ * A highlight with its first comment, written in one action. Metadata is generated once, so the pair can never
+ * straddle a second boundary. Attributes syntax applies thread rule 2: the anchor states nothing and inherits from
+ * the comment. Legacy writes both, so older versions and Commentator still see the anchor's author.
+ */
+export function create_anchored_comment(settings: PluginSettings, anchor_text: string, comment_text: string) {
+	const fields = generate_metadata(settings);
+	const syntax = settings.metadata_syntax;
+	const anchor_fields = syntax === "attributes" ? undefined : fields;
+	return construct_range(anchor_text, "", SuggestionType.HIGHLIGHT, anchor_fields, 0, 0, syntax).insert +
+		construct_range(comment_text, "", SuggestionType.COMMENT, fields, 0, 0, syntax).insert;
 }

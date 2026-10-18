@@ -170,6 +170,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				editor_change.inserted,
 				type,
 				metadata,
+				false,
+				settings.metadata_syntax,
 			);
 			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
 			if (edits) {

@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { write_syntax } from "../src/editor/base/edit-util/metadata";
-import { construct_range, create_range } from "../src/editor/base/edit-util/range-create";
+import { construct_range, create_anchored_comment, create_range } from "../src/editor/base/edit-util/range-create";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
 import { SuggestionType } from "../src/editor/base/ranges";
 
@@ -33,6 +33,13 @@ describe("construct_range by syntax", () => {
 		expect(construct_range("x", "", SuggestionType.ADDITION, undefined, 0, 0, "attributes").insert).toBe("{++x++}");
 	});
 
+	test("attributes fall back to legacy when the fields cannot round-trip", () => {
+		const fields = { author: "A", tags: ["x"] } as any;
+		const { insert, start_offset } = construct_range("x", "", SuggestionType.ADDITION, fields, 0, 0, "attributes");
+		expect(insert).toBe(`{++{"author":"A","tags":["x"]}@@x++}`);
+		expect(start_offset).toBe(insert.indexOf("@@x") + 2);
+	});
+
 	test("create_range follows the setting and its output parses back", () => {
 		const settings = { ...DEFAULT_SETTINGS, author: "Bea", metadata_syntax: "attributes" as const };
 		const insert = create_range(settings, SuggestionType.COMMENT, "hi");
@@ -52,5 +59,24 @@ describe("write_syntax", () => {
 		expect(write_syntax("legacy", legacy, attrs)).toBe("attributes");
 		expect(write_syntax("attributes", legacy)).toBe("attributes");
 		expect(write_syntax("legacy", undefined)).toBe("legacy");
+	});
+});
+
+describe("create_anchored_comment", () => {
+	const at = (metadata_syntax: "legacy" | "attributes") => ({ ...DEFAULT_SETTINGS, author: "A", metadata_syntax });
+
+	test("attributes: the anchor states nothing and inherits from the comment", () => {
+		const insert = create_anchored_comment(at("attributes"), "sel", "hi");
+		expect(insert).toMatch(/^\{==sel==\}\{>>hi<<\}\{author=A time=\d+\}$/);
+		const [anchor, comment] = parse(insert);
+		expect(anchor.own_fields).toEqual({});
+		expect(anchor.fields).toEqual(comment.fields);
+	});
+
+	test("legacy: both carry the same fields (rule 2 is attributes-only)", () => {
+		const insert = create_anchored_comment(at("legacy"), "sel", "");
+		const [anchor, comment] = parse(insert);
+		expect(anchor.own_fields).toEqual(comment.own_fields);
+		expect(anchor.own_fields.author).toBe("A");
 	});
 });

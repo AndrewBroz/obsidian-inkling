@@ -46,6 +46,9 @@ const SEGMENTS = [
 	" plain ",
 	"ab",
 	"xy",
+	"{==b==}{color=red}", // attribute-block highlight
+	"{++added++}{author=A}", // attribute-block addition
+	"{>>c<<}{author=A}", // attribute-block comment
 ];
 
 const INSERTS = ["", "q", "xy"];

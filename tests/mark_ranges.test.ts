@@ -2,6 +2,7 @@ import { applyToText, rangeParser, SuggestionType } from "../src/editor/base";
 import type { EditorSuggestion } from "../src/editor/base/edit-handler";
 import { mark_ranges, MarkAction, type MarkType } from "../src/editor/base/edit-logic/mark";
 import type { MetadataFields } from "../src/editor/base/ranges";
+import type { MetadataSyntax } from "../src/types";
 import { createRangeState } from "./helpers";
 
 // EXPL: Bare `extensions: [rangeParser]` crashes ("Field is not present in this state") per
@@ -17,11 +18,26 @@ function mark(
 	inserted: string,
 	type: MarkType,
 	metadata_fields?: MetadataFields,
+	syntax: MetadataSyntax = "legacy",
 ): string {
+	return apply_edits(doc, mark_edits(doc, from, to, inserted, type, metadata_fields, syntax));
+}
+
+function mark_edits(
+	doc: string,
+	from: number,
+	to: number,
+	inserted: string,
+	type: MarkType,
+	metadata_fields?: MetadataFields,
+	syntax: MetadataSyntax = "legacy",
+): EditorSuggestion[] {
 	const state = createRangeState(doc, { enable_metadata: true, enable_author_metadata: true });
 	const ranges = state.field(rangeParser).ranges;
-	const edits: EditorSuggestion[] = mark_ranges(ranges, state.doc, from, to, inserted, type, metadata_fields);
+	return mark_ranges(ranges, state.doc, from, to, inserted, type, metadata_fields, false, syntax);
+}
 
+function apply_edits(doc: string, edits: EditorSuggestion[]): string {
 	// EXPL: edits must never overlap — overlapping edits would corrupt the document
 	const ordered = [...edits].sort((a, b) => a.from - b.from);
 	for (let i = 1; i < ordered.length; i++)
@@ -90,6 +106,35 @@ describe("mark_ranges in plain text", () => {
 	test("insertion with metadata prepends the metadata block", () => {
 		expect(mark("hello world", 5, 5, " big", SuggestionType.ADDITION, { author: "A" }))
 			.toBe(`hello{++{"author":"A"}@@ big++} world`);
+	});
+});
+
+describe("attributes syntax", () => {
+	test("typing creates an addition with a trailing block and the caret after the typed text", () => {
+		const edits = mark_edits("ab", 1, 1, "X", SuggestionType.ADDITION, { author: "A" }, "attributes");
+		expect(apply_edits("ab", edits)).toBe("a{++X++}{author=A}b");
+		expect(edits.at(-1)!.end).toBe(1 + 3 + 1);
+	});
+
+	test("typing at the end of an attributes addition extends it, keeping one block", () => {
+		const doc = "a{++X++}{author=A}b";
+		const closer_to = doc.indexOf("++}") + 3;
+		expect(mark(doc, closer_to - 3, closer_to - 3, "Y", SuggestionType.ADDITION, { author: "A" }, "attributes"))
+			.toBe("a{++XY++}{author=A}b");
+	});
+
+	test("typing after an attributes addition's block by the same author extends it", () => {
+		const doc = "a{++X++}{author=A}b";
+		const range_to = doc.indexOf("}b") + 1;
+		expect(mark(doc, range_to, range_to, "Y", SuggestionType.ADDITION, { author: "A" }, "attributes"))
+			.toBe("a{++XY++}{author=A}b");
+	});
+
+	test("a legacy-setting edit merging into an attributes range keeps attributes", () => {
+		const doc = "a{++X++}{author=A}b";
+		const range_to = doc.indexOf("}b") + 1;
+		expect(mark(doc, range_to, range_to, "Y", SuggestionType.ADDITION, { author: "A" }, "legacy"))
+			.toBe("a{++XY++}{author=A}b");
 	});
 });
 

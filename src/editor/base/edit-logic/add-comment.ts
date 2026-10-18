@@ -6,7 +6,7 @@ import { Notice } from "obsidian";
 import { CriticMarkupRange, SuggestionType } from "../ranges";
 
 import { rangeParser } from "../edit-util";
-import { create_range } from "../edit-util/range-create";
+import { create_anchored_comment, create_range } from "../edit-util/range-create";
 
 import {
 	annotationGutterFocusAnnotation,
@@ -69,17 +69,18 @@ export function addCommentToView(
 			//       path wraps an ARBITRARY selection in `{==…==}`, and CriticMarkup has no escapes,
 			//       so a `==}` in the selection closes the highlight early (orphaning the rest of the
 			//       anchor and leaving a dangling `==}` in the note) and an `@@` is eaten as the
-			//       highlight's own metadata terminator. Degrade exactly as the draft path does —
+			//       highlight's own legacy metadata terminator. Degrade exactly as the draft path does —
 			//       fall through to the unanchored at-cursor comment, which still carries the user's
 			//       words — rather than wrapping something the parser cannot read back.
 			const anchor_text = editor.state.sliceDoc(selection.from, selection.to);
 			const unsafe_anchor = unsafe_sequence(anchor_text, ["==}"]);
 			if (!unsafe_anchor) {
-				const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) +
-					create_range(settings, SuggestionType.COMMENT, "");
+				const insert = create_anchored_comment(settings, anchor_text, "");
 				editor.dispatch(editor.state.update({
 					changes: { from: selection.from, to: selection.to, insert },
-					selection: EditorSelection.cursor(selection.from + insert.length - 3),
+					// EXPL: The comment's closer is the last `<<}`: an attribute block may follow it, but a
+					//       block escapes `}` inside quoted values, so `<<}` can never occur inside one.
+					selection: EditorSelection.cursor(selection.from + insert.lastIndexOf("<<}")),
 					scrollIntoView: scroll,
 					annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
 				}));
@@ -194,7 +195,7 @@ function anchor_rejection(state: EditorState, draft: CommentDraft): string | und
 		return "the selected text now contains tracked changes or comments";
 
 	// EXPL: `==}` would close the wrapping highlight early; `@@` would be eaten as this highlight's
-	//       own metadata terminator. Checked unconditionally rather than only when `add_metadata` is
+	//       own legacy metadata terminator. Checked unconditionally rather than only when `add_metadata` is
 	//       on: the setting is a toggle, the note is forever, and dropping an anchor is recoverable
 	//       where a mangled note is not.
 	const sequence = unsafe_sequence(state.sliceDoc(draft.from, draft.to), ["==}"]);
@@ -291,7 +292,7 @@ export function commitCommentDraft(editor: EditorView, text: string): boolean {
 	}
 
 	const anchor_text = editor.state.sliceDoc(draft.from, draft.to);
-	const insert = create_range(settings, SuggestionType.HIGHLIGHT, anchor_text) + comment;
+	const insert = create_anchored_comment(settings, anchor_text, text);
 
 	editor.dispatch(editor.state.update({
 		changes: { from: draft.from, to: draft.to, insert },
