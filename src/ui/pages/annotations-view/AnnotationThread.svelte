@@ -3,6 +3,8 @@
 	type CriticMarkupRangeEntry,
 	SUGGESTION_ICON_MAPPER,
 	SuggestionType,
+	thread_resolvable,
+	thread_resolved,
 } from "../../../editor/base";
 import type CommentatorPlugin from "../../../main";
 import { Icon, MarkdownRenderer } from "../../components";
