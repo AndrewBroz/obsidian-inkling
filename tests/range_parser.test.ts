@@ -192,6 +192,40 @@ describe("trailing attribute blocks", () => {
 		expect(ranges[0].fields).toEqual({ k: "{>>x<<}" });
 	});
 
+	// EXPL: Review fix round 2. The grammar's misread node can run past a soft line break, although a block cannot.
+	describe("a node misread inside a quoted value, across a soft line break", () => {
+		const after_edit = (doc: string, at: string) => {
+			let state = createRangeState(doc);
+			state = state.update({ changes: { from: doc.indexOf(at) + 1, insert: "z" } }).state;
+			const span = (r: { type: unknown; from: number; to: number }) => [r.type, r.from, r.to];
+			return {
+				incremental: state.field(rangeParser).ranges.ranges.map(span),
+				full: rangesOf(state.doc.toString(), true).map(span),
+			};
+		};
+
+		test("an opener closed on the next line", () => {
+			const { incremental, full } = after_edit(`{++a++}{author="{++x"} after\nmore {++b++} end`, "more");
+			expect(full).toEqual([[SuggestionType.ADDITION, 0, 22], [SuggestionType.ADDITION, 35, 42]]);
+			expect(incremental).toEqual(full);
+		});
+
+		test("a comment opener closed after a range on the next line", () => {
+			const doc = `{++a++}{author="{>>x"} after\nmore {++b++} text <<} tail`;
+			for (const at of ["more", "text"]) {
+				const { incremental, full } = after_edit(doc, at);
+				expect(full.map(r => r[0])).toEqual([SuggestionType.ADDITION, SuggestionType.ADDITION]);
+				expect(incremental).toEqual(full);
+			}
+		});
+
+		test("an addition opener closed by plain text on the next line", () => {
+			const { incremental, full } = after_edit(`{++a++}{author="{++x"} after\nmore text ++} tail`, "more");
+			expect(full).toEqual([[SuggestionType.ADDITION, 0, 22]]);
+			expect(incremental).toEqual(full);
+		});
+	});
+
 	test("accept and reject replace the whole span, block included", () => {
 		const doc = `a{++b++}{author=A}c{--d--}{author=B}e{~~f~>g~~}{author=C}h`;
 		const ranges = meta(doc);

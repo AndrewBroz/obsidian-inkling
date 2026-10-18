@@ -8,6 +8,7 @@ import { CommentRange, CriticMarkupRange, CriticMarkupRanges, SuggestionType } f
 import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import { fullReloadEffect } from "../../settings";
 import { pluginSettingsField } from "../../uix";
+import { parseAttrBlock } from "./attributes";
 import { cursorGenerateRanges } from "./range-parser";
 
 interface ParserData {
@@ -65,26 +66,30 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		const offsets: [number, number][] = [];
 		const dangling_comments = new Map<number, CommentRange>();
 		const deleted_ranges: Set<CriticMarkupRange> = new Set();
-		// EXPL: A trailing attribute block is text after a range's closer, so an edit can change a range without
-		//       touching it: deleting ` x` from `{++a++}{k=1 x}` makes the block valid and grows the range, and
-		//       the grammar, which does not know blocks, can misread a quoted `{++x"` inside one as an opener.
-		//       Only the block's owner tells the parser to skip such a node, so regeneration starts at the earliest
-		//       range on the edit's line (blocks never span lines) whose closer is followed by `{`.
-		const old_ranges = value.ranges.ranges;
-		const old_doc = tr.startState.doc;
 		const to_old = tr.changes.invertedDesc;
-		function blockOwnerStart(pos: number): number | undefined {
+		// EXPL: A trailing attribute block is text after a range's closer, so an edit can turn the text after a
+		//       range into a valid block without touching the range: deleting ` x` from `{++a++}{k=1 x}` grows it.
+		//       Such a block covers the edit and starts right at the owner's closer. Blocks never span lines, so
+		//       only ranges on the edit's line can own one; ranges quoted inside the new block lie between the
+		//       owner and the edit, so the whole line is walked. A range that already has a block is skipped
+		//       without parsing: it did not touch the edit, so its block ends before it.
+		const old_ranges = value.ranges.ranges;
+		function newBlockOwnerStart(fromA: number, fromB: number): number | undefined {
 			let low = 0, high = old_ranges.length;
 			while (low < high) {
 				const mid = (low + high) >> 1;
-				if (old_ranges[mid].from < pos) low = mid + 1;
+				if (old_ranges[mid].from < fromA) low = mid + 1;
 				else high = mid;
 			}
-			const line_start = old_doc.lineAt(pos).from;
+			const line_start = tr.startState.doc.lineAt(fromA).from;
 			let start: number | undefined = undefined;
 			for (let i = low - 1; i >= 0 && old_ranges[i].to >= line_start; i--) {
-				const closer = old_ranges[i].closer_to;
-				if (old_doc.sliceString(closer, closer + 1) === "{") start = old_ranges[i].from;
+				const range = old_ranges[i];
+				if (range.meta) continue;
+				const at = tr.changes.mapPos(range.closer_to);
+				if (text[at] !== "{") continue;
+				const block = parseAttrBlock(text, at);
+				if (block && block.to >= fromB) start = range.from;
 			}
 			return start;
 		}
@@ -114,15 +119,25 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 					invalidate(range, key);
 					return true;
 				});
-			const owner_start = settings.enable_metadata ? blockOwnerStart(changed_range.fromA) : undefined;
+			const owner_start = settings.enable_metadata ?
+				newBlockOwnerStart(changed_range.fromA, changed_range.fromB) :
+				undefined;
 			if (owner_start !== undefined)
 				regenerate_from = Math.min(regenerate_from, tr.changes.mapPos(owner_start, -1));
 
-			// EXPL: A replaced range can reach past the span just regenerated (an owner that grew over a range
-			//       whose own block hid more ranges), so regenerate again until the span stops growing.
+			// EXPL: A replaced range can lie outside the span just regenerated, so regenerate again until the span
+			//       stops growing. The grammar does not know blocks and can misread a quoted `{++x"` inside one as
+			//       an opener, possibly closed lines later. Only the block's owner, met first, makes the parser skip
+			//       that node, but when regeneration starts after the owner the node becomes a range. That range
+			//       overlaps the owner and replaces it, so the next pass starts at the owner and skips the node; each
+			//       pass discards what earlier passes yielded inside its span, or the misread range would survive.
 			let generated: [number, number] | undefined = undefined;
 			while (!generated || regenerate_from < generated[0] || regenerate_to > generated[1]) {
 				generated = [regenerate_from, regenerate_to];
+				for (const from of inserted_set.keys()) {
+					if (generated[0] <= from && from <= generated[1])
+						inserted_set.delete(from);
+				}
 				for (const range of cursorGenerateRanges(tree, text, settings, ...generated)) {
 					const from = to_old.mapPos(range.from, -1), to = to_old.mapPos(range.to, 1);
 					const overlapped = value.ranges.tree.search([from, to]) as CriticMarkupRange[];
