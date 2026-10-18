@@ -135,4 +135,9 @@ describe("range_source_with_fields by syntax", () => {
 		expect(range_source_with_fields(range, { author: "A" }, "attributes")).toBe(`{==x==}{author=A}`);
 		expect(range_source_with_fields(range, {}, "attributes")).toBe(`{==x==}`);
 	});
+
+	test("fields that cannot round-trip stay legacy", () => {
+		const [range] = topRanges(`{==x==}`);
+		expect(range_source_with_fields(range, { note: { x: 1 } }, "attributes")).toBe(`{=={"note":{"x":1}}@@x==}`);
+	});
 });

@@ -66,6 +66,26 @@ describe("set_metadata by syntax", () => {
 		expect(apply(doc, range.delete_metadata("author"))).toBe(`x{++a++}y`);
 	});
 
+	test("migrates a legacy substitution to attributes", () => {
+		const doc = `x{~~{"author":"A"}@@a~>b~~}y`;
+		const range = parseFirstRange(doc);
+		expect(apply(doc, range.add_metadata("done", true, "attributes"))).toBe(`x{~~a~>b~~}{author=A done=true}y`);
+	});
+
+	test("explicit legacy converts an attributes range back", () => {
+		const doc = `x{++a++}{author=A}y`;
+		const range = parseFirstRange(doc);
+		expect(apply(doc, range.set_metadata({ author: "A" }, "legacy"))).toBe(`x{++{"author":"A"}@@a++}y`);
+	});
+
+	test("fields that cannot round-trip keep a legacy range legacy", () => {
+		const doc = `{++{"note":{"x":1}}@@a++}`;
+		const range = parseFirstRange(doc);
+		expect(apply(doc, range.add_metadata("done", true, "attributes"))).toBe(
+			`{++{"note":{"x":1},"done":true}@@a++}`,
+		);
+	});
+
 	test("split_range puts the block after each half", () => {
 		const range = parseFirstRange(`{++ab++}{author=A}`);
 		expect(range.split_range(4)).toEqual([`++}{author=A}`, `{++`]);
