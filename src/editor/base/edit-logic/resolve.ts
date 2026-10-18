@@ -85,6 +85,11 @@ export function remove_resolved_threads(ranges: CriticMarkupRange[]): { changes:
 	return { changes: bases.flatMap(remove_thread), count: bases.length };
 }
 
+/** The entries whose thread is still open: Resolve acts on these only, so a mixed selection never removes (or re-marks) a resolved thread. */
+export function unresolved_entries<T extends { range: CriticMarkupRange }>(entries: T[]): T[] {
+	return entries.filter(entry => thread_resolvable(entry.range) && !thread_resolved(entry.range));
+}
+
 export type ResolveSettings = Pick<PluginSettings, "metadata_syntax" | "remove_on_resolve">;
 
 /** What an editor Resolve action does: mark the thread done or, with `remove_on_resolve`, remove it. */

@@ -13,6 +13,7 @@ import {
 	SuggestionType,
 	thread_resolvable,
 	thread_resolved,
+	unresolved_entries,
 } from "../../../editor/base";
 import { annotationGutterFocusAnnotation } from "../../../editor/renderers/gutters";
 import { applyRangeEditsToVault, centerRangeInEditorView } from "../../../editor/uix";
@@ -101,7 +102,7 @@ export function onContextMenu(
 					.onClick(async () =>
 						applyRangeEditsToVault(
 							plugin,
-							resolvable_entries,
+							unresolved_entries(resolvable_entries),
 							applyToFile.bind(
 								null,
 								(range, text) => resolve_source(range, text, plugin.settings),

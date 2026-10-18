@@ -43,6 +43,10 @@ let {
 	menu_open = $bindable(false),
 	moreOptionsMenu,
 }: Props = $props();
+
+const resolve_label_for = () => plugin.settings.remove_on_resolve ? "Resolve and remove thread" : "Resolve thread";
+let resolve_label = $state(resolve_label_for());
+const refresh_resolve_label = () => (resolve_label = resolve_label_for());
 </script>
 
 <div style="position: relative;">
@@ -110,9 +114,16 @@ let {
 					))}
 				/>
 			{:else}
+				<!-- EXPL: plugin.settings is not reactive, so the label is re-read when the button is about to be shown. -->
+				<span
+					style="display: contents"
+					role="presentation"
+					onmouseenter={refresh_resolve_label}
+					onfocusin={refresh_resolve_label}
+				>
 				<Button
 					icon="check"
-					tooltip={plugin.settings.remove_on_resolve ? "Resolve and remove thread" : "Resolve thread"}
+					tooltip={resolve_label}
 					onClick={(() =>
 					applyRangeEditsToVault(
 						plugin,
@@ -121,6 +132,7 @@ let {
 						true,
 					))}
 				/>
+				</span>
 			{/if}
 		{/if}
 

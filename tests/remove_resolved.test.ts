@@ -7,6 +7,7 @@ import {
 	resolve_action,
 	resolve_source,
 	resolve_thread,
+	unresolved_entries,
 } from "../src/editor/base/edit-logic/resolve";
 import { applyToText } from "../src/editor/base/edit-util/range-operations";
 import type { CriticMarkupRange } from "../src/editor/base/ranges";
@@ -85,6 +86,29 @@ describe.each(["legacy", "attributes"] as const)("%s metadata", (syntax) => {
 
 		test("remove mode drops a standalone comment thread", () => {
 			expect(run(doc(`x{>>{"author":"A"}@@a<<}{>>b<<}y`), REMOVE)).toBe(`xy`);
+		});
+
+		test("remove mode over two threads in one file removes both", () => {
+			const source = doc(`a {=={"author":"A"}@@b==}{>>{"author":"A"}@@c<<} m x{>>{"author":"A"}@@d<<}{>>e<<}y n`);
+			const all = ranges(source);
+			const bases = all.filter(r => r === r.base_range);
+			const members = bases.flatMap(base => [base, ...base.replies]);
+			expect(applyToText(source, (range, text) => resolve_source(range, text, REMOVE), members))
+				.toBe(`a b m xy n`);
+		});
+
+		test("a resolved highlight with no replies is unwrapped", () => {
+			const source = doc(`{=={"done":true}@@x==}`);
+			expect(apply(source, remove_thread(ranges(source)[0]))).toBe(`x`);
+			const { changes, count } = remove_resolved_threads(ranges(source));
+			expect(count).toBe(1);
+			expect(apply(source, changes)).toBe(`x`);
+		});
+
+		test("unresolved_entries keeps only open, resolvable threads", () => {
+			const source = doc(`{>>{"done":true}@@a<<} {>>b<<} {++c++}`);
+			const entries = ranges(source).map(range => ({ path: "p", range }));
+			expect(unresolved_entries(entries).map(e => e.range.text)).toEqual([entries[1].range.text]);
 		});
 
 		test("keep mode writes done on the base and leaves replies untouched", () => {

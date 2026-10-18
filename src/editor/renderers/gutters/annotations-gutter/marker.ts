@@ -593,6 +593,15 @@ export class AnnotationMarker extends GutterMarker {
 				},
 			});
 			setIcon(resolve_button, "check");
+			// EXPL: The card outlives a settings change (`eq` ignores settings), so the label is re-read from the live
+			//       settings whenever it is about to be shown, to keep "Resolve and remove" truthful.
+			const refresh_label = () =>
+				resolve_button.setAttribute(
+					"aria-label",
+					this.view.state.field(pluginSettingsField).remove_on_resolve ? "Resolve and remove thread" : "Resolve thread",
+				);
+			resolve_button.addEventListener("mouseenter", refresh_label);
+			resolve_button.addEventListener("focus", refresh_label);
 			resolve_button.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.view.dispatch({
