@@ -8,7 +8,8 @@ export class CommentRange extends CriticMarkupRange {
 	// EXPL: Thread rule 1: `done` lives on the thread's base. A reply's copy (written by older versions) is ignored.
 	get fields(): MetadataFields {
 		if (!this.attached_comment || !("done" in this.own_fields)) return this.own_fields;
-		const { done: _, ...rest } = this.own_fields;
+		const rest = { ...this.own_fields };
+		delete rest.done;
 		return rest;
 	}
 

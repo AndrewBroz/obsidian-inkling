@@ -1,11 +1,14 @@
 <script lang="ts">
+	import { Dropdown, Input, SettingItem, Toggle } from "../../../components";
 	import { author_at_warning } from "../../../../editor/base/edit-util/attributes";
-import { Dropdown, Input, SettingItem, Toggle } from "../../../components";
 
 import type CommentatorPlugin from "../../../../main";
 import type { MetadataSyntax } from "../../../../types";
 
 let { plugin }: { plugin: CommentatorPlugin } = $props();
+
+// plugin.settings is a plain object (not reactive), so the Name warning tracks its own copy.
+let author = $state(plugin.settings.author);
 </script>
 
 <SettingItem name="Add Metadata" type="toggle">
@@ -22,6 +25,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 
 <SettingItem
 	name="Metadata format"
+	type="dropdown"
 	description="How Inkling writes author, time and resolution. Both formats are always read. Attribute blocks avoid ZotLit citation false positives, but collaborators need Inkling 0.13 or later, and Commentator does not read them."
 >
 	{#snippet control()}
@@ -79,7 +83,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 		notices={[
 			{
 				type: "warning" as const,
-				text: author_at_warning(plugin.settings.author) ?? "",
+				text: author_at_warning(author) ?? "",
 			},
 		].filter((notice) => notice.text)}
 	>
@@ -88,6 +92,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 				type="text"
 				bind:value={plugin.settings.author}
 				onChange={(value) => {
+					author = value;
 					plugin.settings.author = value;
 					plugin.saveSettings();
 				}}
