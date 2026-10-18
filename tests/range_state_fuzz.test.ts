@@ -44,6 +44,8 @@ const SEGMENTS = [
 	"{++added++}{author=A time=1}",
 	"{==x==}{>>c<<}{author=\"B b\" time=2}",
 	"{~~o~>n~~}{done=true}",
+	"{++a++}{author=\"{++x\"}", // quoted opener
+	"{==q==}{k=\"{>>x<<}\" time=3}", // quoted range
 ];
 
 const INSERTS = ["z", "x", "ab", " ", "qq", "}", "{a=1}", "="];

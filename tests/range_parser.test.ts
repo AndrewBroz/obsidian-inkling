@@ -169,6 +169,29 @@ describe("trailing attribute blocks", () => {
 		expect(ranges[0].fields).toEqual({ k: 1 });
 	});
 
+	// EXPL: Review fix round 1. Incremental regeneration started at the edit, so the grammar's misread node inside
+	//       a quoted value was met without the block's owner before it, and became a range.
+	test("typing after a block that quotes an opener does not create a range inside the block", () => {
+		const doc = `{++a++}{author="{++x"} after {++b++} end`;
+		let state = createRangeState(doc);
+		state = state.update({ changes: { from: doc.indexOf("fter"), insert: "z" } }).state;
+		const ranges = state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(r => [r.type, r.from, r.to])).toEqual([
+			[SuggestionType.ADDITION, 0, 22],
+			[SuggestionType.ADDITION, 30, 37],
+		]);
+	});
+
+	test("a block that becomes valid swallows a range quoted inside it", () => {
+		const doc = `{++a++}{k="{>>x<<}" y} tail`;
+		let state = createRangeState(doc);
+		state = state.update({ changes: { from: doc.indexOf(" y"), to: doc.indexOf("}", doc.indexOf(" y")) } })
+			.state;
+		const ranges = state.field(rangeParser).ranges.ranges;
+		expect(ranges.map(r => [r.type, r.from, r.to])).toEqual([[SuggestionType.ADDITION, 0, 20]]);
+		expect(ranges[0].fields).toEqual({ k: "{>>x<<}" });
+	});
+
 	test("accept and reject replace the whole span, block included", () => {
 		const doc = `a{++b++}{author=A}c{--d--}{author=B}e{~~f~>g~~}{author=C}h`;
 		const ranges = meta(doc);
