@@ -1,6 +1,6 @@
 import { type MetadataSyntax, PreviewMode, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../types";
 import type { EditorChange } from "../edit-handler";
-import { parseAttrBlock, SHORTHAND_KEYS } from "../edit-util/attributes";
+import { parseAttrBlock, serializeAttrBlock, SHORTHAND_KEYS } from "../edit-util/attributes";
 import { CM_All_Brackets, type STRING_SUGGESTION_TYPE, SuggestionType } from "./definitions";
 import type { CommentRange } from "./types";
 
@@ -131,29 +131,45 @@ export abstract class CriticMarkupRange {
 		return [{ from: this.meta.from, to: this.meta.to, insert: "" }];
 	}
 
-	delete_metadata(key: string): EditorChange[] {
+	delete_metadata(key: string, syntax?: MetadataSyntax): EditorChange[] {
 		if (Object.hasOwn(SHORTHAND_KEYS, key)) key = SHORTHAND_KEYS[key];
 
 		if (!(key in this.own_fields))
 			return [];
 
-		delete this.own_fields[key as keyof typeof this.own_fields];
-		if (Object.keys(this.own_fields).length === 0)
-			return this.remove_metadata();
-		return this.set_metadata(this.own_fields);
+		const fields = { ...this.own_fields };
+		delete fields[key as keyof typeof fields];
+		return this.set_metadata(fields, syntax);
 	}
 
-	add_metadata(key: string, value: unknown): EditorChange[] {
-		this.own_fields[key as keyof typeof this.own_fields] = value;
-		return this.set_metadata(this.own_fields);
+	add_metadata(key: string, value: unknown, syntax?: MetadataSyntax): EditorChange[] {
+		return this.set_metadata({ ...this.own_fields, [key]: value }, syntax);
 	}
 
-	set_metadata(fields: MetadataFields): EditorChange[] {
+	/**
+	 * Rewrite this range's metadata as `fields` in `syntax` (default: its current syntax, else legacy). Moving between
+	 * syntaxes removes the old form. Empty `fields` writes no metadata at all. The changes never overlap: the legacy
+	 * blob lies inside the opener and the block after the closer.
+	 */
+	set_metadata(fields: MetadataFields, syntax: MetadataSyntax = this.meta?.syntax ?? "legacy"): EditorChange[] {
 		// TODO: Possibly redundant assignment, ranges will automatically get re-constructed with the EditorChange
 		this.own_fields = fields;
-		const blob = JSON.stringify(fields) + "@@";
-		if (this.meta) return [{ from: this.meta.from, to: this.meta.to, insert: blob }];
-		return [{ from: this.from + 3, to: this.from + 3, insert: blob }];
+		const has_fields = Object.values(fields).some(value => value !== undefined);
+		const legacy = this.meta?.syntax === "legacy" ? this.meta : undefined;
+		const attributes = this.meta?.syntax === "attributes" ? this.meta : undefined;
+		const changes: EditorChange[] = [];
+		if (syntax === "legacy") {
+			const blob = has_fields ? JSON.stringify(fields) + "@@" : "";
+			if (legacy) changes.push({ from: legacy.from, to: legacy.to, insert: blob });
+			else if (blob) changes.push({ from: this.from + 3, to: this.from + 3, insert: blob });
+			if (attributes) changes.push({ from: attributes.from, to: attributes.to, insert: "" });
+		} else {
+			if (legacy) changes.push({ from: legacy.from, to: legacy.to, insert: "" });
+			const block = has_fields ? serializeAttrBlock(fields) : "";
+			if (attributes) changes.push({ from: attributes.from, to: attributes.to, insert: block });
+			else if (block) changes.push({ from: this.closer_to, to: this.closer_to, insert: block });
+		}
+		return changes;
 	}
 
 	has_comment(range: CriticMarkupRange): boolean {
@@ -366,9 +382,8 @@ export abstract class CriticMarkupRange {
 	 * @param cursor Cursor position to split at
 	 */
 	split_range(cursor: number): [string, string] {
-		return [
-			this.text.slice(-3),
-			this.text.slice(0, 3) + (this.meta?.syntax === "legacy" ? JSON.stringify(this.own_fields) + "@@" : ""),
-		];
+		const legacy = this.meta?.syntax === "legacy" ? JSON.stringify(this.own_fields) + "@@" : "";
+		const block = this.meta?.syntax === "attributes" ? serializeAttrBlock(this.own_fields) : "";
+		return [this.text.slice(-3) + block, this.text.slice(0, 3) + legacy];
 	}
 }

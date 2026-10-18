@@ -1,4 +1,6 @@
+import type { MetadataSyntax } from "../../../types";
 import type { EditorChange } from "../edit-handler";
+import { serializeAttrBlock } from "../edit-util/attributes";
 import { type CommentRange, CriticMarkupRange, type MetadataFields, SuggestionType } from "../ranges";
 
 /**
@@ -40,11 +42,18 @@ export function reopen_thread(range: CriticMarkupRange): EditorChange[] {
  * Rebuilds a range's full markup source (brackets included) with the given metadata fields.
  * `range.text` is already metadata-stripped but keeps its brackets, so the first/last 3
  * characters are the opening/closing bracket and everything in between is the range's content
- * (for substitutions, that includes the `~>` separator). Empty fields produce no metadata blob.
+ * (for substitutions, that includes the `~>` separator). Empty fields produce no metadata. The source covers the
+ * full range, an attribute block included, which matches the `from..to` it replaces.
  */
-export function range_source_with_fields(range: CriticMarkupRange, fields: MetadataFields): string {
-	if (Object.keys(fields).length === 0)
+export function range_source_with_fields(
+	range: CriticMarkupRange,
+	fields: MetadataFields,
+	syntax: MetadataSyntax = range.meta?.syntax ?? "legacy",
+): string {
+	if (!Object.values(fields).some(value => value !== undefined))
 		return range.text;
+	if (syntax === "attributes")
+		return range.text + serializeAttrBlock(fields);
 	return range.text.slice(0, 3) + JSON.stringify(fields) + "@@" + range.text.slice(3);
 }
 

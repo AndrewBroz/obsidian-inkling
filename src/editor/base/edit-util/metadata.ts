@@ -1,4 +1,4 @@
-import type { PluginSettings } from "../../../types";
+import type { MetadataSyntax, PluginSettings } from "../../../types";
 import { CriticMarkupRange, type METADATA_TYPE, type MetadataFields } from "../ranges";
 
 export type MetadataCompatibility = {
@@ -19,6 +19,16 @@ export enum MetadataMergeAction {
 	OLD = "old",
 	// Choose value of new range
 	NEW = "new",
+}
+
+/**
+ * The syntax to write a range in: the setting's, except that a range already written with attribute blocks
+ * stays that way. Converting back to legacy is an explicit command, never a side effect.
+ */
+export function write_syntax(setting: MetadataSyntax, ...ranges: (CriticMarkupRange | undefined)[]): MetadataSyntax {
+	return setting === "attributes" || ranges.some(range => range?.meta?.syntax === "attributes") ?
+		"attributes" :
+		"legacy";
 }
 
 export function generate_metadata(settings: PluginSettings): MetadataFields | undefined {

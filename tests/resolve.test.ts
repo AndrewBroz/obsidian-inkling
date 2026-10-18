@@ -123,3 +123,16 @@ describe("cancel_empty_comment", () => {
 		expect(apply(doc, cancel_empty_comment(empty_reply))).toBe("x{==sel==}{>>keep<<}y");
 	});
 });
+
+describe("range_source_with_fields by syntax", () => {
+	test("keeps an attributes range's syntax", () => {
+		const [range] = topRanges(`{==x==}{author=A}`);
+		expect(range_source_with_fields(range, { author: "A", done: true })).toBe(`{==x==}{author=A done=true}`);
+	});
+
+	test("writes the requested syntax", () => {
+		const [range] = topRanges(`{=={"author":"A"}@@x==}`);
+		expect(range_source_with_fields(range, { author: "A" }, "attributes")).toBe(`{==x==}{author=A}`);
+		expect(range_source_with_fields(range, {}, "attributes")).toBe(`{==x==}`);
+	});
+});

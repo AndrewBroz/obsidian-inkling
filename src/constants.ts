@@ -87,6 +87,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	add_completed_metadata: false,
 	add_style_metadata: false,
 	add_color_metadata: false,
+	metadata_syntax: "legacy",
 
 	author: "",
 

@@ -1,5 +1,6 @@
-import type { PluginSettings } from "../../../types";
+import type { MetadataSyntax, PluginSettings } from "../../../types";
 import { CM_All_Brackets, type MetadataFields, SuggestionType } from "../ranges";
+import { serializeAttrBlock } from "./attributes";
 import { generate_metadata } from "./metadata";
 
 export function construct_suggestion(
@@ -8,6 +9,7 @@ export function construct_suggestion(
 	metadata_fields?: MetadataFields,
 	start_offset = 0,
 	end_offset = 0,
+	syntax: MetadataSyntax = "legacy",
 ) {
 	return construct_range(
 		inserted,
@@ -18,6 +20,7 @@ export function construct_suggestion(
 		metadata_fields,
 		start_offset,
 		end_offset,
+		syntax,
 	);
 }
 
@@ -28,20 +31,23 @@ export function construct_range(
 	metadata_fields?: MetadataFields,
 	start_offset = 0,
 	end_offset = 0,
+	syntax: MetadataSyntax = "legacy",
 ) {
 	if (!type)
 		return { insert: deleted + inserted, start_offset, end_offset };
 
 	const brackets = CM_All_Brackets[type];
-	const metadata = metadata_fields && Object.keys(metadata_fields).length ?
-		JSON.stringify(metadata_fields) + "@@" :
-		"";
-	const output = brackets[0] + metadata +
+	const has_fields = !!metadata_fields && Object.values(metadata_fields).some(value => value !== undefined);
+	// EXPL: Legacy metadata sits between the opener and the content, so it shifts every offset into the range.
+	//       An attribute block sits after the closer and shifts nothing the caller measures.
+	const prefix = has_fields && syntax === "legacy" ? JSON.stringify(metadata_fields) + "@@" : "";
+	const suffix = has_fields && syntax === "attributes" ? serializeAttrBlock(metadata_fields!) : "";
+	const output = brackets[0] + prefix +
 		(type === SuggestionType.SUBSTITUTION ?
 			deleted + brackets[1] + inserted + brackets[2] :
-			deleted + inserted + brackets[1]);
-	const initial_offset = brackets[0].length + metadata.length;
-	start_offset += initial_offset;
+			deleted + inserted + brackets[1]) +
+		suffix;
+	start_offset += brackets[0].length + prefix.length;
 	// FIXME: end may not be offset if the bracket appears after the end
 	end_offset += type === SuggestionType.SUBSTITUTION ? brackets[1].length : 0;
 
@@ -49,9 +55,9 @@ export function construct_range(
 }
 
 export function create_suggestion(settings: PluginSettings, inserted: string, deleted: string = "") {
-	return construct_suggestion(inserted, deleted, generate_metadata(settings)).insert;
+	return construct_suggestion(inserted, deleted, generate_metadata(settings), 0, 0, settings.metadata_syntax).insert;
 }
 
 export function create_range(settings: PluginSettings, type: SuggestionType, inserted: string, deleted: string = "") {
-	return construct_range(inserted, deleted, type, generate_metadata(settings)).insert;
+	return construct_range(inserted, deleted, type, generate_metadata(settings), 0, 0, settings.metadata_syntax).insert;
 }

@@ -287,6 +287,11 @@ export interface PluginSettings {
 	 * Whether color metadata should be added to new ranges
 	 */
 	add_color_metadata: boolean;
+	/**
+	 * How Inkling writes metadata: legacy `{json}@@` inside the opener, or a trailing attribute block.
+	 * Governs new ranges and ranges Inkling rewrites anyway (touch-to-migrate). Both are always read.
+	 */
+	metadata_syntax: MetadataSyntax;
 
 	/**
 	 * Author name to use for metadata
