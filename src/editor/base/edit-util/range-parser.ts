@@ -178,3 +178,14 @@ export const RANGE_PROTOTYPE_MAPPER = {
 	[SuggestionType.SUBSTITUTION]: SubstitutionRange,
 	[SuggestionType.COMMENT]: CommentRange,
 };
+
+/**
+ * Reattach range prototypes to a vault-cache entry read back from IndexedDB or a worker (both strip prototypes).
+ * Returns undefined for an entry written before attribute blocks, whose ranges have an own `fields` and no
+ * `own_fields`: with the prototype reattached, that stale `fields` would shadow the getter and every edit built
+ * from `own_fields` would drop the metadata. The caller discards such an entry so the file is parsed again.
+ */
+export function reviveCachedRanges(data: CriticMarkupRange[]): CriticMarkupRange[] | undefined {
+	if (data.some(range => !Object.hasOwn(range, "own_fields"))) return undefined;
+	return data.map(range => Object.setPrototypeOf(range, RANGE_PROTOTYPE_MAPPER[range.type].prototype));
+}

@@ -99,7 +99,8 @@ export class Database<T> extends EventComponent {
 	 * @param defaultValue Constructor for the default value of the database
 	 * @param extractValue Provide new values for database on file modification
 	 * @param workers Number of workers to use for parsing files
-	 * @param loadValue On loading value from indexedDB, run this function on the value (useful for re-adding prototypes)
+	 * @param loadValue On loading value from indexedDB, run this function on the value (useful for re-adding prototypes).
+	 *   Returning undefined rejects a stale value: the entry is dropped and `syncDatabase` parses its file again
 	 * @param getSettings Get the current settings of the plugin
 	 * @param startDatabase Determines whether the database should start immediately on construction (otherwise call `startDatabase()`)
 	 */
@@ -112,7 +113,7 @@ export class Database<T> extends EventComponent {
 		private defaultValue: () => T,
 		private extractValue: (file: TFile, state?: EditorState) => Promise<T>,
 		public workers: number = 2,
-		private loadValue: (data: T) => T = (data: T) => data,
+		private loadValue: (data: T) => T | undefined = (data: T) => data,
 		private getSettings: () => unknown = () => (this.plugin as unknown as { settings: object }).settings,
 		startDatabase = true,
 	) {
@@ -181,13 +182,12 @@ export class Database<T> extends EventComponent {
 	 * Load database from indexedDB
 	 */
 	async loadDatabase() {
-		this.memory = new Map(
-			Object.entries(await this.persist.getItems() as Record<string, DatabaseItem<T>>)
-				.map(([key, value]) => {
-					value.data = this.loadValue(value.data);
-					return [key, value];
-				}),
-		);
+		this.memory = new Map();
+		for (const [key, value] of Object.entries(await this.persist.getItems() as Record<string, DatabaseItem<T>>)) {
+			const data = this.loadValue(value.data);
+			if (data === undefined) continue;
+			this.memory.set(key, { ...value, data });
+		}
 	}
 
 	/**
@@ -220,7 +220,7 @@ export class Database<T> extends EventComponent {
 			worker.onmessage = (event: { data: T[] }) => {
 				for (let i = 0; i < files_chunk.length; i++) {
 					const file = files_chunk[i];
-					const extracted_value = this.loadValue(event.data[i]);
+					const extracted_value = this.loadValue(event.data[i]) ?? this.defaultValue();
 					this.storeKey(file.path, extracted_value, file.stat.mtime, true);
 				}
 				worker.terminate();

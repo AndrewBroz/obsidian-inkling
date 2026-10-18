@@ -8,7 +8,12 @@ import {
 } from "./types";
 
 export const PLUGIN_VERSION = "0.2.3";
-export const DATABASE_VERSION = 4;
+// EXPL: Bump whenever the cached range shape changes: a stored version below this one makes the database clear
+//       and reparse the vault on load (Database.startDatabase). 5: ranges hold `own_fields`/`meta` (attribute
+//       blocks) instead of an own `fields` and a numeric `metadata`. A version-4 entry for an unmodified file
+//       would otherwise survive, and resolving it from the annotations view would rewrite its metadata as
+//       `{"done":true}` alone, losing the author.
+export const DATABASE_VERSION = 5;
 
 export const DEFAULT_SETTINGS: PluginSettings = {
 	version: PLUGIN_VERSION,

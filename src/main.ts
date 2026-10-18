@@ -20,8 +20,8 @@ import {
 	type CriticMarkupRange,
 	type CriticMarkupRanges,
 	getRangesInText,
-	RANGE_PROTOTYPE_MAPPER,
 	rangeParser,
+	reviveCachedRanges,
 	text_copy,
 } from "./editor/base";
 import { registerOriginalTextEmbeds } from "./editor/renderers/embed/original-text-embeds";
@@ -144,9 +144,7 @@ export default class CommentatorPlugin extends Plugin {
 				getRangesInText(await this.app.vault.cachedRead(file), this.settings);
 		},
 		this.settings.database_workers,
-		(data: CriticMarkupRange[]) => {
-			return data.map(range => Object.setPrototypeOf(range, RANGE_PROTOTYPE_MAPPER[range.type].prototype));
-		},
+		reviveCachedRanges,
 		() => this.settings,
 	);
 	file_history: {
