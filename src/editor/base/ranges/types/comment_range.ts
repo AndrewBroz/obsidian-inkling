@@ -1,9 +1,16 @@
-import { CriticMarkupRange, type MetaLocation } from "../base_range";
+import { CriticMarkupRange, type MetadataFields, type MetaLocation } from "../base_range";
 import { SuggestionType } from "../definitions";
 
 export class CommentRange extends CriticMarkupRange {
 	reply_depth = 0;
 	attached_comment: CriticMarkupRange | null = null;
+
+	// EXPL: Thread rule 1: `done` lives on the thread's base. A reply's copy (written by older versions) is ignored.
+	get fields(): MetadataFields {
+		if (!this.attached_comment || !("done" in this.own_fields)) return this.own_fields;
+		const { done: _, ...rest } = this.own_fields;
+		return rest;
+	}
 
 	get base_range(): CriticMarkupRange {
 		return this.attached_comment || this;

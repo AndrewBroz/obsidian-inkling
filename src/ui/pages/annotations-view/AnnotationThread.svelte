@@ -61,7 +61,7 @@ const is_anchor_quote = $derived(
 <div
 	tabindex={index}
 	class="cmtr-view-range"
-	class:cmtr-view-range-completed={row.range.fields.done}
+	class:cmtr-view-range-completed={thread_resolvable(row.range) && thread_resolved(row.range)}
 	class:cmtr-view-range-selected={is_selected}
 	onmouseenter={() => {
 		setHoveredIndex(0);

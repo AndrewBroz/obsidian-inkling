@@ -13,6 +13,9 @@ export interface MetadataFields {
 	[prop: string]: any;
 }
 
+// EXPL: Thread rule 2: the only fields a HIGHLIGHT anchor takes from its first comment.
+export const INHERITED_KEYS = ["author", "time"] as const;
+
 /**
  * Where a range's metadata is written. Legacy: `{json}@@` just inside the opener (`from` is after the opener,
  * `to` after `@@`). Attributes: the `{key=value}` block just after the closer.
@@ -341,8 +344,8 @@ export abstract class CriticMarkupRange {
 			else
 				str = this.unwrap();
 		}
-		// EXPL: Resolved HIGHLIGHTS render as plain text in reading view (resolve writes `done` to
-		//       every thread member, so a per-range check suffices). Only HIGHLIGHT takes this
+		// EXPL: Resolved HIGHLIGHTS render as plain text in reading view. A highlight is always its
+		//       thread's base, so its own `fields.done` is the thread's state. Only HIGHLIGHT takes this
 		//       branch: COMMENT is pre-gated by rangePostProcess (renders as nothing), and resolve
 		//       never applies to suggestion bases — a done-flagged DELETION (legacy "Set completed"
 		//       data) must keep rendering as cmtr-deletion, not as accepted plain text.
