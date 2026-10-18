@@ -149,7 +149,6 @@ export function unconvertibleReason(fields: MetadataFields): string | undefined 
 export function parseLegacyMetadata(json: string): MetadataFields | undefined {
 	let value: unknown;
 	try {
-		// TODO: JS can be injected here, possible security risk
 		value = JSON.parse(json);
 	} catch {
 		return undefined;

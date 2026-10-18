@@ -122,6 +122,8 @@ describe.each(["legacy", "attributes"] as const)("%s metadata: toOriginalText", 
 		expect(original(`{~~{"author":"A"}@@x~>y~>z~~}`)).toBe("x");
 	});
 
+	// EXPL: Guards the legacy `{json}@@` split only. An attribute block has no `@@` separator, so under attributes the
+	//       content's `@@` is plain text and this case cannot fail; it runs over both syntaxes for symmetry.
 	test("never leaks metadata when the content repeats `@@`", () => {
 		expect(original(`x {++{"author":"A"}@@a@@b++} y`)).toBe("x y");
 		expect(original(`{--{"author":"A"}@@a@@b--} here`)).toBe("a@@b here");
