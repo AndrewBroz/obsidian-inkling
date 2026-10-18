@@ -143,42 +143,62 @@ function touchesBracket(tokens: [number, number][], from: number, to: number): b
 	return tokens.some(([start, end]) => from === to ? start < from && from < end : from < end && start < to);
 }
 
-describe("fuzz: incremental parse equals a full parse", () => {
-	test("for random edits over documents with attribute blocks", () => {
-		const rng = mulberry32(0xB10C);
-		const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
-		const spans = (ranges: { from: number; to: number; type: unknown }[]) =>
-			JSON.stringify(ranges.map(r => [r.type, r.from, r.to]));
-		const failures: string[] = [];
-		for (let seq = 0; seq < 500 && failures.length < 3; seq++) {
-			const initial = Array.from({ length: 6 + Math.floor(rng() * 6) }, () => pick(SEGMENTS)).join("");
-			let state = createRangeState(initial);
-			const edits: { from: number; to: number; insert: string }[] = [];
-			for (let i = 0; i < EDITS_PER_SEQUENCE; i++) {
-				const tokens = bracketTokens(state.doc.toString());
-				let edit: { from: number; to: number; insert: string } | undefined;
-				for (let roll = 0; roll < MAX_REROLLS && !edit; roll++) {
-					const from = Math.floor(rng() * (state.doc.length + 1));
-					const is_insert = rng() < 0.7;
-					const to = is_insert ? from : Math.min(state.doc.length, from + 1 + Math.floor(rng() * 4));
-					const insert = is_insert ? pick(INSERTS) : "";
-					if (!touchesBracket(tokens, from, to)) edit = { from, to, insert };
-				}
-				if (!edit) break;
-				edits.push(edit);
-				state = state.update({ changes: edit }).state;
-				const doc = state.doc.toString();
-				const incremental = spans(state.field(rangeParser).ranges.ranges);
-				const full = spans(getRangesInText(doc, { ...DEFAULT_SETTINGS }));
-				if (incremental !== full) {
-					failures.push(
-						`initial=${JSON.stringify(initial)} edits=${JSON.stringify(edits)}\n`
-							+ `doc=${JSON.stringify(doc)}\nincremental=${incremental}\nfull=${full}`,
-					);
-					break;
-				}
+type Edit = { from: number; to: number; insert: string };
+
+/**
+ * Random edit sequences over documents with attribute blocks; after each transaction the incremental ranges must
+ * equal a full parse. Each transaction makes 1 to `max_edits` non-overlapping edits, none touching a bracket token.
+ * @returns the first failures found (at most 3), with their reproduction.
+ */
+function incrementalVsFull(seed: number, max_edits: number): string[] {
+	const rng = mulberry32(seed);
+	const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
+	const spans = (ranges: { from: number; to: number; type: unknown }[]) =>
+		JSON.stringify(ranges.map(r => [r.type, r.from, r.to]));
+	const failures: string[] = [];
+	for (let seq = 0; seq < 500 && failures.length < 3; seq++) {
+		const initial = Array.from({ length: 6 + Math.floor(rng() * 6) }, () => pick(SEGMENTS)).join("");
+		let state = createRangeState(initial);
+		const transactions: Edit[][] = [];
+		for (let i = 0; i < EDITS_PER_SEQUENCE; i++) {
+			const tokens = bracketTokens(state.doc.toString());
+			const count = max_edits === 1 ? 1 : 1 + Math.floor(rng() * max_edits);
+			const edits: Edit[] = [];
+			for (let roll = 0; roll < MAX_REROLLS && edits.length < count; roll++) {
+				const from = Math.floor(rng() * (state.doc.length + 1));
+				const is_insert = rng() < 0.7;
+				const to = is_insert ? from : Math.min(state.doc.length, from + 1 + Math.floor(rng() * 4));
+				const insert = is_insert ? pick(INSERTS) : "";
+				if (touchesBracket(tokens, from, to)) continue;
+				if (edits.some(edit => from <= edit.to && edit.from <= to)) continue;
+				edits.push({ from, to, insert });
+			}
+			if (!edits.length) break;
+			transactions.push(edits);
+			state = state.update({ changes: edits }).state;
+			const doc = state.doc.toString();
+			const incremental = spans(state.field(rangeParser).ranges.ranges);
+			const full = spans(getRangesInText(doc, { ...DEFAULT_SETTINGS }));
+			if (incremental !== full) {
+				failures.push(
+					`initial=${JSON.stringify(initial)} transactions=${JSON.stringify(transactions)}\n`
+						+ `doc=${JSON.stringify(doc)}\nincremental=${incremental}\nfull=${full}`,
+				);
+				break;
 			}
 		}
-		expect(failures).toEqual([]);
+	}
+	return failures;
+}
+
+describe("fuzz: incremental parse equals a full parse", () => {
+	test("for random edits over documents with attribute blocks", () => {
+		expect(incrementalVsFull(0xB10C, 1)).toEqual([]);
+	});
+
+	// EXPL: Several changes in one transaction (multi-cursor typing, a command editing several places) are
+	//       regenerated together; a range one change removed must still be seen by the others.
+	test("for transactions of up to three edits", () => {
+		expect(incrementalVsFull(0x4242, 3)).toEqual([]);
 	});
 });

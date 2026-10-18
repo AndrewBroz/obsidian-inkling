@@ -226,6 +226,57 @@ describe("trailing attribute blocks", () => {
 		});
 	});
 
+	// EXPL: Review fix round 3. A change that removed the block's owner left the next change in the same
+	//       transaction without it, so that change turned the misread node into a range.
+	describe("several edits in one transaction after a block that quotes an opener", () => {
+		const after_edits = (doc: string, ats: [string, number][]) => {
+			let state = createRangeState(doc);
+			const changes = ats.map(([at, offset]) => ({ from: doc.indexOf(at) + offset, insert: "z" }));
+			state = state.update({ changes }).state;
+			const span = (r: { type: unknown; from: number; to: number }) => [r.type, r.from, r.to];
+			return {
+				incremental: state.field(rangeParser).ranges.ranges.map(span),
+				full: rangesOf(state.doc.toString(), true).map(span),
+			};
+		};
+
+		test("far-apart edits regenerate only the ranges around them", () => {
+			const doc = "{++a++}{author=A} x ".repeat(100);
+			const state = createRangeState(doc).update({
+				changes: [{ from: 4, insert: "z" }, { from: doc.length - 16, insert: "z" }],
+			}).state;
+			const { inserted_ranges } = state.field(rangeParser);
+			expect(inserted_ranges.map(r => r.from)).toEqual([0, doc.length - 19]);
+		});
+
+		test("on one line", () => {
+			const { incremental, full } = after_edits(`{++a++}{author="{++x"} after {++b++} end`, [
+				["after", 1],
+				["after", 3],
+			]);
+			expect(full).toEqual([[SuggestionType.ADDITION, 0, 22], [SuggestionType.ADDITION, 31, 38]]);
+			expect(incremental).toEqual(full);
+		});
+
+		test("a comment opener closed on the next line", () => {
+			const { incremental, full } = after_edits(`{++a++}{author="{>>x"} after\nmore {++b++} text <<} tail`, [
+				["more", 1],
+				["text", 1],
+			]);
+			expect(full.map(r => r[0])).toEqual([SuggestionType.ADDITION, SuggestionType.ADDITION]);
+			expect(incremental).toEqual(full);
+		});
+
+		test("an addition opener closed on the next line", () => {
+			const { incremental, full } = after_edits(`{++a++}{author="{++x"} after\nmore {++b++} end`, [
+				["after", 1],
+				["more", 1],
+			]);
+			expect(full.map(r => r[0])).toEqual([SuggestionType.ADDITION, SuggestionType.ADDITION]);
+			expect(incremental).toEqual(full);
+		});
+	});
+
 	test("accept and reject replace the whole span, block included", () => {
 		const doc = `a{++b++}{author=A}c{--d--}{author=B}e{~~f~>g~~}{author=C}h`;
 		const ranges = meta(doc);

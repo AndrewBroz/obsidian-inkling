@@ -1,6 +1,6 @@
 import { DocInput } from "@codemirror/language";
 import { EditorState, StateField } from "@codemirror/state";
-import { type Interval, Node } from "@flatten-js/interval-tree";
+import { Node } from "@flatten-js/interval-tree";
 import { type ChangedRange, type Tree, TreeFragment } from "@lezer/common";
 
 import { CommentRange, CriticMarkupRange, CriticMarkupRanges, SuggestionType } from "../ranges";
@@ -94,66 +94,81 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			return start;
 		}
 
+		// EXPL: Invariant. Every range in `dirty` (spans in the new document) is regenerated from the final tree,
+		//       and outside them the tree's ranges are kept as they are. A span grows, and spans merge, until each
+		//       was last regenerated with its current bounds. A span covers:
+		//       - each edit, and every range it touched (removed from the tree): their text changed;
+		//       - the owner of a block the edit made valid (see `newBlockOwnerStart`);
+		//       - every range a regenerated range overlaps: a regenerated range that is not identical to one in the
+		//         tree replaces the ranges it overlaps (a block owner that grew, a range now quoted inside a block),
+		//         and if it overlaps another span, both are regenerated as one. That last rule handles the grammar
+		//         misreading a quoted `{++x"` inside a block as an opener, possibly closed lines later: the misread
+		//         node starts inside the block's owner, which is then in the same span, so the parser meets the
+		//         owner first and skips the node.
+		//       Regenerating from a span's start also re-yields ranges no edit touched (the parser yields the range
+		//       ending at its start, and ranges left stale inside a malformed node); one identical to a range still
+		//       in the tree (compared at its position before this transaction) is skipped, so no two range objects
+		//       share a position. Far-apart edits keep separate spans, so the text between them is not re-parsed.
+		type Span = { from: number; to: number; ranges?: CriticMarkupRange[] };
+		const dirty: Span[] = [];
+		function markDirty(from: number, to: number) {
+			const merged: Span = { from, to };
+			for (let i = dirty.length - 1; i >= 0; i--) {
+				const span = dirty[i];
+				if (span.from <= merged.to && merged.from <= span.to) {
+					if (span.from <= merged.from && merged.to <= span.to) return;
+					merged.from = Math.min(merged.from, span.from);
+					merged.to = Math.max(merged.to, span.to);
+					dirty.splice(i, 1);
+				}
+			}
+			dirty.push(merged);
+		}
+		function invalidate(range: CriticMarkupRange) {
+			value.ranges.tree.remove([range.from, range.to], range);
+			deleted_ranges.add(range);
+			for (const reply of range.base_range.thread)
+				dangling_comments.set(reply.from, reply);
+			markDirty(tr.changes.mapPos(range.from, -1), tr.changes.mapPos(range.to, 1));
+		}
+
 		for (const changed_range of changed_ranges) {
-			// EXPL: Regenerate from the earliest of: the edit, every range it invalidated, and a possible block owner
-			//       (all mapped into the new document), up to the end of the edit or of every range it invalidated: a
-			//       block that stops being valid exposes the ranges quoted inside it, which may lie past the edit.
-			//       Starting earlier re-collects ranges the edit did not touch: the parser is left-inclusive, so it
-			//       yields the left neighbour that ends at an invalidated range's `from`, and ranges left stale
-			//       inside a malformed node are yielded again too. Those are still in the tree, so inserting them
-			//       would put two range objects at one position; a regenerated range identical to one still in the
-			//       tree (at its position before this transaction) is skipped. A regenerated range that differs
-			//       replaces every untouched range it overlaps (a block owner that grew, a range now quoted inside
-			//       its block).
-			let regenerate_from = changed_range.fromB, regenerate_to = changed_range.toB;
-			const invalidate = (range: CriticMarkupRange, key: Interval | [number, number]) => {
-				value.ranges.tree.remove(key, range);
-				deleted_ranges.add(range);
-				for (const reply of range.base_range.thread)
-					dangling_comments.set(reply.from, reply);
-				regenerate_from = Math.min(regenerate_from, tr.changes.mapPos(range.from, -1));
-				regenerate_to = Math.max(regenerate_to, tr.changes.mapPos(range.to, 1));
-			};
-			value.ranges.tree
-				.search([changed_range.fromA, changed_range.toA], (range: CriticMarkupRange, key: Interval) => {
-					invalidate(range, key);
-					return true;
-				});
+			markDirty(changed_range.fromB, changed_range.toB);
+			for (const range of value.ranges.tree.search([changed_range.fromA, changed_range.toA]))
+				invalidate(range);
 			const owner_start = settings.enable_metadata ?
 				newBlockOwnerStart(changed_range.fromA, changed_range.fromB) :
 				undefined;
 			if (owner_start !== undefined)
-				regenerate_from = Math.min(regenerate_from, tr.changes.mapPos(owner_start, -1));
-
-			// EXPL: A replaced range can lie outside the span just regenerated, so regenerate again until the span
-			//       stops growing. The grammar does not know blocks and can misread a quoted `{++x"` inside one as
-			//       an opener, possibly closed lines later. Only the block's owner, met first, makes the parser skip
-			//       that node, but when regeneration starts after the owner the node becomes a range. That range
-			//       overlaps the owner and replaces it, so the next pass starts at the owner and skips the node; each
-			//       pass discards what earlier passes yielded inside its span, or the misread range would survive.
-			let generated: [number, number] | undefined = undefined;
-			while (!generated || regenerate_from < generated[0] || regenerate_to > generated[1]) {
-				generated = [regenerate_from, regenerate_to];
-				for (const from of inserted_set.keys()) {
-					if (generated[0] <= from && from <= generated[1])
-						inserted_set.delete(from);
-				}
-				for (const range of cursorGenerateRanges(tree, text, settings, ...generated)) {
-					const from = to_old.mapPos(range.from, -1), to = to_old.mapPos(range.to, 1);
-					const overlapped = value.ranges.tree.search([from, to]) as CriticMarkupRange[];
-					if (overlapped.some(old => old.from === from && old.to === to && old.type === range.type))
-						continue;
-					for (const old of overlapped) {
-						if (old.from < to && from < old.to)
-							invalidate(old, [old.from, old.to]);
-					}
-					inserted_set.set(range.from, range);
-				}
-			}
+				markDirty(tr.changes.mapPos(owner_start, -1), changed_range.fromB);
 			offsets.push([
 				changed_range.toA,
 				changed_range.toB - changed_range.fromB - (changed_range.toA - changed_range.fromA),
 			]);
+		}
+
+		for (let span = dirty.find(span => !span.ranges); span; span = dirty.find(span => !span.ranges)) {
+			const ranges = cursorGenerateRanges(tree, text, settings, span.from, span.to);
+			span.ranges = [];
+			for (const range of ranges) {
+				const from = to_old.mapPos(range.from, -1), to = to_old.mapPos(range.to, 1);
+				const overlapped = value.ranges.tree.search([from, to]) as CriticMarkupRange[];
+				if (overlapped.some(old => old.from === from && old.to === to && old.type === range.type))
+					continue;
+				span.ranges.push(range);
+				for (const old of overlapped) {
+					if (old.from < to && from < old.to)
+						invalidate(old);
+				}
+				if (dirty.some(other => other !== span && other.from < range.to && range.from < other.to))
+					markDirty(range.from, range.to);
+				// EXPL: The span grew or merged, so it is regenerated again with its new bounds.
+				if (!dirty.includes(span)) break;
+			}
+		}
+		for (const span of dirty) {
+			for (const range of span.ranges!)
+				inserted_set.set(range.from, range);
 		}
 		for (const deleted_range of deleted_ranges) {
 			if (deleted_range.type === SuggestionType.COMMENT)
