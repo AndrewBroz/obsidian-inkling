@@ -12,6 +12,7 @@ import {
 	resolve_action,
 	thread_resolvable,
 	thread_resolved,
+	write_syntax,
 } from "../base";
 
 import { AnnotationInclusionType } from "../../constants";
@@ -84,7 +85,11 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 							.setIcon("lucide-user")
 							.onClick(() => {
 								editor.cm.dispatch(editor.cm.state.update({
-									changes: range.add_metadata("author", plugin.settings.author),
+									changes: range.add_metadata(
+										"author",
+										plugin.settings.author,
+										write_syntax(editor.cm.state.field(pluginSettingsField).metadata_syntax, range),
+									),
 									annotations: [pluginEditAnnotation.of(true)],
 								}));
 							});
@@ -94,7 +99,11 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 							.setIcon("lucide-calendar")
 							.onClick(() => {
 								editor.cm.dispatch(editor.cm.state.update({
-									changes: range.add_metadata("time", Math.round(Date.now() / 1000)),
+									changes: range.add_metadata(
+										"time",
+										Math.round(Date.now() / 1000),
+										write_syntax(editor.cm.state.field(pluginSettingsField).metadata_syntax, range),
+									),
 									annotations: [pluginEditAnnotation.of(true)],
 								}));
 							});
