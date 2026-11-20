@@ -378,6 +378,7 @@ export default class CommentatorPlugin extends Plugin {
 
 	async migrateSettings(new_settings: PluginSettings) {
 		const original_settings = this.settings;
+		let imported = false;
 
 		if (new_settings == null) {
 			// EXPL: One-time import from a pre-rename plugin id ("inkling", then "commentator"),
@@ -386,6 +387,7 @@ export default class CommentatorPlugin extends Plugin {
 			if (legacy) {
 				new_settings = legacy.settings as PluginSettings;
 				this.legacy_import_id = legacy.id;
+				imported = true;
 			}
 		}
 
@@ -404,9 +406,13 @@ export default class CommentatorPlugin extends Plugin {
 		clampEditMode(this.settings);
 		this.previous_settings = Object.assign({}, original_settings, this.settings);
 
+		// EXPL: Every step below that changes what must be persisted sets `save`; settings are written once, at the
+		//       end, rather than once per step.
+		let save = false;
+
 		// EXPL: Do not migrate new installs, immediately save settings
 		if (new_settings === null)
-			await this.setSettings();
+			save = true;
 		else {
 			const old_version = new_settings?.version;
 			// EXPL: Migration code for upgrading to a new version
@@ -452,7 +458,7 @@ export default class CommentatorPlugin extends Plugin {
 					}
 
 					this.settings.version = DEFAULT_SETTINGS.version;
-					await this.setSettings();
+					save = true;
 				}
 			} catch (e) {
 				console.error("Inkling: settings migration failed", e);
@@ -471,18 +477,21 @@ export default class CommentatorPlugin extends Plugin {
 			//       (flag absent from the saved data), so it survives a restart.
 			disableDiffGutterOnce(this.settings, new_settings);
 			if (!("diff_gutter_migrated" in new_settings))
-				await this.setSettings();
+				save = true;
 
 			// EXPL: Same every-load, flag-gated pattern: remove_on_resolve is switched on once for
 			//       existing installs, persisted immediately so a later opt-out sticks.
 			enableRemoveOnResolveOnce(this.settings, new_settings);
 			if (!("remove_on_resolve_migrated" in new_settings))
-				await this.setSettings();
+				save = true;
 		}
 
 		// EXPL: Settings imported from a pre-rename plugin id exist only in memory until saved here;
 		//       the legacy data.json disappears once the old copy is uninstalled (plugin-id.ts).
-		if (this.legacy_import_id)
+		if (imported)
+			save = true;
+
+		if (save)
 			await this.setSettings();
 	}
 

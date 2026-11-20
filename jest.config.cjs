@@ -41,6 +41,8 @@ module.exports = {
 		// which the previous bare "embeddable-editor$" pattern would have
 		// matched.
 		"/embeddable-editor$": "<rootDir>/tests/__mocks__/embeddable-editor.ts",
+		// Svelte components need the svelte compiler; tests that import a module holding them (main.ts) get a stub.
+		"\\.svelte$": "<rootDir>/tests/__mocks__/svelte-component.ts",
 	},
 
 	setupFilesAfterEnv: ["jest-expect-message"],
