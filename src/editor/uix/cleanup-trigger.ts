@@ -106,6 +106,7 @@ function filePath(state: EditorState): string | undefined {
  */
 export class CleanupScheduler {
 	private pending = false;
+	private disposed = false;
 	private last_activity = -Infinity;
 	private timer: number | undefined;
 
@@ -116,12 +117,14 @@ export class CleanupScheduler {
 	}
 
 	request(): void {
+		if (this.disposed) return;
 		this.pending = true;
 		this.last_activity = Math.max(this.last_activity, this.now());
 		this.arm(this.idle_ms);
 	}
 
 	dispose(): void {
+		this.disposed = true;
 		this.pending = false;
 		window.clearTimeout(this.timer);
 		this.timer = undefined;
@@ -171,22 +174,29 @@ export function cleanupTrigger(plugin: CommentatorPlugin): Extension {
 	};
 	plugin.registerEvent(plugin.app.workspace.on("file-open", request));
 	plugin.registerEvent(plugin.app.workspace.on("active-leaf-change", request));
-	// EXPL: The note restored at startup was opened before the plugin loaded.
+	// EXPL: The note restored at startup was opened before the plugin loaded. If the plugin unloads first, the
+	//       disposed scheduler ignores the request.
 	plugin.app.workspace.onLayoutReady(request);
 
-	// EXPL: Inkling's own helpers (the bracket auto-closer) dispatch without a user event while the user types, so a
-	//       change only counts as external once the user has been idle for a while.
-	let last_typing = -Infinity;
+	const route = updateRouter(scheduler, request);
 	return EditorView.updateListener.of(update => {
 		for (const tr of update.transactions) cleanupUndos.observe(update.view, filePath(tr.startState), tr);
-		if (update.transactions.some(isTyping)) {
-			last_typing = Date.now();
-			scheduler.noteTyping();
-		} else if (
-			update.transactions.some(isExternalChange) && Date.now() - last_typing >= IDLE_MS &&
-			update.view === activeEditor(plugin.app)
-		) {
-			request();
-		}
+		route(update.transactions, update.view === activeEditor(plugin.app));
 	});
+}
+
+/**
+ * Routes an editor update's transactions: typing defers a pending run, and an external change to the active editor
+ * requests one.
+ */
+export function updateRouter(
+	scheduler: Pick<CleanupScheduler, "noteTyping">,
+	request: () => void,
+): (transactions: readonly Transaction[], active: boolean) => void {
+	// EXPL: Every Inkling edit carries a user event or `pluginEditAnnotation`, so an unmarked change is external
+	//       even mid-typing. It is requested right away; the scheduler holds the run until the user is idle.
+	return (transactions, active) => {
+		if (transactions.some(isTyping)) scheduler.noteTyping();
+		else if (active && transactions.some(isExternalChange)) request();
+	};
 }

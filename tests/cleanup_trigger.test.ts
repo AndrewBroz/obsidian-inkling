@@ -11,7 +11,9 @@ import {
 	cleanupView,
 	isExternalChange,
 	isTyping,
+	updateRouter,
 } from "../src/editor/uix/cleanup-trigger";
+import { bracketMatcher } from "../src/editor/uix/extensions/bracket-matcher";
 import { suggestionMode } from "../src/editor/uix/extensions";
 import { pluginEditAnnotation } from "../src/editor/uix/extensions/editing-modes";
 import { createRangeState } from "./helpers";
@@ -124,6 +126,42 @@ describe("CleanupScheduler", () => {
 		expect(run).not.toHaveBeenCalled();
 	});
 
+	test("a request after dispose is a no-op", () => {
+		const run = jest.fn();
+		const scheduler = new CleanupScheduler(run);
+		scheduler.dispose();
+		scheduler.request();
+		jest.advanceTimersByTime(5000);
+		expect(run).not.toHaveBeenCalled();
+	});
+
+	test("an external change while the user is typing is rescheduled, not dropped", () => {
+		const run = jest.fn();
+		const scheduler = new CleanupScheduler(run);
+		const route = updateRouter(scheduler, () => scheduler.request());
+		const view = viewOf("hello");
+		const typing = view.state.update({ changes: { from: 0, insert: "x" }, userEvent: "input.type" });
+		const external = view.state.update({ changes: { from: 0, insert: "y" } });
+
+		route([typing], true);
+		jest.advanceTimersByTime(500);
+		route([external], true);
+		jest.advanceTimersByTime(500);
+		route([typing], true);
+		jest.advanceTimersByTime(1999);
+		expect(run).not.toHaveBeenCalled();
+		jest.advanceTimersByTime(1);
+		expect(run).toHaveBeenCalledTimes(1);
+		scheduler.dispose();
+	});
+
+	test("an external change to an inactive editor requests nothing", () => {
+		const request = jest.fn();
+		const route = updateRouter({ noteTyping: () => {} }, request);
+		route([viewOf("hello").state.update({ changes: { from: 0, insert: "y" } })], false);
+		expect(request).not.toHaveBeenCalled();
+	});
+
 	test("repeated requests run once", () => {
 		const run = jest.fn();
 		const scheduler = new CleanupScheduler(run);
@@ -148,6 +186,18 @@ describe("transaction classification", () => {
 		expect(isTyping(state.update({ changes: { from: 0, to: 1 }, annotations: [pluginEditAnnotation.of(true)] })))
 			.toBe(false);
 		expect(isTyping(state.update({ selection: { anchor: 1 }, userEvent: "select" }))).toBe(false);
+	});
+
+	test("the bracket auto-closer's keystroke counts as typing", () => {
+		const view = new EditorView({ state: createRangeState("{+}", { add_metadata: false }, [bracketMatcher]) });
+		const seen = spyTransactions(view);
+		const handled = view.state.facet(EditorView.inputHandler)
+			.some(handler => handler(view, 2, 2, "+", () => view.state.update({ changes: { from: 2, insert: "+" } })));
+		expect(handled).toBe(true);
+		expect(view.state.doc.toString()).toBe("{++++}");
+		expect(seen).toHaveLength(1);
+		expect(isTyping(seen[0])).toBe(true);
+		expect(isExternalChange(seen[0])).toBe(false);
 	});
 
 	test("a doc change with no user event and not ours is external", () => {

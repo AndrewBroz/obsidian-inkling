@@ -14,9 +14,12 @@ export const bracketMatcher = Prec.high(EditorView.inputHandler.of((view, from, 
 			insert: text + bracket.join(""),
 		}];
 
+		// EXPL: It replaces the user's keystroke, so it is typing: without the user event, automatic cleanup would
+		//       read it as an external change (cleanup-trigger.ts).
 		view.dispatch({
 			changes,
 			selection: EditorSelection.cursor(to + 1),
+			userEvent: "input.type",
 		});
 		return true;
 	}
