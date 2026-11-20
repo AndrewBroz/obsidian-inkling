@@ -126,7 +126,8 @@ A range whose fields cannot be converted losslessly stays as it is.
 To clear finished discussions, run **Remove resolved comments in this note**. It asks for confirmation, then deletes
 every resolved comment thread in the note in one step (a single undo restores them). Highlighted text is kept, and
 suggestions are never touched. **Settings, Editor, Remove comments on resolve** makes every Resolve action delete the
-thread instead of marking it done.
+thread instead of marking it done. As of 0.13 this setting is on by default, including for existing installs (it is
+switched on once; turning it off afterwards sticks). Threads resolved earlier can be removed with the command above.
 
 Thread rules for attribute blocks: a highlight takes its author and time from its first comment, so the same fact is
 not written twice. The resolved state (`done`) is written once, on the thread's base.
@@ -142,6 +143,18 @@ in attribute blocks, and the Name setting shows a warning.
 
 Update in this order: first every collaborator's Inkling to 0.13 or later, then any tooling that parses the metadata
 itself (for the CRI build, `config/critic.py`). Only then should anyone change the Metadata format setting.
+
+Also new in 0.13:
+
+- **Fenced code blocks are left alone.** CriticMarkup inside a fenced code block (``` or ~~~, including inside
+  callouts and quotes) is no longer recognised; inline `code` is unchanged. Before updating, accept or reject any
+  pending suggestions or comments inside fenced code blocks. In Suggest mode, typing inside a fenced code block is not
+  tracked, and comments cannot be added inside code blocks.
+- **Broken markup is cleaned up automatically.** Sync tools can leave stray CriticMarkup brackets or orphaned Inkling
+  metadata behind. When a note becomes active, or the open note changes from outside the editor, these are removed.
+  Text is never removed, and one Undo restores the markup. Only the note you are viewing is cleaned, and markup inside
+  fenced code is never touched. Turn it off with **Clean up broken markup automatically** (on by default), or run
+  **Clean up broken markup in this note** yourself.
 
 ## Developing
 
