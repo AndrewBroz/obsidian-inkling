@@ -1,5 +1,5 @@
 import { decodeHTML, DecodingMode } from "entities";
-import { App, type MarkdownPostProcessorContext, MarkdownRenderer, MarkdownView, sanitizeHTMLToDom } from "obsidian";
+import { App, type MarkdownPostProcessorContext, MarkdownView, sanitizeHTMLToDom } from "obsidian";
 
 import type CommentatorPlugin from "../../../main";
 import { PreviewMode } from "../../../types";
@@ -15,7 +15,6 @@ import {
 	thread_resolvable,
 	thread_resolved,
 } from "../../base";
-import { findCodeRegions } from "../../base/edit-util/code-regions";
 import { previewModeState } from "../../settings";
 import { renderCommentWidget } from "../live-preview";
 
@@ -70,36 +69,9 @@ function extractCodeBlocks(decoded: string): { text: string; code_blocks: { from
 	return { text, code_blocks };
 }
 
-/**
- * Splits a rendered code block that ends earlier in Inkling's reading than in Obsidian's: true if it did.
- * EXPL: A fence wrapped in CriticMarkup (`{--```--}`, from deleting the closing fence in Suggest mode) closes its block
- *       in the editor when nothing is left unclosed (see `findCodeRegions`), but Obsidian's renderer does not know it
- *       and runs the block to the end of the note. The block is cut to its content in the editor's reading, and the
- *       rest of the section, from that closing line on, is rendered as Markdown after it, so reading view shows the
- *       same suggestions as the editor.
- */
-async function splitCodeBlock(el: HTMLElement, ctx: MarkdownPostProcessorContext, plugin: CommentatorPlugin) {
-	const code = el.querySelector("pre > code");
-	const info = code && ctx.getSectionInfo(el);
-	if (!code || !info) return false;
-	const section = info.text.split("\n").slice(info.lineStart, info.lineEnd + 1).join("\n");
-	// The section is that block, Obsidian runs it past a closing line carrying markup, and text follows that line.
-	const block = findCodeRegions(section)[0];
-	if (!block || block.inner_to >= section.length || section.lastIndexOf("\n", block.from) !== -1) return false;
-	const tail = section.slice(block.inner_to);
-	const closing_end = tail.indexOf("\n");
-	if (closing_end === -1 || !/[{}]/.test(tail.slice(0, closing_end)) || !tail.slice(closing_end).trim()) return false;
-	code.textContent = section.slice(block.inner_from, block.inner_to).replace(/\r?\n$/, "");
-	const container = document.createElement("div");
-	el.appendChild(container);
-	await MarkdownRenderer.render(plugin.app, tail, container, ctx.sourcePath, plugin);
-	return true;
-}
-
 export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorContext, plugin: CommentatorPlugin) {
 	// EXPL: A code block's contents are code, not markup.
 	if (el.closest("pre")) return;
-	if (ctx && await splitCodeBlock(el, ctx, plugin)) return;
 
 	let ranges_in_range: CriticMarkupRange[] | null = null;
 	let start_char: number | null = null, end_char: number | null = null;

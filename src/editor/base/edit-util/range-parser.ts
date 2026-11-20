@@ -14,7 +14,7 @@ import {
 import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import type { PluginSettings } from "../../../types";
 import { parseAttrBlock, parseLegacyMetadata } from "./attributes";
-import { type CodeRegion, findCodeRegions, inCodeRegion } from "./code-regions";
+import { findCodeRegions, maskCode } from "./code-regions";
 
 function constructRangeFromSyntaxNode(
 	settings: PluginSettings,
@@ -84,8 +84,8 @@ function rangeEnd(range: SyntaxNode, text: string, offset: number): number | und
 
 /**
  * The CriticMarkup ranges in `text` that start in `[start, to]`.
- * @param code Fenced code regions of `text`: a range whose opener lies inside one is code, not markup.
- *   `null` keeps every range the grammar finds.
+ * @param source The text `tree` was parsed from: `text`, or `text` with its fenced code masked (`maskCode`), so that
+ *   no range opens or closes inside code. Range contents are always read from `text`.
  */
 export function cursorGenerateRanges(
 	tree: Tree,
@@ -93,7 +93,7 @@ export function cursorGenerateRanges(
 	settings: PluginSettings,
 	start = 0,
 	to = text.length,
-	code: CodeRegion[] | null = findCodeRegions(text),
+	source = text,
 ) {
 	const ranges: CriticMarkupRange[] = [];
 
@@ -123,19 +123,7 @@ export function cursorGenerateRanges(
 				resume = previous_range.to;
 				break;
 			}
-			const end = rangeEnd(range, text, offset);
-			// EXPL: A node opened inside a fenced code block is code. If it is malformed or ends past the block
-			//       (`{++` in the code, `++}` in later prose), the grammar's output after it cannot be trusted:
-			//       re-parse from the end of the block so the text after it is read as written.
-			const region = code && inCodeRegion(code, range.from + offset);
-			if (region) {
-				const untrusted = end !== range.to + offset || end > region.to;
-				if (untrusted) {
-					resume = region.to;
-					break;
-				}
-				continue;
-			}
+			const end = rangeEnd(range, source, offset);
 			const new_range = end === undefined ?
 				undefined :
 				constructRangeFromSyntaxNode(settings, range, text, offset, end);
@@ -160,40 +148,16 @@ export function cursorGenerateRanges(
 			return ranges;
 		// EXPL: Parse a slice and shift positions by hand: with `ranges` passed to this parser, node positions
 		//       came back relative to the range start rather than absolute.
-		tree = criticmarkupLanguage.parser.parse(text.slice(resume));
+		tree = criticmarkupLanguage.parser.parse(source.slice(resume));
 		offset = resume;
 		start = Math.max(start, resume);
 	}
 }
 
-/**
- * Where a full parse restarts after a node opened inside fenced code that cannot be trusted (it is malformed or ends
- * past the block): the end of that block. Ranges after such a point come from re-parsing the text from there, so they
- * depend on text before an edit far below them (see `cursorGenerateRanges`).
- */
-export function codeResumePoints(tree: Tree, text: string, code: CodeRegion[]): number[] {
-	const points: number[] = [];
-	for (const region of code) {
-		const cursor = tree.cursor();
-		cursor.childAfter(region.from - 1);
-		if (cursor.node.type.name === "CriticMarkup") continue;
-		do {
-			const node = cursor.node;
-			if (node.from >= region.to) break;
-			if (node.from < region.from || node.type.name === "\u26a0") continue;
-			const end = rangeEnd(node, text, 0);
-			if (end !== node.to || end > region.to) {
-				points.push(region.to);
-				break;
-			}
-		} while (cursor.nextSibling());
-	}
-	return points;
-}
-
+/** The ranges in `text`; with `ignore_code`, CriticMarkup inside fenced code is code, not markup. */
 export function getRangesInText(text: string, settings: PluginSettings, ignore_code = true) {
-	const tree = criticmarkupLanguage.parser.parse(text);
-	return cursorGenerateRanges(tree, text, settings, 0, text.length, ignore_code ? findCodeRegions(text) : null);
+	const source = ignore_code ? maskCode(text, findCodeRegions(text)) : text;
+	return cursorGenerateRanges(criticmarkupLanguage.parser.parse(source), text, settings, 0, text.length, source);
 }
 
 export function constructRange(

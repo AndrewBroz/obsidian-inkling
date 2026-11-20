@@ -1,6 +1,6 @@
 import { EditorSelection, EditorState, type Extension, SelectionRange, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { editorEditorField } from "obsidian";
+import { editorEditorField, Notice } from "obsidian";
 import type { VimEditor } from "obsidian-typings";
 import { type PluginSettings } from "../../../../types";
 
@@ -182,7 +182,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				false,
 				settings.metadata_syntax,
 			);
-			if (!edits.length) return undefined;
+			// EXPL: Nothing to do (deleting text already suggested for deletion): the cursor moves over it.
+			if (!edits.length) return { changes: [], cursor: backwards_delete ? editor_change.from : editor_change.to };
 			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
 			return {
 				changes: edits,
@@ -190,45 +191,49 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			};
 		}
 
-		function addition(at: number, text: string): GuardedEdit {
-			const edits = mark_ranges(
-				new CriticMarkupRanges([]),
-				tr.startState.doc,
-				at,
-				at,
-				text,
-				SuggestionType.ADDITION,
-				metadata,
-				false,
-				settings.metadata_syntax,
+		/** Whether no range overlaps `[from, to)` (or, for a position, holds it inside). */
+		const free = (from: number, to: number) =>
+			ranges.ranges_in_interval(from, to).every(r =>
+				from === to ? r.from >= from || r.to <= from : r.from >= to || r.to <= from
 			);
-			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
-			return { changes: edits, cursor: edits[edits.length - 1].end + added_offset };
-		}
 
-		function deletion(from: number, to: number): GuardedEdit {
-			const edits = mark_ranges(
+		/** A range of its own (one change) marking `[from, to)` as deleted or `text` as added there. */
+		const fresh = (from: number, to: number, text: string) =>
+			mark_ranges(
 				new CriticMarkupRanges([]),
 				tr.startState.doc,
 				from,
 				to,
-				"",
-				SuggestionType.DELETION,
+				text,
+				text ? SuggestionType.ADDITION : SuggestionType.DELETION,
 				metadata,
 				false,
 				settings.metadata_syntax,
-			);
-			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
+			)[0];
+
+		function addition(at: number, text: string): GuardedEdit | undefined {
+			if (!free(at, at)) return undefined;
+			const edit = fresh(at, at, text);
+			return { changes: [edit], cursor: edit.end };
+		}
+
+		/** A deletion of its own, with `before` and `after` added inside it around the deleted text. */
+		function deletion(from: number, to: number, before = "", after = ""): GuardedEdit | undefined {
+			if (!free(from, to)) return undefined;
+			const edit = fresh(from, to, "");
+			const start = edit.start - from, end = edit.end - from + before.length;
+			const insert = edit.insert.slice(0, start) + before + edit.insert.slice(start);
+			const wrapped = insert.slice(0, end) + after + insert.slice(end);
 			return {
-				changes: edits,
-				cursor: backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset,
+				changes: [{ from, to, insert: wrapped }],
+				cursor: from + (backwards_delete ? start : end + after.length),
 			};
 		}
 
 		// EXPL: Each change is decided on its own by the fence guard (see fence-guard.ts): tracked in prose, plain in
-		//       code, and never in a way that breaks a fence. A change it refuses leaves its cursor where it was and
-		//       does not affect the other cursors' changes. Positions are in the START document; `offset` carries the
-		//       length change of the earlier changes into each cursor.
+		//       code, and never with markup on a fence line or in code. A change it refuses leaves its cursor where it
+		//       was, does not affect the other cursors' changes, and shows a notice. Positions are in the START
+		//       document; `offset` carries the length change of the earlier changes into each cursor.
 		const edits = guardSuggestions(
 			tr.startState.doc,
 			tr.startState.field(rangeParser).code_regions,
@@ -242,8 +247,13 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					return inside.length === 1 && inside[0].type === SuggestionType.ADDITION &&
 						inside[0].encloses_range(from, to);
 				},
+				rangeEnd: pos => {
+					const range = ranges.ranges_in_interval(pos, pos).find(r => r.closer_to - 3 === pos);
+					return range?.full_range_back;
+				},
 			},
 		);
+		if (edits.includes(null)) new Notice("Inkling: this edit would break a code fence in Suggest mode.");
 		const changes: EditorChange[] = [];
 		const selections: SelectionRange[] = [];
 		let offset = 0;

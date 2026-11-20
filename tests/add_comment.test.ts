@@ -207,13 +207,29 @@ describe("addCommentToView inside fenced code", () => {
 		expect(drafting.state.field(commentDraftField)).toMatchObject({ from: 0, to: 5 });
 	});
 
-	test("a comment at the end of a closing fence is written and parsed as a range", () => {
-		const view = viewWith("```\nx\n```", 9, 9);
+	test.each([
+		["at the end of a closing fence", "```\nx\n```\nafter", 9, 9],
+		["at the start of an opening fence", "intro\n```\nx\n```", 6, 6],
+		["selecting from prose to the end of a closing fence", "intro\n```\nx\n```\nafter", 0, 15],
+	])("a comment %s is refused: its delimiters would sit on a fence line", (_, doc, anchor, head) => {
+		const view = viewWith(doc, anchor, head, []);
+		const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
 		addCommentToView(view, undefined);
 
-		expect(view.state.doc.toString()).toBe("```\nx\n```{>><<}");
+		expect(view.state.doc.toString()).toBe(doc);
+		expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
+		notice.mockRestore();
+	});
+
+	test("a selection covering a whole block from prose to prose is commented", () => {
+		const doc = "intro\n```\nx\n```\nafter";
+		const view = viewWith(doc, 5, 17, []);
+		addCommentToView(view, undefined);
+
+		const text = view.state.doc.toString();
+		expect(text).toBe("intro{==\n```\nx\n```\na==}{>><<}fter");
 		const parsed = view.state.field(rangeParser);
-		expect(parsed.code_regions.map(r => [r.from, r.to])).toEqual([[0, 9]]);
-		expect(parsed.ranges.ranges.map(r => [r.from, r.to])).toEqual([[9, 15]]);
+		expect(parsed.code_regions.map(r => text.slice(r.from, r.to))).toEqual(["```\nx\n```"]);
+		expect(parsed.ranges.ranges).toHaveLength(2);
 	});
 });

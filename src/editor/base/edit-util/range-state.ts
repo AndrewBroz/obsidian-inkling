@@ -1,4 +1,3 @@
-import { DocInput } from "@codemirror/language";
 import { EditorState, StateField } from "@codemirror/state";
 import { Node } from "@flatten-js/interval-tree";
 import { type ChangedRange, type Tree, TreeFragment } from "@lezer/common";
@@ -9,8 +8,8 @@ import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import { fullReloadEffect } from "../../settings";
 import { pluginSettingsField } from "../../uix";
 import { parseAttrBlock } from "./attributes";
-import { type CodeRegion, findCodeRegions, regionsPreserved } from "./code-regions";
-import { codeResumePoints, cursorGenerateRanges } from "./range-parser";
+import { type CodeRegion, findCodeRegions, maskCode, regionsPreserved } from "./code-regions";
+import { cursorGenerateRanges } from "./range-parser";
 
 interface ParserData {
 	tree: Tree;
@@ -18,21 +17,19 @@ interface ParserData {
 	ranges: CriticMarkupRanges;
 	inserted_ranges: CriticMarkupRange[];
 	deleted_ranges: CriticMarkupRange[];
-	/** The document's fenced code regions; ranges opened inside them are not in `ranges`. */
+	/** The document's fenced code regions, masked out before parsing: no range opens or closes in code. */
 	code_regions: CodeRegion[];
-	/** Where the parse restarts after an untrusted node opened in code (see `codeResumePoints`). */
-	code_resume: number[];
 }
 
 export const rangeParser: StateField<ParserData> = StateField.define({
 	create(state) {
 		const text = state.doc.toString();
-		const tree = criticmarkupLanguage.parser.parse(text);
-		const settings = state.field(pluginSettingsField);
 		const code_regions = findCodeRegions(text);
-		const ranges = new CriticMarkupRanges(cursorGenerateRanges(tree, text, settings, 0, text.length, code_regions));
+		const source = maskCode(text, code_regions);
+		const tree = criticmarkupLanguage.parser.parse(source);
+		const settings = state.field(pluginSettingsField);
+		const ranges = new CriticMarkupRanges(cursorGenerateRanges(tree, text, settings, 0, text.length, source));
 		return {
-			code_resume: codeResumePoints(tree, text, code_regions),
 			tree,
 			fragments: TreeFragment.addTree(tree),
 			ranges: ranges,
@@ -64,27 +61,16 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		let fragments = TreeFragment.applyChanges(value.fragments, changed_ranges);
 		// stringify-doc: 0.98 - 8.99 ms
 		const text = tr.state.doc.toString();
-		// EXPL: Only dirty spans are re-parsed, but a fence line opening or closing a code block flips every range
-		//       below it in or out of code, far from the edit. If the old regions do not map onto the new ones through
-		//       the changes (`regionsPreserved`), the state is rebuilt from scratch. Mapping is monotone, so matching
-		//       regions keep every range outside the dirty spans on the same side of every fence; a boundary may only
-		//       move across text inserted at it, which is dirty and re-parsed with the new regions. Edits that
-		//       rebuild: adding, removing or breaking a fence line, an edit that joins one with another line, and
-		//       changing which closer ends a region. An edit inside a region, or outside every region, keeps them.
+		// EXPL: The parser reads the text with fenced code masked, so a fence line opening or closing a block changes
+		//       the masked text far from the edit. Unless the old regions map onto the new ones through the changes
+		//       (`regionsPreserved`), the state is rebuilt. When they map, the masked text differs only in the changed
+		//       spans (a boundary moves only across text inserted at it), so the fragments stay valid.
 		const code_regions = findCodeRegions(text);
 		if (!regionsPreserved(value.code_regions, tr.changes, code_regions))
 			return this.create(tr.state) as ParserData;
+		const source = maskCode(text, code_regions);
 		// parse-doc: 0.68 - 1.24 ms
-		const tree = criticmarkupLanguage.parser.parse(new DocInput(tr.state.doc), fragments);
-		// EXPL: Ranges after an untrusted node opened in code come from re-parsing the text from the end of its block
-		//       on, so an edit anywhere after that point can change ranges before the edit (`{++` in an info string,
-		//       `--}` appended below, pairs with a `{--` in between). Such an edit rebuilds, as does one after a point
-		//       the edit removed.
-		const code_resume = codeResumePoints(tree, text, code_regions);
-		let edit_end = 0;
-		tr.changes.iterChangedRanges((_fromA, _toA, _fromB, toB) => edit_end = Math.max(edit_end, toB));
-		if ([...code_resume, ...value.code_resume.map(p => tr.changes.mapPos(p))].some(p => p <= edit_end))
-			return this.create(tr.state) as ParserData;
+		const tree = criticmarkupLanguage.parser.parse(source, fragments);
 		// apply-fragments: <0.01 ms
 		fragments = TreeFragment.addTree(tree, fragments);
 
@@ -177,7 +163,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		}
 
 		for (let span = dirty.find(span => !span.ranges); span; span = dirty.find(span => !span.ranges)) {
-			const ranges = cursorGenerateRanges(tree, text, settings, span.from, span.to, code_regions);
+			const ranges = cursorGenerateRanges(tree, text, settings, span.from, span.to, source);
 			span.ranges = [];
 			for (const range of ranges) {
 				const from = to_old.mapPos(range.from, -1), to = to_old.mapPos(range.to, 1);
@@ -321,7 +307,6 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			inserted_ranges,
 			deleted_ranges: [...deleted_ranges],
 			code_regions,
-			code_resume,
 		};
 	},
 });

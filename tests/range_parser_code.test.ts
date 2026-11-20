@@ -8,15 +8,17 @@ import { SuggestionType } from "../src/editor/base/ranges";
 import { postProcess } from "../src/editor/renderers/post-process/renderer";
 import { createRangeState } from "./helpers";
 
-// EXPL: CriticMarkup whose opener lies inside a fenced code block is code, not markup. Every parse path goes
-//       through cursorGenerateRanges, so the editor state, reading view, vault index and original-text API agree.
+// EXPL: CriticMarkup inside a fenced code block is code, not markup: the parser reads the text with code masked.
+//       Every parse path goes through cursorGenerateRanges, so the editor state, reading view, vault index and
+//       original-text API agree.
 const spans = (doc: string, ignore_code = true) =>
 	getRangesInText(doc, DEFAULT_SETTINGS, ignore_code).map(range => [range.type, range.from, range.to]);
 
 const IN_FENCE = "a {++x++}\n```\n{++code++}\n```\n{--y--}";
 const OPENER_IN_FENCE = "```\n{++a\n```\nb++} {==h==}";
 const UNCLOSED = "{++x++}\n```\n{++y++}";
-const SUGGESTED_BLOCK = "{++```\nx\n```++} {--d--}";
+const SUGGESTED_BLOCK = "{++\n```\nx\n```\n++} {--d--}";
+const MARKUP_ON_FENCE = "{++```\nx\n```++} {--d--}";
 const INLINE = "`{==h==}`";
 
 describe("parser ignores ranges opened inside fenced code", () => {
@@ -35,11 +37,20 @@ describe("parser ignores ranges opened inside fenced code", () => {
 		expect(spans(UNCLOSED)).toEqual([[SuggestionType.ADDITION, 0, 7]]);
 	});
 
-	test("suggested code block stays a range", () => {
+	test("a suggested code block with its markers on prose lines stays a range", () => {
 		expect(spans(SUGGESTED_BLOCK)).toEqual([
-			[SuggestionType.ADDITION, 0, 15],
-			[SuggestionType.DELETION, 16, 23],
+			[SuggestionType.ADDITION, 0, 17],
+			[SuggestionType.DELETION, 18, 25],
 		]);
+	});
+
+	test("markup on a fence line is not read specially: \"```++}\" opens a block running to the end", () => {
+		expect(spans(MARKUP_ON_FENCE)).toEqual([]);
+	});
+
+	test("a closer inside code does not close a range opened in prose", () => {
+		const doc = "{++a\n```\n++}\n```\nb++}";
+		expect(spans(doc)).toEqual([[SuggestionType.ADDITION, 0, doc.length]]);
 	});
 
 	test("inline code still parsed", () => {
@@ -54,11 +65,14 @@ describe("parser ignores ranges opened inside fenced code", () => {
 		]);
 	});
 
-	test.each([IN_FENCE, OPENER_IN_FENCE, UNCLOSED, SUGGESTED_BLOCK, INLINE])("editor state agrees: %j", doc => {
-		const state = createRangeState(doc);
-		const parsed = state.field(rangeParser).ranges.ranges.map(range => [range.type, range.from, range.to]);
-		expect(parsed).toEqual(spans(doc));
-	});
+	test.each([IN_FENCE, OPENER_IN_FENCE, UNCLOSED, SUGGESTED_BLOCK, MARKUP_ON_FENCE, INLINE])(
+		"editor state agrees: %j",
+		doc => {
+			const state = createRangeState(doc);
+			const parsed = state.field(rangeParser).ranges.ranges.map(range => [range.type, range.from, range.to]);
+			expect(parsed).toEqual(spans(doc));
+		},
+	);
 
 	test("original-text API skips code", () => {
 		const doc = "```\n{++code++}\n```";

@@ -6,7 +6,6 @@ import { Notice } from "obsidian";
 import { CriticMarkupRange, SuggestionType } from "../ranges";
 
 import { rangeParser } from "../edit-util";
-import { inCodeRegion } from "../edit-util/code-regions";
 import { create_anchored_comment, create_range } from "../edit-util/range-create";
 
 import {
@@ -162,19 +161,14 @@ export function comment_selection(state: EditorState): SelectionRange {
 }
 
 /**
- * Whether a new comment must be refused because it would touch a fenced code block.
- * EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so a comment written there would be inert
- *       text spliced into the code. Refused when the selection starts or ends in a fence (an anchor would wrap part
- *       of it), or when the comment would be written in one. The anchored path writes at the selection's end, the
- *       at-cursor path at the snapped head; a comment written there would also break a fence line. Shared with the
- *       comment pill, which hides where commenting is refused.
+ * Whether a new comment must be refused: one of its delimiters (at the selection's ends, or where an at-cursor comment
+ * is written) would land on a fence line or in code. Shared with the comment pill, which hides where it is refused.
  */
 export function comment_refused_in_code(state: EditorState): boolean {
 	const selection = comment_selection(state);
 	const regions = state.field(rangeParser).code_regions;
-	const touched = [selection.from, safe_insert_position(state, selection.head)];
-	if (!selection.empty) touched.push(selection.to - 1, selection.to);
-	return touched.some(pos => inCodeRegion(regions, pos));
+	return [selection.from, selection.to, safe_insert_position(state, selection.head)]
+		.some(pos => regions.some(r => r.from <= pos && pos <= r.to));
 }
 
 // EXPL: CriticMarkup has no escape syntax: `create_range` concatenates brackets around raw text, so

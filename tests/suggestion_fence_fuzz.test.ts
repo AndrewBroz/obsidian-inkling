@@ -1,33 +1,32 @@
 import { ChangeSet, EditorSelection, EditorState, Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
+import * as obsidian from "obsidian";
 import { editorEditorField } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
-import { findCodeRegions, inCodeRegion, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
+import { type CodeRegion, findCodeRegions, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
 import { SuggestionType } from "../src/editor/base/ranges";
 import { suggestionMode } from "../src/editor/uix/extensions";
+import * as fence_guard from "../src/editor/uix/extensions/editing-modes/fence-guard";
+import { editorKeypressCatcher } from "../src/editor/uix/extensions/keypress-catcher";
 import { createRangeState } from "./helpers";
 
-// EXPL: Property test for the suggest-mode fence guard (.superpowers/sdd/2026-11-20-0.13.0-stable/fence-guard-findings.md).
-//       Random documents mixing prose, ranges and fenced blocks of every kind, and random single- and multi-cursor
-//       suggest-mode edits concentrated on and around fence lines. After every edit:
-//       (a) no CriticMarkup opener the edit wrote lies inside a code region (beyond openers the user typed);
-//       (b) the code-region structure changed only if the user's edit deliberately changed it: a deletion covering
-//           fence characters, or a plain edit that itself changes the structure by typing fence characters or
-//           CriticMarkup braces, by editing a CriticMarkup delimiter, by typing into a fence line's info string, by a
-//           plain edit of code content, or by pasting a fence line into a block. A deletion covering fence characters
-//           must keep every block's fence lines; a prose edit may change the structure only as its plain form does;
-//       (c) unless (b)'s exception applies, the edit changes a delimiter or the markup has a stray opener, every range
-//           the edit did not touch still parses;
+// EXPL: Property test for Suggest mode around fenced code (0.13.0 spec, addendum: simplified fence handling). Random
+//       documents mixing prose, ranges and fenced blocks of every kind; random single- and multi-cursor edits, mostly
+//       on and around fence lines. After every edit:
+//       (a) no CriticMarkup delimiter lies on a fence line or in code, unless it was there before, untouched, or the
+//           user's own change put it there plainly (typing literal characters in code);
+//       (b) the block structure changes only if the plain edit changes it; then the result holds exactly the old
+//           blocks (minus those deleted from one's own addition) plus the complete blocks in the inserted text, and
+//           every block the edit did not touch is unchanged;
+//       (c) no range the edit did not touch vanishes;
 //       (d) the incremental rangeParser state equals a full parse;
-//       (e) a non-whitespace edit in prose stays tracked;
-//       (f) typed text is never dropped, and a deletion is refused only as a join of a fence line (counted);
-//       (g) cursors also type into the content of existing ranges.
-//       Seeded (mulberry32), so a failure is reproducible from the printed example. A sequence stops at its first
-//       failure, so the counts are of failing sequences.
+//       (e) a non-whitespace edit in prose that is not refused stays tracked;
+//       (f) no keystroke is dropped unless the edit was refused with a notice, and no notice without a refusal.
+//       Seeded (mulberry32), so a failure is reproducible from the printed example.
 
 // Obsidian global, absent under jest -- test-env artifact only.
 (Math as any).clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -61,41 +60,38 @@ const PARTS = [
 	"a {++abcdef++} b",
 	"x {~~old~>new~~} y",
 	"{==hi==}{>>c<<} z",
+	"intro{++\n```js\nc\n```\n++}",
 ];
 
 const TYPED = ["a", " ", "`", ">", "~", "}", "x"];
-const PASTES = ["x\ny", "\n```\n", "a\n", "\n", "p\n\nq", "Intro\n\n```js\ncode\n```\n\nMore\n", "see\n~~~\n"];
+const PASTES = [
+	"x\ny",
+	"\n```\n",
+	"a\n",
+	"\n",
+	"p\n\nq",
+	"Intro\n\n```js\ncode\n```\n\nMore\n",
+	"see\n~~~\n",
+	"```\nz\n```\n",
+];
 
 const SEQUENCES = 2000;
 const EDITS_PER_SEQUENCE = 6;
+const NOTICE = "Inkling: this edit would break a code fence in Suggest mode.";
 
-const FENCE_LINE = /^( {0,3}(?:> {0,4})*)(\{(?:\+\+|--|==|~~))?(`{3,}|~{3,})/;
-const OPENER = /\{(?:\+\+|--|~~|==|>>)/g;
+const FENCE_LINE = /^( {0,3}(?:> {0,4})*)(`{3,}|~{3,})/;
 const DELIMITER = /\{(?:\+\+|--|~~|==|>>)|(?:\+\+|--|~~|==|<<)\}|~>/g;
+const FENCE_TEXT = /(^|\n)[ >]*(```|~~~)/;
 
 function suggestView(doc: string): EditorView {
 	return new EditorView({
 		state: createRangeState(doc, { add_metadata: false }, [
 			editorEditorField,
+			editorKeypressCatcher,
 			EditorState.allowMultipleSelections.of(true),
 			suggestionMode({ ...DEFAULT_SETTINGS, add_metadata: false }),
 		]),
 	});
-}
-
-/** Fence markers (the run of backticks or tildes) of every fence-shaped line, as [from, to, line end). */
-function fenceMarkers(text: string): [number, number, number][] {
-	const markers: [number, number, number][] = [];
-	let pos = 0;
-	for (const line of text.split("\n")) {
-		const m = FENCE_LINE.exec(line);
-		if (m) {
-			const start = pos + m[1].length + (m[2]?.length ?? 0);
-			markers.push([start, start + m[3].length, pos + line.length]);
-		}
-		pos += line.length + 1;
-	}
-	return markers;
 }
 
 type Change = { from: number; to: number; insert: string };
@@ -109,14 +105,21 @@ function staleState(state: EditorState): boolean {
 		JSON.stringify(field.code_regions) !== JSON.stringify(findCodeRegions(text));
 }
 
-describe("fuzz: suggest-mode edits never break fenced code", () => {
+/** Whether `pos` is on a fence line or in code (a region with its line bounds, both ends included). */
+const inCode = (regions: CodeRegion[], pos: number) => regions.some(r => r.from <= pos && pos <= r.to);
+const delimiters = (text: string) => [...text.matchAll(DELIMITER)].map(m => ({ at: m.index!, text: m[0] }));
+const count = (text: string, part: string) => text.split(part).length - 1;
+
+describe("fuzz: suggest-mode edits never put markup on a fence line or in code", () => {
 	test(`${SEQUENCES} random documents x ${EDITS_PER_SEQUENCE} edits`, () => {
-		const rng = mulberry32(0xFE11CE);
+		const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
+		// The guard's decision per change (null: refused), to tell which change a notice is for.
+		const guard = jest.spyOn(fence_guard, "guardSuggestions");
+		const rng = mulberry32(Number(process.env.FUZZ_SEED ?? 0xFE11CE));
 		const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
 		const failures: Record<string, number> = { a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, throws: 0 };
-		let join_refusals = 0, fence_refusals = 0, in_markup_failures = 0, n5_failures = 0;
 		const examples: string[] = [];
-		let edits_run = 0, multi_cursor = 0, near_fence = 0, structure_changes = 0, refused = 0;
+		let edits_run = 0, multi_cursor = 0, near_fence = 0, structure_changes = 0, refused = 0, plain_in_code = 0;
 
 		for (let seq = 0; seq < SEQUENCES; seq++) {
 			const n = 3 + Math.floor(rng() * 5);
@@ -137,7 +140,7 @@ describe("fuzz: suggest-mode edits never break fenced code", () => {
 				const len = before.length;
 
 				// Positions on and around fence lines: line start, after the prefix, line end, the previous line's end
-				// and the next line's start.
+				// and the next line's start; and inside ranges' content, where cursors type into existing suggestions.
 				const hot: number[] = [];
 				let pos = 0;
 				for (const line of before.split("\n")) {
@@ -145,7 +148,6 @@ describe("fuzz: suggest-mode edits never break fenced code", () => {
 					if (m) hot.push(pos - 1, pos, pos + m[1].length, pos + line.length, pos + line.length + 1);
 					pos += line.length + 1;
 				}
-				// (g): positions inside a range's content, where cursors type into existing suggestions.
 				const inside = before_ranges.filter(r => r.to - r.from > 6);
 				const position = () => {
 					if (inside.length && rng() < 0.2) {
@@ -191,51 +193,41 @@ describe("fuzz: suggest-mode edits never break fenced code", () => {
 				}
 				changes.sort((x, y) => x.from - y.from);
 				const disjoint = changes.filter((c, i) => i === 0 || changes[i - 1].to < c.from);
-				if (!disjoint.length) continue;
+				// A change splitting a CRLF line break is not something an editor produces.
+				if (
+					!disjoint.length ||
+					disjoint.some(c => /\r$/.test(before.slice(0, c.from)) || /\r$/.test(before.slice(0, c.to)))
+				) {
+					continue;
+				}
 				log.push([kind, disjoint]);
 				edits_run++;
 				if (disjoint.length > 1) multi_cursor++;
 				if (disjoint.some(c => hot.some(h => Math.abs(h - c.from) <= 1 || Math.abs(h - c.to) <= 1))) near_fence++;
 
-				// A fence line inside a pending suggestion (or carrying markup) when the edit touches that suggestion.
-				const fence_in_markup = fenceMarkers(before).some(([s, , end]) =>
-					before_ranges.some(r =>
-						r.from <= end && s < r.to && disjoint.some(c => c.from <= r.to + 1 && r.from - 1 <= c.to)
-					)
-				);
-				// N5 makes a fence line carrying markup a closing fence only if that leaves nothing unclosed, so in a
-				// document holding one, or a block left open, a tracked edit and its plain form can pair the fences
-				// differently.
-				const n5_context = fenceMarkers(before).some(([s, , end]) => /[{}]/.test(before.slice(s - 3, end))) ||
-					(before_regions.length > 0 && before_regions[before_regions.length - 1].inner_to >= len);
 				let failed = false;
-				const after_text = () => view.state.doc.toString();
 				const fail = (kind: string, detail = "") => {
 					if (failed) return;
 					failed = true;
-					// Residual classes, counted and printed but not failed: see the report's concerns.
-					if (kind !== "a" && kind !== "d" && kind !== "throws" && (fence_in_markup || n5_context)) {
-						if (fence_in_markup) in_markup_failures++;
-						else n5_failures++;
-						return;
-					}
 					failures[kind]++;
 					if (
 						examples.length < (process.env.FUZZ_KIND ? 30 : 8) &&
-						(!process.env.FUZZ_KIND || process.env.FUZZ_KIND === kind) && !(process.env.FUZZ_PLAIN && fence_in_markup)
+						(!process.env.FUZZ_KIND || process.env.FUZZ_KIND === kind)
 					) {
 						examples.push(
-							`(${kind}) ${detail} doc=${JSON.stringify(doc)} edits=${JSON.stringify(log)}` +
-								(process.env.FUZZ_KIND ?
-									`\n    before=${JSON.stringify(before)}\n    after=${JSON.stringify(after_text())}` :
-									""),
+							`(${kind}) ${detail}\n    doc=${JSON.stringify(doc)} edits=${JSON.stringify(log)}` +
+								`\n    before=${JSON.stringify(before)}\n    after=${JSON.stringify(view.state.doc.toString())}`,
 						);
 					}
 				};
 
+				const notices_before = notice.mock.calls.filter(call => call[0] === NOTICE).length;
+				guard.mockClear();
 				let tr;
 				try {
-					// The cursors (or selections) the edit starts from, as an editor would have them.
+					// The key behind the edit, as the editor sees it (Backspace and Delete delete in different directions).
+					const key = kind === 2 ? "Backspace" : kind === 3 ? "Delete" : kind === 1 ? "Enter" : "a";
+					view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 					view.dispatch({
 						selection: EditorSelection.create(
 							disjoint.map(c =>
@@ -266,203 +258,252 @@ describe("fuzz: suggest-mode edits never break fenced code", () => {
 					fail("throws", String(error));
 					break;
 				}
-				if (!tr.docChanged) refused++;
+				const was_refused = notice.mock.calls.filter(call => call[0] === NOTICE).length > notices_before;
+				if (was_refused) refused++;
+				const decisions = (guard.mock.results.at(-1)?.value ?? []) as unknown[];
+				const refused_changes = disjoint.filter((_, i) => decisions[i] === null);
+				const accepted = disjoint.filter(c => !refused_changes.includes(c));
+				if (process.env.FUZZ_REFUSALS && disjoint.length === 1 && refused_changes.length) {
+					console.log(
+						"REFUSED " + kind + " " +
+							JSON.stringify(
+								before.slice(Math.max(0, disjoint[0].from - 12), disjoint[0].from) + "|" +
+									before.slice(disjoint[0].from, disjoint[0].to) + "|" +
+									before.slice(disjoint[0].to, disjoint[0].to + 12),
+							) + " ins=" + JSON.stringify(disjoint[0].insert),
+					);
+				}
 
 				const after = view.state.doc.toString();
 				const after_regions = view.state.field(rangeParser).code_regions;
-				const plain_changes = ChangeSet.of(disjoint, len);
+				const after_ranges = view.state.field(rangeParser).ranges.ranges;
+				const plain_changes = ChangeSet.of(accepted, len);
 				const plain = plain_changes.apply(Text.of(before.split("\n"))).toString();
 				const plain_regions = findCodeRegions(plain);
+				const applied: { fromA: number; toA: number; fromB: number; toB: number; text: string }[] = [];
+				tr.changes.iterChanges((fromA, toA, fromB, toB, text) =>
+					applied.push({ fromA, toA, fromB, toB, text: text.toString() })
+				);
+				// A user change applied exactly as typed.
+				const as_typed = (c: Change) => applied.some(x => x.fromA === c.from && x.toA === c.to && x.text === c.insert);
+				const block_line = (c: Change) => before_regions.some(r => r.from <= c.to && c.from <= r.to);
 
 				// (d)
 				if (staleState(view.state)) fail("d");
 
-				// Editing a CriticMarkup delimiter itself (inside it, or deleting part of it) changes what the markup
-				// means, which can change which line closes a block.
-				const delimiters = [...before.matchAll(DELIMITER)].map(m => [m.index!, m.index! + m[0].length]);
-				const edits_markup = disjoint.some(c =>
-					delimiters.some(([s, t]) => c.from === c.to ? s < c.from && c.from < t : c.from < t && s < c.to)
-				);
-				// (a): openers the edit wrote, beyond those the user typed, that lie in code.
-				let written_in_code = 0;
-				// An opener overlapping a changed span was written (a change may keep an opener's `{` and rewrite the rest).
-				tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
-					for (const m of after.slice(Math.max(0, fromB - 2), toB + 2).matchAll(OPENER)) {
-						const at = Math.max(0, fromB - 2) + m.index!;
-						if (at < toB && at + 3 > fromB && inCodeRegion(after_regions, at)) written_in_code++;
-					}
-				});
-				const typed_openers = disjoint.reduce((n, c) => n + (c.insert.match(OPENER)?.length ?? 0), 0);
-				if (written_in_code > typed_openers && !edits_markup) fail("a", JSON.stringify(after));
-
-				const line_end = (pos: number) => (before.indexOf("\n", pos) + 1 || len + 1) - 1;
-				const touches_block = (c: Change) =>
-					before_regions.some(r =>
-						before.lastIndexOf("\n", r.from - 1) + 1 <= c.to &&
-						c.from <= (r.inner_to < len ? line_end(r.inner_to) : r.to) + 1
+				// (a)
+				for (const { at, text } of delimiters(after)) {
+					if (!inCode(after_regions, at)) continue;
+					const back = tr.changes.invertedDesc.mapPos(at);
+					const untouched = !tr.changes.touchesRange(back, back + text.length);
+					const was_in_code = before.startsWith(text, back) && inCode(before_regions, back);
+					// Typed plainly: inside (or right next to) a change applied exactly as the user made it.
+					const typed = applied.some(x =>
+						x.fromB <= at + text.length && at <= x.toB && disjoint.some(c => c.insert === x.text && as_typed(c))
 					);
+					// In a block that is unchanged (an edit around it, such as a tracked deletion, may have moved it).
+					const block = after_regions.find(r => r.from <= at && at <= r.to)!;
+					const kept_block = before_regions.some(r => before.slice(r.from, r.to) === after.slice(block.from, block.to));
+					if (!(untouched && was_in_code) && !typed && !kept_block) {
+						fail("a", `${JSON.stringify(text)} at ${at}`);
+						break;
+					}
+				}
+
+				// Changes whose windows (W around each) overlap are checked together: text may move a little (next to a
+				// fence), so a typed character is looked for in the whole cluster's window.
+				const W = 60;
+				const clusters: Change[][] = [];
+				for (const c of disjoint) {
+					const last = clusters.at(-1);
+					if (last && last.at(-1)!.to + 2 * W >= c.from) last.push(c);
+					else clusters.push([c]);
+				}
+				// Whether a cluster's deletions left text visible (counted per character in the cluster's window, so an
+				// equivalent deletion shifted by a character, or one widened to whole blocks, counts as applied). Visible
+				// text is what accepting would keep: not delimiters, deleted text or comments. A deleted character that is
+				// already deleted (deleting it again does nothing), a delimiter or inside a comment (the cursor steps over
+				// markup and comments), or a line break next to a fence line or a fence line's prefix (kept so markers stay
+				// on prose lines) is not expected to go.
+				const fence_breaks = new Set(before_regions.flatMap(r => [r.from - 1, r.open_to, r.close_from - 1, r.to]));
+				for (const r of before_regions) {
+					for (const at of r.close_from < r.to ? [r.from, r.close_from] : [r.from]) {
+						const prefix = /^[ >]*/.exec(before.slice(at, before.indexOf("\n", at) + 1 || len))![0].length;
+						for (let k = 0; k < prefix; k++) fence_breaks.add(at + k);
+					}
+				}
+				const hidden = (text: string, ranges: { from: number; to: number; type: SuggestionType }[]) => {
+					const at = new Set<number>(delimiters(text).flatMap(d => [...d.text].map((_, k) => d.at + k)));
+					for (const r of ranges) {
+						const middle = text.indexOf("~>", r.from + 3);
+						const end = r.type === SuggestionType.SUBSTITUTION ?
+							middle :
+							r.type === SuggestionType.DELETION || r.type === SuggestionType.COMMENT ?
+							r.to :
+							r.from;
+						for (let k = r.from; k < end; k++) at.add(k);
+					}
+					return at;
+				};
+				const hidden_before = hidden(before, before_ranges), hidden_after = hidden(after, after_ranges);
+				const visible = (text: string, from: number, to: number, skip: Set<number>) =>
+					[...text.slice(from, to)].filter((_, k) => !skip.has(from + k)).join("");
+				const left_visible = (cluster: Change[]) => {
+					const lo = Math.max(0, cluster[0].from - W), hi = Math.min(len, cluster.at(-1)!.to + W);
+					const window_before = visible(before, lo, hi, hidden_before);
+					const window_after = visible(after, tr.changes.mapPos(lo, -1), tr.changes.mapPos(hi, 1), hidden_after);
+					const typed = cluster.map(c => c.insert).join("");
+					const deleted = cluster.filter(c => !c.insert && !refused_changes.includes(c))
+						.flatMap(c =>
+							[...before.slice(c.from, c.to)].filter((_, i) =>
+								!hidden_before.has(c.from + i) && !fence_breaks.has(c.from + i)
+							)
+						)
+						.join("");
+					return [...new Set(deleted)].some(ch =>
+						count(window_before, ch) + count(typed, ch) - count(window_after, ch) < count(deleted, ch)
+					);
+				};
+				// Whether a cluster lost a typed character. Counted in the text without the ranges' delimiters: an edit only
+				// adds or rewrites those. A change into a block inside an addition may remove that whole block (one's own
+				// suggested text), so it is not counted.
+				const delimiter_positions = (text: string, ranges: { from: number; to: number; type: SuggestionType }[]) => {
+					const at = new Set<number>();
+					for (const r of ranges) {
+						for (const k of [0, 1, 2]) at.add(r.from + k).add(r.to - 1 - k);
+						const middle = text.indexOf("~>", r.from + 3);
+						if (r.type === SuggestionType.SUBSTITUTION && middle !== -1 && middle < r.to - 3)
+							at.add(middle).add(middle + 1);
+					}
+					return at;
+				};
+				const before_delimiters = delimiter_positions(before, before_ranges);
+				const after_delimiters = delimiter_positions(after, after_ranges);
+				const text_of = (text: string, from: number, to: number, skip: Set<number>) =>
+					[...text.slice(from, to)].filter((_, k) => !skip.has(from + k)).join("");
+				const own_blocks = before_regions.filter(r =>
+					before_ranges.some(range => range.type === SuggestionType.ADDITION && range.from < r.from && r.to < range.to)
+				);
+				const lost = (cluster: Change[]) => {
+					if (cluster.some(c => own_blocks.some(r => c.from <= r.to && r.from <= c.to))) return false;
+					const lo = Math.max(0, cluster[0].from - W), hi = Math.min(len, cluster.at(-1)!.to + W);
+					const window_before = text_of(before, lo, hi, before_delimiters);
+					const window_after = text_of(after, tr.changes.mapPos(lo, -1), tr.changes.mapPos(hi, 1), after_delimiters);
+					const typed = cluster.map(c => c.insert).join("");
+					return [...new Set(typed)].some(ch => {
+						const expected = count(window_before, ch) + count(typed, ch) -
+							cluster.reduce((n, c) => n + count(text_of(before, c.from, c.to, before_delimiters), ch), 0);
+						return count(window_after, ch) < expected;
+					});
+				};
+				// (f)
+				for (const cluster of clusters) {
+					const applied_only = cluster.every(c => !refused_changes.includes(c));
+					if ((applied_only && lost(cluster)) || left_visible(cluster))
+						fail("f", "dropped a change that was not refused");
+				}
+				if (was_refused !== refused_changes.length > 0)
+					fail("f", `notice ${was_refused}, refused ${refused_changes.length}`);
 
 				// (b)
 				const changed = !regionsPreserved(before_regions, tr.changes, after_regions);
 				const plain_changed = !regionsPreserved(before_regions, plain_changes, plain_regions);
-				const markers = fenceMarkers(before);
-				const covers_fence = disjoint.some(c => c.from < c.to && markers.some(([s, t]) => c.from < t && s < c.to));
-				// Editing code content (between a block's fence lines) can turn a code line into a fence line; nothing
-				// but the plain edit is right there ((a) checks no markup is written there).
-				const in_content = disjoint.some(c => before_regions.some(r => r.inner_from <= c.from && c.to < r.inner_to));
-				// A deletion covering fence characters keeps every block's fence lines (it is tracked, wrapping the whole
-				// fence); where a closing line ends may move. Other structure changes are the user's plain edit: typing a
-				// single fence character, editing a delimiter or code content, or typing inside a fence line's marker
-				// or info string. A paste containing a fence is not exempt: its tracked form keeps the plain structure.
-				// Removing a fence inside one's own addition removes suggested text outright.
-				const own_text = disjoint.some(c =>
-					before_ranges.some(r => r.type === SuggestionType.ADDITION && r.from < c.from && c.to < r.to)
-				);
-				// Pasting text containing a fence line into a block (its content or a fence line) changes it on purpose.
-				const pastes_fence = disjoint.some(c => touches_block(c) && /(^|\n)[ >]*(```|~~~)/.test(c.insert));
-				const deliberate = covers_fence ||
-					(plain_changed && (edits_markup || in_content || pastes_fence || own_text)) ||
-					(plain_changed && disjoint.some(c =>
-						c.from === c.to && (
-							(c.insert.length === 1 && /[`~]/.test(c.insert)) ||
-							markers.some(([, t, end]) => t <= c.from && c.to <= end)
-						)
-					));
-				const other_deliberate = plain_changed && (edits_markup || in_content || pastes_fence || own_text ||
-					disjoint.some(c => c.from === c.to && c.insert.length === 1 && /[`~]/.test(c.insert)));
-				// A fence wrapped in a deletion closes its block only if no fence is left unclosed (N5): with a block
-				// left open at the end, a selection deleting fences may change the structure.
-				const open_at_end = [before_regions, after_regions].some(regions =>
-					regions.length > 0 &&
-					regions[regions.length - 1].inner_to >= (regions === before_regions ? len : after.length)
-				);
-				const keystroke = disjoint.every(c => c.to - c.from <= 1 && !c.insert);
-				if (
-					covers_fence && !other_deliberate && (keystroke || !open_at_end) &&
-					!regionsPreserved(before_regions, tr.changes, after_regions, false)
-				) {
-					fail("b", "fence deletion broke a block: " + JSON.stringify(after));
-				}
-				// A prose edit whose plain form changes the structure (pasting a code block) is tracked with the same blocks.
-				const lines_of = (text: string, regions: typeof after_regions) => {
-					const line = (pos: number) => text.slice(0, pos).split("\n").length;
-					return text.split("\n").length + ":" +
-						regions.map(r => line(r.from) + "-" + (r.inner_to < text.length ? line(r.inner_to) : "")).join(",");
-				};
-				const in_block_content = (c: Change) => before_regions.some(r => r.inner_from <= c.from && c.to < r.inner_to);
-				// With several cursors, a prose paste holding a fence line changes the structure as its plain form does,
-				// while another cursor's change is placed by the guard, so their results are not comparable as a whole.
-				const as_plain = (!disjoint.some(c => touches_block(c) && !in_block_content(c)) &&
-					lines_of(after, after_regions) === lines_of(plain, plain_regions)) ||
-					(disjoint.length > 1 && disjoint.some(c => !touches_block(c) && /(^|\n)[ >]*(```|~~~)/.test(c.insert)));
 				if (changed) structure_changes++;
-				if (changed && !deliberate && !as_plain) fail("b", JSON.stringify(after));
+				if (changed && !plain_changed) fail("b", "structure changed, though the plain edit keeps it");
+				const block_text = (text: string) => (r: CodeRegion) => text.slice(r.from, r.to);
+				const after_blocks = after_regions.map(block_text(after));
+				if (plain_changed) {
+					// The complete blocks in the text the changes insert.
+					// Text inserted in code (a block's content, or above its closing fence) is code, not blocks; text typed in
+					// an opening fence line's prefix or fence characters goes above it, and text after a closing one below.
+					const in_code = (c: Change) =>
+						before_regions.some(r =>
+							r.from + /^[ >]*[`~]+/.exec(before.slice(r.from, r.to))![0].length <= c.from && c.to <= r.to &&
+							!(c.from === r.to && r.close_from < r.to)
+						);
+					const inserted_blocks = accepted.filter(c => !in_code(c)).flatMap(c =>
+						findCodeRegions(c.insert).filter(r => r.close_from < r.to).map(block_text(c.insert))
+					);
+					// Blocks deleted from one's own addition go outright.
+					const own = before_regions.filter(r =>
+						before_ranges.some(range =>
+							range.type === SuggestionType.ADDITION && range.from < r.from && r.to < range.to
+						) &&
+						accepted.some(c => c.from < r.to && r.from < c.to)
+					);
+					const most = before_regions.length + inserted_blocks.length, least = most - own.length;
+					if (after_regions.length < least || after_regions.length > most)
+						fail("b", `${after_regions.length} blocks, expected ${least}-${most}`);
+				}
+				// Every block no change touched is unchanged.
+				for (const r of before_regions) {
+					if (tr.changes.touchesRange(r.from, r.to)) continue;
+					if (!after_blocks.includes(before.slice(r.from, r.to))) fail("b", "untouched block changed");
+				}
 
-				// (c): the spans the user's edit and the applied edit touched (a tracked deletion may merge a neighbour).
+				// (c)
 				const touched: [number, number][] = disjoint.map(c => [c.from, c.to]);
 				tr.changes.iterChangedRanges((fromA, toA) => touched.push([fromA, toA]));
-				// A stray opener (left by an earlier edit that broke a delimiter) pairs with whatever closer comes next,
-				// fences or not, so (c) only holds for well-formed markup.
-				const stray = [...before.matchAll(OPENER)].filter(m => !inCodeRegion(before_regions, m.index!)).length !==
-					before_ranges.length;
-				if (!deliberate && !edits_markup && !stray && !(changed && as_plain)) {
-					const after_texts = view.state.field(rangeParser).ranges.ranges.map(r => after.slice(r.from, r.to));
-					for (const range of before_ranges) {
-						if (touched.some(([from, to]) => range.from <= to + 1 && from - 1 <= range.to)) continue;
-						const text = before.slice(range.from, range.to);
-						const i = after_texts.indexOf(text);
-						if (i === -1) {
-							fail("c", `${JSON.stringify(text)} in ${JSON.stringify(after)}`);
-							break;
-						}
-						after_texts.splice(i, 1);
+				const after_texts = after_ranges.map(r => after.slice(r.from, r.to));
+				for (const range of before_ranges) {
+					if (touched.some(([from, to]) => range.from <= to + 1 && from - 1 <= range.to)) continue;
+					const text = before.slice(range.from, range.to);
+					const i = after_texts.indexOf(text);
+					if (i === -1) {
+						fail("c", `${JSON.stringify(text)} vanished`);
+						break;
 					}
+					after_texts.splice(i, 1);
 				}
 
-				const after_ranges = view.state.field(rangeParser).ranges.ranges;
-				const W = 60;
-				const window_after = (c: Change) =>
-					after.slice(
-						Math.max(0, tr.changes.mapPos(Math.max(0, c.from - W), -1)),
-						tr.changes.mapPos(Math.min(len, c.to + W), 1),
-					);
-				const window_before = (c: Change) => before.slice(Math.max(0, c.from - W), Math.min(len, c.to + W));
-				const count = (text: string, part: string) => {
-					let n = 0;
-					for (let k = part ? text.indexOf(part) : -1; k !== -1; k = text.indexOf(part, k + 1)) n++;
-					return n;
-				};
-				// Inside an existing suggestion, mark_ranges decides (own text is edited outright, text typed into a
-				// deletion joins it): outside this guard's checks.
-				const in_suggestion = (c: Change) =>
-					before_ranges.some(r =>
-						r.type !== SuggestionType.COMMENT && r.type !== SuggestionType.HIGHLIGHT && r.from < c.from &&
-						c.to < r.to
-					);
+				const in_range = (c: Change, types: SuggestionType[]) =>
+					before_ranges.some(r => types.includes(r.type) && r.from < c.from && c.to < r.to);
+				// (e)
 				for (const c of disjoint) {
 					const deleted = before.slice(c.from, c.to);
-					// (f): typed text is never dropped; a deletion is refused only as a join of a fence line.
-					if (c.insert && !in_suggestion(c) && after !== plain && !stray) {
-						// Each character typed is still there (markup only adds characters; the text may have moved
-						// to a new line next to a fence).
-						for (const ch of new Set(c.insert.replace(/\s/g, ""))) {
-							const expected = count(window_before(c), ch) - count(deleted, ch) + count(c.insert, ch);
-							if (count(window_after(c), ch) < expected) fail("f", "dropped " + JSON.stringify(c));
-						}
-					} else if (
-						(touches_block(c) || covers_fence) &&
-						!tr.changes.touchesRange(Math.max(0, c.from - 8), Math.min(len, c.to + 8)) && !edits_markup &&
-						!in_suggestion(c) &&
-						// Deleting text already suggested for deletion does nothing.
-						!before_ranges.some(r => r.type === SuggestionType.DELETION && r.from < c.from && c.to < r.to)
-					) {
-						if (/^[\s>]*$/.test(deleted) && deleted.includes("\n") && touches_block(c)) join_refusals++;
-						// A deletion covering fence characters with no tracked form that keeps its markup out of code.
-						else if (covers_fence && !written_in_code) fence_refusals++;
-						else fail("f", "refused " + JSON.stringify(c) + " " + JSON.stringify(after));
-					}
-					// (e): a non-whitespace edit in prose stays tracked.
-					// Comments are edited verbatim; Backspace in a highlight is not tracked (both outside this guard).
-					const in_comment = before_ranges.some(r =>
-						(r.type === SuggestionType.COMMENT || r.type === SuggestionType.HIGHLIGHT) && r.from <= c.to &&
-						c.from <= r.to
-					);
-					const near_range = before_ranges.some(r =>
-						Math.abs(r.from - c.from) < 4 || Math.abs(r.to - c.to) < 4 ||
-						Math.abs(r.from - c.to) < 4 || Math.abs(r.to - c.from) < 4
-					);
-					const types_fence = c.insert.length === 1 && /[`~]/.test(c.insert);
+					if (!/\S/.test(c.insert + deleted) || block_line(c) || FENCE_TEXT.test(c.insert) || was_refused) continue;
+					// mark_ranges' own rules: a comment is edited verbatim, own text is removed outright, deleting deleted
+					// text does nothing, and a change at or across a delimiter snaps to the range.
 					if (
-						!/\S/.test(c.insert + deleted) || touches_block(c) || in_comment || edits_markup || types_fence ||
-						in_suggestion(c) ||
-						(changed && disjoint.length > 1) || near_range
-					) { continue; }
-					const lo = Math.max(0, tr.changes.mapPos(c.from, -1) - 3), hi = tr.changes.mapPos(c.to, 1) + 3;
-					const tracked_types = c.insert ?
+						before_ranges.some(r => r.type === SuggestionType.COMMENT && r.from <= c.to && c.from <= r.to) ||
+						(!c.insert &&
+							in_range(c, [SuggestionType.ADDITION, SuggestionType.DELETION, SuggestionType.SUBSTITUTION])) ||
+						delimiters(before).some(d => c.from <= d.at + d.text.length && d.at <= c.to)
+					) {
+						continue;
+					}
+					// mark_ranges may place text typed inside a range beside it, or into a range next to that one.
+					const inside = before_ranges.find(r => r.from < c.from && c.to < r.to);
+					const next_to = before_ranges.filter(r => inside && (r.to === inside.from || r.from === inside.to));
+					const around = inside ?
+						{
+							from: Math.min(inside.from, ...next_to.map(r => r.from)),
+							to: Math.max(inside.to, ...next_to.map(r => r.to)),
+						} :
+						{ from: c.from, to: c.to };
+					const lo = Math.max(0, tr.changes.mapPos(around.from, -1) - 3), hi = tr.changes.mapPos(around.to, 1) + 3;
+					const types = c.insert ?
 						[SuggestionType.ADDITION, SuggestionType.SUBSTITUTION] :
 						[SuggestionType.DELETION, SuggestionType.SUBSTITUTION];
-					const part = c.insert ? c.insert.replace(/\n/g, "") ? c.insert : "" : deleted;
+					const part = c.insert || deleted;
 					let tracked = false;
-					for (let k = after.indexOf(part, lo); k !== -1 && k <= hi; k = after.indexOf(part, k + 1)) {
-						if (after_ranges.some(r => tracked_types.includes(r.type) && r.from < k && k + part.length <= r.to))
-							tracked = true;
-					}
-					// Removing text from one's own addition is not a suggestion.
-					const own = !c.insert &&
-						before_ranges.some(r => r.type === SuggestionType.ADDITION && r.from + 3 <= c.from && c.to <= r.to - 3);
-					if (!tracked && !own) fail("e", "untracked " + JSON.stringify(c) + " -> " + JSON.stringify(after));
+					for (let k = after.indexOf(part, lo); k !== -1 && k <= hi; k = after.indexOf(part, k + 1))
+						if (after_ranges.some(r => types.includes(r.type) && r.from < k && k + part.length <= r.to)) tracked = true;
+					if (!tracked) fail("e", "untracked " + JSON.stringify(c));
 				}
+				if (disjoint.some(c => as_typed(c) && block_line(c))) plain_in_code++;
+
 				// Later edits would start from a broken document; each sequence counts its first failure only.
 				if (failed) break;
 			}
 		}
+		notice.mockRestore();
+		guard.mockRestore();
 
 		console.log(
-			`fence fuzz checks: ${join_refusals} join refusals (option 4), ${fence_refusals} fence-deletion refusals (option 6); residual (not failed): ${in_markup_failures} at fences inside suggestions, ${n5_failures} in N5 contexts`,
-		);
-		console.log(
 			`fence fuzz: ${SEQUENCES} docs, ${edits_run} edits (${multi_cursor} multi-cursor, ${near_fence} at a fence line, ` +
-				`${structure_changes} deliberate structure changes, ${refused} refused); failures ${JSON.stringify(failures)}`,
+				`${plain_in_code} plain in code, ${structure_changes} structure changes, ${refused} refused with a notice); ` +
+				`failures ${JSON.stringify(failures)}`,
 		);
 		for (const example of examples) console.log("  example: " + example);
 		expect(failures).toEqual({ a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, throws: 0 });

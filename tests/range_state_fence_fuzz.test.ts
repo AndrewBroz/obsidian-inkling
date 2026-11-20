@@ -7,7 +7,8 @@ import { createRangeState } from "./helpers";
 // EXPL: Adversarial plain-edit fuzz for range-state's incremental parse around fenced code: after every transaction
 //       (1-3 plain changes, mostly on and next to region boundaries) the ranges and code regions must equal a full
 //       parse. Edits change fence lengths, swap ``` and ~~~, edit info strings, quote and indent prefixes, and write
-//       CriticMarkup into fence lines (`{--```--}`, `{++` in an info string). Seeded (mulberry32).
+//       CriticMarkup into and next to fence lines and code (`{--```--}`, `{++` in an info string, a closer in code
+//       pairing with an opener in prose). Seeded (mulberry32).
 
 // Obsidian global, absent under jest -- test-env artifact only.
 (Math as any).clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -35,6 +36,7 @@ const PARTS = [
 	"```\nx\n{--```--}",
 	"```\nx\n```{++\nfoo++}",
 	"```{++\n```\n{--++}}",
+	"{++a\n```\nb++}\n```\nc++}",
 	"```\n{==```==}{>>c<<}\n```",
 	"",
 ];
@@ -76,7 +78,7 @@ describe("fuzz: range-state stays exact under plain edits around fences", () => 
 				for (let e = 0; e < EDITS_PER_SEQUENCE; e++) {
 					const len = state.doc.length;
 					const boundaries = state.field(rangeParser).code_regions
-						.flatMap(r => [r.from, r.to, r.head_end, r.inner_from, r.inner_to])
+						.flatMap(r => [r.from, r.to, r.open_to, r.close_from])
 						.flatMap(b => [b - 1, b, b + 1, b + 3]);
 					const position = () =>
 						Math.max(

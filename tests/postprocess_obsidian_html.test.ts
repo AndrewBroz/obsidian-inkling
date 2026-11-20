@@ -1,4 +1,4 @@
-import { App, MarkdownRenderer } from "obsidian";
+import { App } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { postProcess } from "../src/editor/renderers/post-process/renderer";
@@ -108,7 +108,7 @@ describe("code blocks inside a rendered section", () => {
 	});
 });
 
-describe("reading view agrees with the editor on fences carrying CriticMarkup (N5)", () => {
+describe("reading view reads fences as plain CommonMark, like the editor", () => {
 	function section(html: string, source: string, lineStart: number, lineEnd: number) {
 		const el = document.createElement("div");
 		el.innerHTML = html;
@@ -127,30 +127,18 @@ describe("reading view agrees with the editor on fences carrying CriticMarkup (N
 		return postProcess(el, ctx, plugin).then(() => el);
 	}
 
-	afterEach(() => jest.restoreAllMocks());
-
-	test("a deletion wrapping the last fence ends the block; the rest renders as markup", async () => {
-		const rendered: string[] = [];
-		jest.spyOn(MarkdownRenderer, "render").mockImplementation(
-			async (_app, markdown: string, container: HTMLElement) => {
-				rendered.push(markdown);
-				container.innerHTML = "<p>rendered</p>";
-			},
-		);
-		const source = "```\nx\n{--```--}\nafter {++y++}";
-		const el = await section("<pre><code>x\n{--```--}\nafter {++y++}\n</code></pre>", source, 0, 3);
-		expect(el.querySelector("code")!.textContent).toBe("x");
-		expect(rendered).toEqual(["{--```--}\nafter {++y++}"]);
-		expect(el.textContent).toContain("rendered");
-	});
-
 	test("a block showing a deleted fence stays one code block, and the text after it is markup", async () => {
-		const render = jest.spyOn(MarkdownRenderer, "render");
 		const source = "```markdown\n{--```--}\n```\nafter {++y++}";
 		const block = await section("<pre><code>{--```--}\n</code></pre>", source, 0, 2);
-		expect(render).not.toHaveBeenCalled();
 		expect(block.querySelector("code")!.textContent).toBe("{--```--}\n");
+		expect(block.querySelector(".cmtr-deletion")).toBeNull();
 		const after = await section(`<p dir="auto">after {++y++}</p>`, source, 3, 3);
 		expect(after.querySelector(".cmtr-addition")?.textContent).toBe("y");
+	});
+
+	test("a whole block inside a suggested addition renders as part of the addition", async () => {
+		const source = "intro{++\n```js\ncode\n```\n++}\nrest";
+		const block = await section("<pre><code>code\n</code></pre>", source, 1, 3);
+		expect(block.querySelector(".cmtr-addition pre code")?.textContent).toBe("code\n");
 	});
 });
