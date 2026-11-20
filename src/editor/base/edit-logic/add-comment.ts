@@ -33,11 +33,19 @@ export function addCommentToView(
 	const selection = editor.state.selection.main;
 
 	// EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so a comment written
-	//       there would be inert text spliced into the code. Refuse rather than corrupt it. A reply
+	//       there would be inert text spliced into the code. Refuse rather than corrupt it: when the
+	//       selection starts or ends in a fence (an anchor would wrap part of it), or when the comment
+	//       would be written in one. The anchored path writes at the selection's end, the at-cursor
+	//       path at the snapped head; a comment written there would also break a fence line. A reply
 	//       (`range` given) targets an existing thread, which by construction is outside any fence.
-	if (!range && inCodeRegion(editor.state.field(rangeParser).code_regions, selection.from)) {
-		new Notice("Comments can't be added inside code blocks");
-		return;
+	if (!range) {
+		const regions = editor.state.field(rangeParser).code_regions;
+		const touched = [selection.from, safe_insert_position(editor.state, selection.head)];
+		if (!selection.empty) touched.push(selection.to - 1, selection.to);
+		if (touched.some(pos => inCodeRegion(regions, pos))) {
+			new Notice("Comments can't be added inside code blocks");
+			return;
+		}
 	}
 
 	// EXPL: GDocs-style anchored comment. A clean selection no longer writes markup here — it opens

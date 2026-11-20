@@ -4,6 +4,7 @@ import { EditorView } from "@codemirror/view";
 import * as obsidian from "obsidian";
 import { editorEditorField } from "obsidian";
 
+import { rangeParser } from "../src/editor/base";
 import { addCommentToView } from "../src/editor/base/edit-logic/add-comment";
 import { pendingAnnotationMarkers } from "../src/editor/renderers/gutters/annotations-gutter/pending-marker";
 import { commentDraftField } from "../src/editor/uix/extensions/comment-draft";
@@ -171,5 +172,33 @@ describe("addCommentToView inside fenced code", () => {
 		expect(view.state.field(commentDraftField)).toBeNull();
 		expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
 		notice.mockRestore();
+	});
+
+	test.each([
+		["an empty cursor inside a fence", "```\nab\n```", 5, 5],
+		["a selection from prose into a fence", "intro\n```\ncode", 0, 14],
+		["a selection from a fence into prose", "```\ncode\n```\nprose", 6, 17],
+		["a selection ending where a fence begins", "a\n```\nx\n```", 0, 2],
+	])("%s is refused with a notice and writes nothing", (_, doc, anchor, head) => {
+		for (const extra of [WITH_GUTTER, []]) {
+			const view = viewWith(doc, anchor, head, extra);
+			const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
+			addCommentToView(view, undefined);
+
+			expect(view.state.doc.toString()).toBe(doc);
+			expect(view.state.field(commentDraftField, false) ?? null).toBeNull();
+			expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
+			notice.mockRestore();
+		}
+	});
+
+	test("a comment at the end of a closing fence is written and parsed as a range", () => {
+		const view = viewWith("```\nx\n```", 9, 9);
+		addCommentToView(view, undefined);
+
+		expect(view.state.doc.toString()).toBe("```\nx\n```{>><<}");
+		const parsed = view.state.field(rangeParser);
+		expect(parsed.code_regions.map(r => [r.from, r.to])).toEqual([[0, 9]]);
+		expect(parsed.ranges.ranges.map(r => [r.from, r.to])).toEqual([[9, 15]]);
 	});
 });
