@@ -151,11 +151,15 @@ function preserves(text: string, settings: PluginSettings, before: string[], spa
 	return after.length === expected.length && after.every((entry, i) => entry === expected[i]);
 }
 
+// EXPL: The per-fragment fallback re-parses the whole note once per fragment: about 10 s at 1000 fragments.
+const FALLBACK_LIMIT = 50;
+
 /**
  * Changes that remove the debris from `text`. One pass only, and validated: removing a fragment can change how the
  * grammar pairs what remains (`{+{--+ x {==y++} z==}` without its `{--` turns `{++ x {==y++}` into an addition) or
  * where a fence opens, so the removals are kept only if every range and fenced region survives unchanged. Failing
  * that, each removal that is safe on its own is kept if they are still safe together; otherwise nothing changes.
+ * Past `FALLBACK_LIMIT` fragments the fallback is skipped (it re-parses once per fragment) and nothing changes.
  * Adjacent removals are merged into one change; `count` is the number of fragments removed.
  */
 export function cleanupChanges(
@@ -166,6 +170,7 @@ export function cleanupChanges(
 	if (debris.length) {
 		const before = structure(text, settings);
 		if (!preserves(text, settings, before, debris)) {
+			if (debris.length > FALLBACK_LIMIT) return { changes: [], count: 0 };
 			debris = debris.filter(span => preserves(text, settings, before, [span]));
 			if (!preserves(text, settings, before, debris)) debris = [];
 		}

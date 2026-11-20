@@ -95,6 +95,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	metadata_syntax: "legacy",
 	remove_on_resolve: true,
 	remove_on_resolve_migrated: true,
+	cleanup_broken_markup: true,
 
 	author: "",
 

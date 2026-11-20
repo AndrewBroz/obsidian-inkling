@@ -20,6 +20,7 @@ import {
 } from "../base";
 import { addCommentToView, generateCriticMarkupPatchFromDiff } from "../base";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
+import { cleanupNotice, cleanupView } from "./cleanup-trigger";
 import {
 	editMode,
 	editModeEnforcedState,
@@ -116,6 +117,16 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 				onConfirm: () =>
 					editor.cm.dispatch(editor.cm.state.update({ changes, annotations: [pluginEditAnnotation.of(true)] })),
 			}).open();
+		},
+	},
+	{
+		id: "clean-broken-markup",
+		name: "Clean up broken markup in this note",
+		icon: "eraser",
+		editor_context: true,
+		regular_callback: (editor: Editor, _: MarkdownView) => {
+			const count = cleanupView(editor.cm, plugin.settings);
+			new Notice(count ? cleanupNotice(count) : "Inkling: no broken markup found.");
 		},
 	},
 	{

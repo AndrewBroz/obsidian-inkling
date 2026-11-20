@@ -298,6 +298,10 @@ export interface PluginSettings {
 	remove_on_resolve: boolean;
 	/** One-time flag: the 0.13.0 default-on migration of `remove_on_resolve` has run */
 	remove_on_resolve_migrated: boolean;
+	/**
+	 * Whether broken markup fragments are removed when a note opens or changes from outside the editor
+	 */
+	cleanup_broken_markup: boolean;
 
 	/**
 	 * Author name to use for metadata

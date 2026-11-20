@@ -114,6 +114,15 @@ describe("cleanupChanges", () => {
 		expect(clean("{+{--+ x {==y++} z==} w <<}")).toEqual({ text: "{+{--+ x {==y++} z==} w ", count: 1 });
 	});
 
+	test("many fragments with one unsafe removal: nothing changes, without per-fragment re-parsing", () => {
+		// EXPL: Past 50 fragments the per-fragment fallback re-parses once per fragment (seconds on a large note), so a
+		//       failed combined validation gives up instead.
+		const input = "{+{--+ x {==y++} z==}\n" + "w <<}\n".repeat(60);
+		const started = Date.now();
+		expect(cleanupChanges(input, DEFAULT_SETTINGS)).toEqual({ changes: [], count: 0 });
+		expect(Date.now() - started).toBeLessThan(1000);
+	});
+
 	test("one pass: debris exposed by a removal waits for the next run", () => {
 		// EXPL: Removing the inner `{++` joins `{+` and `+` into a new opener; the next run removes it.
 		const input = "a {+{+++ b";

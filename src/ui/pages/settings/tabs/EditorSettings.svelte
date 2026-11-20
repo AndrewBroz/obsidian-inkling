@@ -181,3 +181,19 @@ let comment_rendering_mode_notices = {
 		/>
 	{/snippet}
 </SettingItem>
+
+<SettingItem
+	name="Clean up broken markup automatically"
+	description="When a note opens or sync changes it, remove stray CriticMarkup brackets and orphaned metadata. Text is never removed. Undo restores it."
+	type="toggle"
+>
+	{#snippet control()}
+		<Toggle
+			value={plugin.settings.cleanup_broken_markup}
+			onChange={(value) => {
+				plugin.settings.cleanup_broken_markup = value;
+				plugin.saveSettings();
+			}}
+		/>
+	{/snippet}
+</SettingItem>

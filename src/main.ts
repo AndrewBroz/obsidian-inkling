@@ -47,6 +47,7 @@ import {
 	suggestionModeStatusBarButton,
 } from "./editor/status-bar";
 import { cmenuGlobalCommands, cmenuViewportCommands, commands } from "./editor/uix";
+import { cleanupTrigger } from "./editor/uix/cleanup-trigger";
 import {
 	bracketMatcher,
 	commentDraftField,
@@ -329,6 +330,9 @@ export default class CommentatorPlugin extends Plugin {
 		this.addSettingTab(new CommentatorSettings(this.app, this));
 		this.loadEditorExtensions();
 		this.registerEditorExtension(this.editorExtensions);
+		// EXPL: Kept out of editorExtensions, which loadEditorExtensions() rebuilds: the trigger registers workspace
+		//       events once and its scheduler must not be duplicated.
+		this.registerEditorExtension(cleanupTrigger(this));
 
 		// EXPL: CM editor may not be fully loaded when header buttons are attached
 		//   	Since the header buttons requires an initial value from their corresponding editor facet
