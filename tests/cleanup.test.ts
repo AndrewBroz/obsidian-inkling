@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { cleanupChanges, findDebris } from "../src/editor/base/edit-logic";
 import { findCodeRegions } from "../src/editor/base/edit-util/code-regions";
+import * as rangeParserModule from "../src/editor/base/edit-util/range-parser";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
 
 function apply(text: string, changes: { from: number; to: number; insert: string }[]): string {
@@ -139,6 +140,43 @@ describe("cleanupChanges", () => {
 		for (const input of ["a {++new text", "{++a {==b <<}", "w{author=A}--} {==x"]) {
 			const once = clean(input);
 			expect(clean(once.text)).toEqual({ text: once.text, count: 0 });
+		}
+	});
+
+	test.each([
+		["see `{author=A}` here"],
+		["see `{++` here"],
+		["see `<<}` here"],
+		["see ``a ` {++`` here"],
+		["> quoted `--}` code"],
+	])("inline code untouched: %j", input => {
+		expect(clean(input)).toEqual({ text: input, count: 0 });
+	});
+
+	test.each([
+		["`{++` and {++x", "`{++` and x"],
+		["{++x `{--` y--}", "x `{--` y--}"],
+		["`a {++b", "`a b"],
+		["`a``{++b", "`a``b"],
+	])("debris outside inline code on the same line is removed: %j", (input, expected) => {
+		expect(clean(input).text).toBe(expected);
+	});
+
+	test("a block right after a closer is not debris, even when the range already has metadata", () => {
+		const input = "{++{\"author\":\"A\"}@@x++}{author=B}";
+		expect(clean(input)).toEqual({ text: input, count: 0 });
+	});
+
+	test("a note without any candidate token is not parsed", () => {
+		const parse = jest.spyOn(rangeParserModule, "getRangesInText");
+		try {
+			expect(cleanupChanges("plain text, `code`, a {} and } and @@ here\n".repeat(100), DEFAULT_SETTINGS))
+				.toEqual({ changes: [], count: 0 });
+			expect(parse).not.toHaveBeenCalled();
+			expect(cleanupChanges("a {++b", DEFAULT_SETTINGS).count).toBe(1);
+			expect(parse).toHaveBeenCalled();
+		} finally {
+			parse.mockRestore();
 		}
 	});
 });

@@ -1,14 +1,14 @@
 import type { PluginSettings } from "../../../types";
 import { parseAttrBlock, parseLegacyMetadata, SHORTHAND_KEYS } from "../edit-util/attributes";
-import { findCodeRegions } from "../edit-util/code-regions";
+import { type CodeRegion, findCodeRegions, inCodeRegion } from "../edit-util/code-regions";
 import { getRangesInText } from "../edit-util/range-parser";
 import type { MetadataFields } from "../ranges";
 
 // EXPL: Sync can leave half a range behind (`{++new text` with no closer). Only Inkling writes CriticMarkup, so a
 //       delimiter the grammar cannot pair is debris. Cleanup removes exactly the delimiter characters, never the
-//       words between them, and never anything inside fenced code or inside a range as the grammar pairs it
-//       *without* the code filter, so a range the code rule hides is never mistaken for debris. See "G4" in
-//       docs/superpowers/specs/2026-11-20-0.13.0-stable-design.md.
+//       words between them, and never anything inside fenced code, inside an inline code span, or inside a range as
+//       the grammar pairs it *without* the code filter, so a range the code rule hides is never mistaken for debris.
+//       See "G4" in docs/superpowers/specs/2026-11-20-0.13.0-stable-design.md.
 
 export type DebrisKind = "opener" | "closer" | "attributes" | "legacy";
 
@@ -27,6 +27,12 @@ const IDENTIFYING_KEYS = ["author", "time", "a", "t"];
 
 // EXPL: A closer-shaped token (`--}`, also `>>}`) sharing characters with an opener: `{---}` is not a broken `{--`.
 const OVERLAPPING_CLOSER = /^([+\-~=<>])\1\}/;
+
+// EXPL: Every token that can start a candidate: an opener, a closer, `}@@`, or a `{` followed by an attribute
+//       key's first character. A note with none of them (most notes) has no debris and is not parsed at all.
+const ANY_CANDIDATE = /\{(?:\+\+|--|~~|==|>>|[A-Za-z_])|(?:\+\+|--|~~|==|<<)\}|\}@@/;
+
+const CLOSERS = new Set(["++}", "--}", "~~}", "==}", "<<}"]);
 
 /**
  * Whether metadata left outside any range is Inkling's: every key is an Inkling key and one names an author or a
@@ -62,6 +68,9 @@ function candidateAt(text: string, match: RegExpExecArray): Debris | undefined {
 	}
 	if (token.length === 3) return { from: at, to: at + 3, kind: "closer" };
 
+	// EXPL: A block right after a closer is that range's trailing block, even when the parser leaves it unattached
+	//       (a range with legacy metadata ignores a second, trailing block).
+	if (CLOSERS.has(text.slice(Math.max(0, at - 3), at))) return undefined;
 	const block = parseAttrBlock(text, at);
 	if (!block || !inklingMetadata(block.fields)) return undefined;
 	return { from: block.from, to: block.to, kind: "attributes" };
@@ -85,14 +94,48 @@ function intersects(areas: { from: number; to: number }[], span: Debris): boolea
 }
 
 /**
+ * Inline code spans outside fenced code: a backtick run closed by the next run of the same length on the same
+ * line. Sorted, non-overlapping. The parser does not know inline code, so these are protected by cleanup alone.
+ */
+function inlineCodeSpans(text: string, regions: CodeRegion[]): { from: number; to: number }[] {
+	const spans: { from: number; to: number }[] = [];
+	const RUN = /`+/g;
+	let line: { from: number; length: number }[] = [];
+	let line_end = -1;
+	const pair = () => {
+		for (let i = 0; i < line.length; i++) {
+			let close = i + 1;
+			while (close < line.length && line[close].length !== line[i].length) close++;
+			if (close === line.length) continue;
+			spans.push({ from: line[i].from, to: line[close].from + line[close].length });
+			i = close;
+		}
+		line = [];
+	};
+	for (let match; (match = RUN.exec(text));) {
+		if (inCodeRegion(regions, match.index)) continue;
+		if (match.index > line_end) {
+			pair();
+			line_end = text.indexOf("\n", match.index);
+			if (line_end === -1) line_end = text.length;
+		}
+		line.push({ from: match.index, length: match[0].length });
+	}
+	pair();
+	return spans;
+}
+
+/**
  * Broken CriticMarkup fragments in `text`: sorted, non-overlapping spans whose removal deletes only delimiters
- * (or Inkling metadata) left outside every range and every fenced code block.
+ * (or Inkling metadata) left outside every range, every fenced code block and every inline code span.
  */
 export function findDebris(text: string, settings: PluginSettings): Debris[] {
+	if (!ANY_CANDIDATE.test(text)) return [];
 	// EXPL: Metadata is always parsed: with it off, a range's trailing `{author=…}` would not attach and would
 	//       look orphaned. The code filter is off for the same reason (see the module comment).
 	const ranges = getRangesInText(text, { ...settings, enable_metadata: true }, false);
 	const regions = findCodeRegions(text);
+	const inline_code = inlineCodeSpans(text, regions);
 	const debris: Debris[] = [];
 
 	CANDIDATE.lastIndex = 0;
@@ -103,7 +146,7 @@ export function findDebris(text: string, settings: PluginSettings): Debris[] {
 		// EXPL: Template syntax (`{{-- note --}}`, `{{!-- x --}}`) is not ours.
 		if (text[span.from - 1] === "{" || text[span.to] === "}") continue;
 
-		if (intersects(ranges, span) || intersects(regions, span)) continue;
+		if (intersects(ranges, span) || intersects(regions, span) || intersects(inline_code, span)) continue;
 
 		// EXPL: A legacy blob is only recognised at its `}@@`, after any opener quoted in its JSON was already
 		//       taken; the blob replaces those, so it is removed as one fragment.
