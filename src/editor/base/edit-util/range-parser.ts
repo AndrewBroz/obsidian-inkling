@@ -14,6 +14,7 @@ import {
 import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import type { PluginSettings } from "../../../types";
 import { parseAttrBlock, parseLegacyMetadata } from "./attributes";
+import { type CodeRegion, findCodeRegions, inCodeRegion } from "./code-regions";
 
 function constructRangeFromSyntaxNode(
 	settings: PluginSettings,
@@ -81,7 +82,19 @@ function rangeEnd(range: SyntaxNode, text: string, offset: number): number | und
 	return close === -1 ? undefined : close + closer.length;
 }
 
-export function cursorGenerateRanges(tree: Tree, text: string, settings: PluginSettings, start = 0, to = text.length) {
+/**
+ * The CriticMarkup ranges in `text` that start in `[start, to]`.
+ * @param code Fenced code regions of `text`: a range whose opener lies inside one is code, not markup.
+ *   `null` keeps every range the grammar finds.
+ */
+export function cursorGenerateRanges(
+	tree: Tree,
+	text: string,
+	settings: PluginSettings,
+	start = 0,
+	to = text.length,
+	code: CodeRegion[] | null = findCodeRegions(text),
+) {
 	const ranges: CriticMarkupRange[] = [];
 
 	let previous_range: CriticMarkupRange | undefined = undefined;
@@ -111,6 +124,17 @@ export function cursorGenerateRanges(tree: Tree, text: string, settings: PluginS
 				break;
 			}
 			const end = rangeEnd(range, text, offset);
+			// EXPL: A node opened inside a fenced code block is code. If it is malformed or ends past the block
+			//       (`{++` in the code, `++}` in later prose), the grammar's output after it cannot be trusted:
+			//       re-parse from the end of the block so the text after it is read as written.
+			const region = code && inCodeRegion(code, range.from + offset);
+			if (region) {
+				if (end !== range.to + offset || end > region.to) {
+					resume = region.to;
+					break;
+				}
+				continue;
+			}
 			const new_range = end === undefined ?
 				undefined :
 				constructRangeFromSyntaxNode(settings, range, text, offset, end);
@@ -141,9 +165,9 @@ export function cursorGenerateRanges(tree: Tree, text: string, settings: PluginS
 	}
 }
 
-export function getRangesInText(text: string, settings: PluginSettings) {
+export function getRangesInText(text: string, settings: PluginSettings, ignore_code = true) {
 	const tree = criticmarkupLanguage.parser.parse(text);
-	return cursorGenerateRanges(tree, text, settings);
+	return cursorGenerateRanges(tree, text, settings, 0, text.length, ignore_code ? findCodeRegions(text) : null);
 }
 
 export function constructRange(

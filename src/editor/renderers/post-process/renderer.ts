@@ -43,6 +43,9 @@ export function rangePostProcess(
 }
 
 export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorContext, plugin: CommentatorPlugin) {
+	// EXPL: A code block's contents are code, not markup.
+	if (el.closest("pre")) return;
+
 	let ranges_in_range: CriticMarkupRange[] | null = null;
 	let start_char: number | null = null, end_char: number | null = null;
 

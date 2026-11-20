@@ -42,6 +42,13 @@ describe("findCodeRegions", () => {
 		expect(inCodeRegion(regions, 0)).toBeUndefined();
 	});
 
+	test("text after a closing fence's CriticMarkup closer is outside the region", () => {
+		const t = "{++```\nx\n```++} {--d--}";
+		const regions = findCodeRegions(t);
+		expect(regions).toEqual([{ from: 3, to: t.indexOf(" {--") }]);
+		expect(inCodeRegion(regions, t.indexOf("{--"))).toBeUndefined();
+	});
+
 	test("range prefix after a quote marker stays outside the region", () => {
 		const t = "> {++```\n> x\n> ```++}";
 		const regions = findCodeRegions(t);

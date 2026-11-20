@@ -1,14 +1,19 @@
 export interface CodeRegion {
 	/** Start of the opening fence line. */
 	from: number;
-	/** End of the closing fence line (excluding newline), or text.length if unclosed. */
+	/**
+	 * End of the closing fence line (excluding newline), or of the CriticMarkup closer that ends it
+	 * ("```++} more" ends after "++}"), or text.length if unclosed.
+	 */
 	to: number;
 }
 
 // Optional "{++" style CriticMarkup opener may precede the fence, so a fence
 // wrapped by a range ("{++```") is still recognised as a code block.
 const OPEN_FENCE = /^( {0,3}(?:> ?)*)(\{(?:\+\+|--|==|~~))?(`{3,}|~{3,})(.*)$/;
-const CLOSE_FENCE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(?:\+\+\}|--\}|==\}|~~\})?\s*$/;
+// A closing fence may carry the closer of a range wrapping the block; text may follow that closer
+// ("```++} {--d--}"), and is outside the region.
+const CLOSE_FENCE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(?:(?:\+\+\}|--\}|==\}|~~\})(.*)|\s*)$/;
 
 /** Finds fenced code blocks (``` / ~~~, including inside `>` quotes). Sorted, non-overlapping. */
 export function findCodeRegions(text: string): CodeRegion[] {
@@ -24,7 +29,7 @@ export function findCodeRegions(text: string): CodeRegion[] {
 		if (open) {
 			const m = CLOSE_FENCE.exec(line);
 			if (m && m[1][0] === open.char && m[1].length >= open.length) {
-				regions.push({ from: open.from, to: pos + line.length });
+				regions.push({ from: open.from, to: pos + line.length - (m[2]?.length ?? 0) });
 				open = null;
 			}
 		} else {
