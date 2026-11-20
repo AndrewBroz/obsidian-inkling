@@ -166,6 +166,31 @@ export function cursorGenerateRanges(
 	}
 }
 
+/**
+ * Where a full parse restarts after a node opened inside fenced code that cannot be trusted (it is malformed or ends
+ * past the block): the end of that block. Ranges after such a point come from re-parsing the text from there, so they
+ * depend on text before an edit far below them (see `cursorGenerateRanges`).
+ */
+export function codeResumePoints(tree: Tree, text: string, code: CodeRegion[]): number[] {
+	const points: number[] = [];
+	for (const region of code) {
+		const cursor = tree.cursor();
+		cursor.childAfter(region.from - 1);
+		if (cursor.node.type.name === "CriticMarkup") continue;
+		do {
+			const node = cursor.node;
+			if (node.from >= region.to) break;
+			if (node.from < region.from || node.type.name === "\u26a0") continue;
+			const end = rangeEnd(node, text, 0);
+			if (end !== node.to || end > region.to) {
+				points.push(region.to);
+				break;
+			}
+		} while (cursor.nextSibling());
+	}
+	return points;
+}
+
 export function getRangesInText(text: string, settings: PluginSettings, ignore_code = true) {
 	const tree = criticmarkupLanguage.parser.parse(text);
 	return cursorGenerateRanges(tree, text, settings, 0, text.length, ignore_code ? findCodeRegions(text) : null);

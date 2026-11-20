@@ -10,7 +10,7 @@ import { fullReloadEffect } from "../../settings";
 import { pluginSettingsField } from "../../uix";
 import { parseAttrBlock } from "./attributes";
 import { type CodeRegion, findCodeRegions, regionsPreserved } from "./code-regions";
-import { cursorGenerateRanges } from "./range-parser";
+import { codeResumePoints, cursorGenerateRanges } from "./range-parser";
 
 interface ParserData {
 	tree: Tree;
@@ -20,6 +20,8 @@ interface ParserData {
 	deleted_ranges: CriticMarkupRange[];
 	/** The document's fenced code regions; ranges opened inside them are not in `ranges`. */
 	code_regions: CodeRegion[];
+	/** Where the parse restarts after an untrusted node opened in code (see `codeResumePoints`). */
+	code_resume: number[];
 }
 
 export const rangeParser: StateField<ParserData> = StateField.define({
@@ -30,6 +32,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		const code_regions = findCodeRegions(text);
 		const ranges = new CriticMarkupRanges(cursorGenerateRanges(tree, text, settings, 0, text.length, code_regions));
 		return {
+			code_resume: codeResumePoints(tree, text, code_regions),
 			tree,
 			fragments: TreeFragment.addTree(tree),
 			ranges: ranges,
@@ -73,6 +76,15 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			return this.create(tr.state) as ParserData;
 		// parse-doc: 0.68 - 1.24 ms
 		const tree = criticmarkupLanguage.parser.parse(new DocInput(tr.state.doc), fragments);
+		// EXPL: Ranges after an untrusted node opened in code come from re-parsing the text from the end of its block
+		//       on, so an edit anywhere after that point can change ranges before the edit (`{++` in an info string,
+		//       `--}` appended below, pairs with a `{--` in between). Such an edit rebuilds, as does one after a point
+		//       the edit removed.
+		const code_resume = codeResumePoints(tree, text, code_regions);
+		let edit_end = 0;
+		tr.changes.iterChangedRanges((_fromA, _toA, _fromB, toB) => edit_end = Math.max(edit_end, toB));
+		if ([...code_resume, ...value.code_resume.map(p => tr.changes.mapPos(p))].some(p => p <= edit_end))
+			return this.create(tr.state) as ParserData;
 		// apply-fragments: <0.01 ms
 		fragments = TreeFragment.addTree(tree, fragments);
 
@@ -309,6 +321,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			inserted_ranges,
 			deleted_ranges: [...deleted_ranges],
 			code_regions,
+			code_resume,
 		};
 	},
 });
