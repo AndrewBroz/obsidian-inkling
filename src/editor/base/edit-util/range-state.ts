@@ -9,7 +9,7 @@ import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import { fullReloadEffect } from "../../settings";
 import { pluginSettingsField } from "../../uix";
 import { parseAttrBlock } from "./attributes";
-import { type CodeRegion, findCodeRegions, sameRegions } from "./code-regions";
+import { type CodeRegion, findCodeRegions, regionsPreserved } from "./code-regions";
 import { cursorGenerateRanges } from "./range-parser";
 
 interface ParserData {
@@ -62,25 +62,14 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		// stringify-doc: 0.98 - 8.99 ms
 		const text = tr.state.doc.toString();
 		// EXPL: Only dirty spans are re-parsed, but a fence line opening or closing a code block flips every range
-		//       below it in or out of code, far from the edit. The old regions are mapped through the changes; if
-		//       they no longer match the new ones, the state is rebuilt from scratch. Mapping is monotone, so
-		//       matching regions keep every range outside the dirty spans on the same side of every fence. Edits
-		//       that rebuild: adding, removing or breaking a fence line, an edit that joins or splits one (touching
-		//       a region's first or last character), and changing which closer ends a region. An edit inside a
-		//       region, or outside every region, keeps them. A region that ended at the old document end maps to the
-		//       new end, since `mapPos(…, -1)` would leave appended text outside an unclosed region.
-		//       Content bounds (and the opening line's end) map so that text typed at either edge of the content stays
-		//       inside it.
+		//       below it in or out of code, far from the edit. If the old regions do not map onto the new ones through
+		//       the changes (`regionsPreserved`), the state is rebuilt from scratch. Mapping is monotone, so matching
+		//       regions keep every range outside the dirty spans on the same side of every fence; a boundary may only
+		//       move across text inserted at it, which is dirty and re-parsed with the new regions. Edits that
+		//       rebuild: adding, removing or breaking a fence line, an edit that joins one with another line, and
+		//       changing which closer ends a region. An edit inside a region, or outside every region, keeps them.
 		const code_regions = findCodeRegions(text);
-		const old_length = tr.startState.doc.length;
-		const mapped_regions = value.code_regions.map(region => ({
-			from: tr.changes.mapPos(region.from, 1),
-			to: region.to === old_length ? text.length : tr.changes.mapPos(region.to, -1),
-			head_end: region.head_end === old_length ? text.length : tr.changes.mapPos(region.head_end, 1),
-			inner_from: region.inner_from === old_length ? text.length : tr.changes.mapPos(region.inner_from, -1),
-			inner_to: region.inner_to === old_length ? text.length : tr.changes.mapPos(region.inner_to, 1),
-		}));
-		if (!sameRegions(mapped_regions, code_regions))
+		if (!regionsPreserved(value.code_regions, tr.changes, code_regions))
 			return this.create(tr.state) as ParserData;
 		// parse-doc: 0.68 - 1.24 ms
 		const tree = criticmarkupLanguage.parser.parse(new DocInput(tr.state.doc), fragments);

@@ -1,4 +1,6 @@
-import { findCodeRegions, inCodeContent, inCodeRegion, sameRegions } from "../src/editor/base/edit-util/code-regions";
+import { EditorState } from "@codemirror/state";
+
+import { findCodeRegions, inCodeContent, inCodeRegion, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
 
 describe("findCodeRegions", () => {
 	test("backtick fence", () => {
@@ -174,20 +176,77 @@ describe("inCodeContent", () => {
 	});
 });
 
-describe("sameRegions", () => {
-	const r = (from: number, to: number, inner_from = from, inner_to = to, head_end = inner_from) => ({
-		from,
-		to,
-		head_end,
-		inner_from,
-		inner_to,
+describe("regionsPreserved", () => {
+	const DOC = "```\nab\n```\nafter";
+	const preserved = (doc: string, change: { from: number; to?: number; insert?: string }) => {
+		const state = EditorState.create({ doc });
+		const tr = state.update({ changes: change });
+		return regionsPreserved(findCodeRegions(doc), tr.changes, findCodeRegions(tr.state.doc.toString()));
+	};
+
+	test.each([
+		["typing in content", { from: 5, insert: "X" }],
+		["typing an info string", { from: 3, insert: "js" }],
+		["Enter at the end of the opening line", { from: 3, insert: "\n" }],
+		["a line above the block", { from: 0, insert: "X\n" }],
+		["Enter at the end of the closing line", { from: 10, insert: "\n" }],
+		["prose after the block", { from: 12, insert: "X" }],
+	])("%s keeps the structure", (_, change) => {
+		expect(preserved(DOC, change)).toBe(true);
 	});
-	test("compares by value", () => {
-		expect(sameRegions([r(1, 2)], [r(1, 2)])).toBe(true);
-		expect(sameRegions([r(1, 2)], [r(1, 3)])).toBe(false);
-		expect(sameRegions([r(1, 5, 2, 4)], [r(1, 5, 2, 3)])).toBe(false);
-		expect(sameRegions([r(1, 5, 2, 4)], [r(1, 5, 3, 4)])).toBe(false);
-		expect(sameRegions([r(1, 5, 3, 4, 2)], [r(1, 5, 3, 4, 1)])).toBe(false);
-		expect(sameRegions([], [r(1, 3)])).toBe(false);
+
+	test.each([
+		["joining the first code line onto the opening line", { from: 3, to: 4 }],
+		["joining the closing fence onto the last code line", { from: 6, to: 7 }],
+		["text before the opening fence on its line", { from: 0, insert: "X" }],
+		["text before the closing fence on its line", { from: 7, insert: "X" }],
+		["breaking the closing fence", { from: 9, to: 10 }],
+	])("%s changes the structure", (_, change) => {
+		expect(preserved(DOC, change)).toBe(false);
+	});
+
+	test("deleting the closing fence of the last block unmakes it", () => {
+		expect(preserved("```\nab\n```", { from: 7, to: 10 })).toBe(false);
+	});
+
+	test("removing an empty first code line keeps the structure", () => {
+		expect(preserved("```\n\nab\n```", { from: 3, to: 4 })).toBe(true);
+	});
+
+	test("text appended to an unclosed block keeps it", () => {
+		expect(preserved("```\nx", { from: 5, insert: "\nmore" })).toBe(true);
+		expect(preserved("a\n```", { from: 5, insert: "\n" })).toBe(true);
+	});
+});
+
+describe("a trailing opener on a closing fence line skips nested blocks (B1)", () => {
+	test("a complete nested block between the opener and its closer", () => {
+		const t = "```\nx\n```{++\nfoo\n```js\ncode\n```\nbar++}\nafter";
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 9], [17, 31]]);
+	});
+
+	test("a nested fence line carrying the closer", () => {
+		const t = "```\nx\n```{++\nfoo\n```++}\nafter";
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 9], [17, t.length]]);
+	});
+
+	test("an unclosed nested block containing the closer", () => {
+		const t = "```\nx\n```{++\nfoo\n```js\n++}\nafter";
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 9], [17, t.length]]);
+	});
+
+	test("a bare fence line before the closer is the block's own closer", () => {
+		const t = "```\n```{==\nx\n```\nprose {==h==}";
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 16]]);
+	});
+
+	test("a range opener before a closing fence closes the block outside the range", () => {
+		const t = "```\nx\n{--```--}\nafter";
+		expect(findCodeRegions(t)).toEqual([{ from: 0, to: 6, head_end: 3, inner_from: 4, inner_to: 6 }]);
+	});
+
+	test("a code line starting with an opener and fence but no closer does not close", () => {
+		const t = "```\n{==```\nx\n```";
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, t.length]]);
 	});
 });
