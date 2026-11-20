@@ -65,6 +65,18 @@ describe("pill_eligible", () => {
 		expect(pill_eligible(state)).toBe(false);
 	});
 
+	test.each([
+		["inside a fence", "```\nab\n```", 4, 6],
+		["from prose into a fence", "intro\n```\ncode", 0, 14],
+		["from a fence into prose", "```\ncode\n```\nprose", 6, 17],
+	])("a selection %s is not eligible (commenting there is refused)", (_, doc, anchor, head) => {
+		expect(pill_eligible(stateWithSelection(doc, anchor, head))).toBe(false);
+	});
+
+	test("a whole line selected above a fence is eligible", () => {
+		expect(pill_eligible(stateWithSelection("intro\n```\nx\n```", 0, 6))).toBe(true);
+	});
+
 	test("a non-empty selection in a read-only state is not eligible", () => {
 		const state = stateWithSelection("hello world", 0, 5, [EditorState.readOnly.of(true)]);
 		expect(pill_eligible(state)).toBe(false);

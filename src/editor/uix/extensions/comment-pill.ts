@@ -4,6 +4,7 @@ import { EditorView, showTooltip, type Tooltip, type TooltipView } from "@codemi
 import { setIcon, setTooltip } from "obsidian";
 
 import { addCommentToView, rangeParser } from "../../base";
+import { comment_refused_in_code } from "../../base/edit-logic/add-comment";
 import { pendingAnnotationMarkers } from "../../renderers/gutters/annotations-gutter/pending-marker";
 import { commentDraftField } from "./comment-draft";
 
@@ -42,7 +43,7 @@ export function pill_eligible(state: EditorState): boolean {
 		return false;
 
 	const selection = state.selection.main;
-	if (selection.empty)
+	if (selection.empty || comment_refused_in_code(state))
 		return false;
 
 	const ranges = state.field(rangeParser).ranges;

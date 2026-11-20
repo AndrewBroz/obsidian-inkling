@@ -1,4 +1,4 @@
-import { EditorSelection, type EditorState } from "@codemirror/state";
+import { EditorSelection, type EditorState, type SelectionRange } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { Notice } from "obsidian";
@@ -30,22 +30,12 @@ export function addCommentToView(
 ): void {
 	const settings = editor.state.field(pluginSettingsField);
 
-	const selection = editor.state.selection.main;
+	const selection = comment_selection(editor.state);
 
-	// EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so a comment written
-	//       there would be inert text spliced into the code. Refuse rather than corrupt it: when the
-	//       selection starts or ends in a fence (an anchor would wrap part of it), or when the comment
-	//       would be written in one. The anchored path writes at the selection's end, the at-cursor
-	//       path at the snapped head; a comment written there would also break a fence line. A reply
-	//       (`range` given) targets an existing thread, which by construction is outside any fence.
-	if (!range) {
-		const regions = editor.state.field(rangeParser).code_regions;
-		const touched = [selection.from, safe_insert_position(editor.state, selection.head)];
-		if (!selection.empty) touched.push(selection.to - 1, selection.to);
-		if (touched.some(pos => inCodeRegion(regions, pos))) {
-			new Notice("Comments can't be added inside code blocks");
-			return;
-		}
+	// EXPL: A reply (`range` given) targets an existing thread, which by construction is outside any fence.
+	if (!range && comment_refused_in_code(editor.state)) {
+		new Notice("Comments can't be added inside code blocks");
+		return;
 	}
 
 	// EXPL: GDocs-style anchored comment. A clean selection no longer writes markup here — it opens
@@ -157,6 +147,34 @@ export function addCommentToView(
 			],
 		}));
 	});
+}
+
+/**
+ * The main selection a new comment acts on: a trailing newline is dropped, so a whole line selected by triple-click
+ * is anchored up to the end of its text and the comment's closer stays on that line.
+ */
+export function comment_selection(state: EditorState): SelectionRange {
+	const selection = state.selection.main;
+	if (selection.empty || state.doc.sliceString(selection.to - 1, selection.to) !== "\n") return selection;
+	return selection.head === selection.to ?
+		EditorSelection.range(selection.from, selection.to - 1) :
+		EditorSelection.range(selection.to - 1, selection.from);
+}
+
+/**
+ * Whether a new comment must be refused because it would touch a fenced code block.
+ * EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so a comment written there would be inert
+ *       text spliced into the code. Refused when the selection starts or ends in a fence (an anchor would wrap part
+ *       of it), or when the comment would be written in one. The anchored path writes at the selection's end, the
+ *       at-cursor path at the snapped head; a comment written there would also break a fence line. Shared with the
+ *       comment pill, which hides where commenting is refused.
+ */
+export function comment_refused_in_code(state: EditorState): boolean {
+	const selection = comment_selection(state);
+	const regions = state.field(rangeParser).code_regions;
+	const touched = [selection.from, safe_insert_position(state, selection.head)];
+	if (!selection.empty) touched.push(selection.to - 1, selection.to);
+	return touched.some(pos => inCodeRegion(regions, pos));
 }
 
 // EXPL: CriticMarkup has no escape syntax: `create_range` concatenates brackets around raw text, so

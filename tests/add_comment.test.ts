@@ -178,7 +178,6 @@ describe("addCommentToView inside fenced code", () => {
 		["an empty cursor inside a fence", "```\nab\n```", 5, 5],
 		["a selection from prose into a fence", "intro\n```\ncode", 0, 14],
 		["a selection from a fence into prose", "```\ncode\n```\nprose", 6, 17],
-		["a selection ending where a fence begins", "a\n```\nx\n```", 0, 2],
 	])("%s is refused with a notice and writes nothing", (_, doc, anchor, head) => {
 		for (const extra of [WITH_GUTTER, []]) {
 			const view = viewWith(doc, anchor, head, extra);
@@ -190,6 +189,22 @@ describe("addCommentToView inside fenced code", () => {
 			expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
 			notice.mockRestore();
 		}
+	});
+
+	test("a whole line selected above a fence (triple-click) is commented without its newline", () => {
+		const doc = "intro\n```\nx\n```";
+		const view = viewWith(doc, 0, 6, []);
+		addCommentToView(view, undefined);
+
+		const text = view.state.doc.toString();
+		expect(text).toBe("{==intro==}{>><<}\n```\nx\n```");
+		const parsed = view.state.field(rangeParser);
+		expect(parsed.code_regions.map(r => text.slice(r.from, r.to))).toEqual(["```\nx\n```"]);
+		expect(parsed.ranges.ranges.map(r => text.slice(r.from, r.to))).toEqual(["{==intro==}", "{>><<}"]);
+
+		const drafting = viewWith(doc, 0, 6);
+		addCommentToView(drafting, undefined);
+		expect(drafting.state.field(commentDraftField)).toMatchObject({ from: 0, to: 5 });
 	});
 
 	test("a comment at the end of a closing fence is written and parsed as a range", () => {
