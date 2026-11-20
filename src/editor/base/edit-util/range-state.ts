@@ -9,6 +9,7 @@ import { criticmarkupLanguage } from "@fevol/lang-criticmarkup";
 import { fullReloadEffect } from "../../settings";
 import { pluginSettingsField } from "../../uix";
 import { parseAttrBlock } from "./attributes";
+import { type CodeRegion, findCodeRegions, sameRegions } from "./code-regions";
 import { cursorGenerateRanges } from "./range-parser";
 
 interface ParserData {
@@ -17,6 +18,8 @@ interface ParserData {
 	ranges: CriticMarkupRanges;
 	inserted_ranges: CriticMarkupRange[];
 	deleted_ranges: CriticMarkupRange[];
+	/** The document's fenced code regions; ranges opened inside them are not in `ranges`. */
+	code_regions: CodeRegion[];
 }
 
 export const rangeParser: StateField<ParserData> = StateField.define({
@@ -24,13 +27,15 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		const text = state.doc.toString();
 		const tree = criticmarkupLanguage.parser.parse(text);
 		const settings = state.field(pluginSettingsField);
-		const ranges = new CriticMarkupRanges(cursorGenerateRanges(tree, text, settings));
+		const code_regions = findCodeRegions(text);
+		const ranges = new CriticMarkupRanges(cursorGenerateRanges(tree, text, settings, 0, text.length, code_regions));
 		return {
 			tree,
 			fragments: TreeFragment.addTree(tree),
 			ranges: ranges,
 			inserted_ranges: ranges.ranges,
 			deleted_ranges: [],
+			code_regions,
 		};
 	},
 
@@ -56,6 +61,21 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		let fragments = TreeFragment.applyChanges(value.fragments, changed_ranges);
 		// stringify-doc: 0.98 - 8.99 ms
 		const text = tr.state.doc.toString();
+		// EXPL: Only dirty spans are re-parsed, but a fence line opening or closing a code block flips every range
+		//       below it in or out of code, far from the edit. The old regions are mapped through the changes; if
+		//       they no longer match the new ones, the state is rebuilt from scratch. Mapping is monotone, so
+		//       matching regions keep every range outside the dirty spans on the same side of every fence. Edits
+		//       that rebuild: adding, removing or breaking a fence line, an edit that joins or splits one (touching
+		//       a region's first or last character), and changing which closer ends a region. An edit inside a
+		//       region, or outside every region, keeps them. A region that ran to the end of the document still
+		//       does once mapped (`mapPos` would leave text appended at the end outside an unclosed region).
+		const code_regions = findCodeRegions(text);
+		const mapped_regions = value.code_regions.map(region => ({
+			from: tr.changes.mapPos(region.from, 1),
+			to: region.to === tr.startState.doc.length ? text.length : tr.changes.mapPos(region.to, -1),
+		}));
+		if (!sameRegions(mapped_regions, code_regions))
+			return this.create(tr.state) as ParserData;
 		// parse-doc: 0.68 - 1.24 ms
 		const tree = criticmarkupLanguage.parser.parse(new DocInput(tr.state.doc), fragments);
 		// apply-fragments: <0.01 ms
@@ -150,7 +170,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		}
 
 		for (let span = dirty.find(span => !span.ranges); span; span = dirty.find(span => !span.ranges)) {
-			const ranges = cursorGenerateRanges(tree, text, settings, span.from, span.to);
+			const ranges = cursorGenerateRanges(tree, text, settings, span.from, span.to, code_regions);
 			span.ranges = [];
 			for (const range of ranges) {
 				const from = to_old.mapPos(range.from, -1), to = to_old.mapPos(range.to, 1);
@@ -287,7 +307,14 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		// finalize: 1.80 - 1.85 ms
 		value.ranges.ranges = value.ranges.tree.values;
 
-		return { tree, ranges: value.ranges, fragments, inserted_ranges, deleted_ranges: [...deleted_ranges] };
+		return {
+			tree,
+			ranges: value.ranges,
+			fragments,
+			inserted_ranges,
+			deleted_ranges: [...deleted_ranges],
+			code_regions,
+		};
 	},
 });
 

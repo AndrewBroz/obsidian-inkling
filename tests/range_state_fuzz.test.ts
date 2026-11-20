@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
+import { findCodeRegions } from "../src/editor/base/edit-util/code-regions";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
 import { type CriticMarkupRange, SubstitutionRange } from "../src/editor/base/ranges";
 import { createRangeState } from "./helpers";
@@ -49,12 +50,25 @@ const SEGMENTS = [
 	"{++a++}{author=\"{>>x\"} after\nmore {++b++} text <<} ", // quoted opener closed on the next line
 	"{++a@@b++}{author=A}", // @@ in the content
 	"{~~a@@b~>c~~}", // @@ in a substitution's content
+	"\n```\n", // fence line: opens or closes a code block
+	"\n~~~\n",
+	"```", // a fence only when it starts a line
+	"\n> ```\n", // fence inside a quote
 ];
 
-const INSERTS = ["z", "x", "ab", " ", "qq", "}", "{a=1}", "="];
+const INSERTS = ["z", "x", "ab", " ", "qq", "}", "{a=1}", "=", "\n```\n", "\n~~~\n", "```", "\n> ```\n"];
 
 const SEQUENCES = 1000;
 const EDITS_PER_SEQUENCE = 6;
+
+/** The incremental state's ranges (type, from, to) or code regions differ from a full parse of its text. */
+function staleState(state: ReturnType<typeof createRangeState>): boolean {
+	const text = state.doc.toString();
+	const field = state.field(rangeParser);
+	const spans = (ranges: CriticMarkupRange[]) => JSON.stringify(ranges.map(r => [r.type, r.from, r.to]));
+	return spans(field.ranges.ranges) !== spans(getRangesInText(text, { ...DEFAULT_SETTINGS })) ||
+		JSON.stringify(field.code_regions) !== JSON.stringify(findCodeRegions(text));
+}
 
 /** True if two DISTINCT range objects share one [from, to). */
 function hasDuplicatePosition(state: ReturnType<typeof createRangeState>): boolean {
@@ -74,8 +88,10 @@ describe("fuzz: interval tree never leaves two range objects at one position", (
 		const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
 
 		let duplicate_failures = 0;
+		let stale_failures = 0;
 		let throws = 0;
 		const examples: string[] = [];
+		const stale_examples: string[] = [];
 
 		for (let seq = 0; seq < SEQUENCES; seq++) {
 			// 8-16 segments: a tree deep enough that a stale `max` actually prunes a live subtree.
@@ -99,6 +115,12 @@ describe("fuzz: interval tree never leaves two range objects at one position", (
 						failed = true;
 						break;
 					}
+					if (staleState(state)) {
+						stale_failures++;
+						if (stale_examples.length < 3)
+							stale_examples.push(`doc=${JSON.stringify(doc)} edits=${JSON.stringify(edits)}`);
+						break;
+					}
 				}
 			} catch (error) {
 				throws++;
@@ -116,7 +138,13 @@ describe("fuzz: interval tree never leaves two range objects at one position", (
 			for (const example of examples) console.log("  example: " + example);
 		}
 
+		if (stale_failures) {
+			console.log(`stale-state failures ${stale_failures}/${SEQUENCES}`);
+			for (const example of stale_examples) console.log("  example: " + example);
+		}
+
 		expect(duplicate_failures).toBe(0);
+		expect(stale_failures).toBe(0);
 		expect(throws).toBe(0);
 	});
 });
@@ -165,8 +193,13 @@ function snapshot(ranges: CriticMarkupRange[]): string {
 /** The incremental ranges of `state` diverge from a full parse of its text. */
 function diverges(state: ReturnType<typeof createRangeState>): { incremental: string; full: string } | undefined {
 	const incremental = snapshot(state.field(rangeParser).ranges.ranges);
-	const full = snapshot(getRangesInText(state.doc.toString(), { ...DEFAULT_SETTINGS }));
-	return incremental === full ? undefined : { incremental, full };
+	const text = state.doc.toString();
+	const full = snapshot(getRangesInText(text, { ...DEFAULT_SETTINGS }));
+	const regions = JSON.stringify(state.field(rangeParser).code_regions);
+	const full_regions = JSON.stringify(findCodeRegions(text));
+	return incremental === full && regions === full_regions ?
+		undefined :
+		{ incremental: `${incremental} code=${regions}`, full: `${full} code=${full_regions}` };
 }
 
 /**
@@ -221,6 +254,19 @@ describe("fuzz: incremental parse equals a full parse", () => {
 	//       regenerated together; a range one change removed must still be seen by the others.
 	test("for transactions of up to three edits", () => {
 		expect(incrementalVsFull(0x4242, 3)).toEqual([]);
+	});
+});
+
+describe("a fence line typed above ranges", () => {
+	test("typing a fence line hides ranges below", () => {
+		const state = createRangeState("a\n{++x++}\n{--y--}");
+		const fenced = state.update({ changes: { from: 2, to: 2, insert: "```\n" } }).state;
+		expect(fenced.field(rangeParser).ranges.ranges).toEqual([]);
+		expect(fenced.field(rangeParser).code_regions).toEqual(findCodeRegions(fenced.doc.toString()));
+		const restored = fenced.update({ changes: { from: 2, to: 6, insert: "" } }).state;
+		expect(restored.field(rangeParser).ranges.ranges.map(range => [range.from, range.to]))
+			.toEqual([[2, 9], [10, 17]]);
+		expect(restored.field(rangeParser).code_regions).toEqual([]);
 	});
 });
 
