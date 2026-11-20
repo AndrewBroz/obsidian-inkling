@@ -1,6 +1,6 @@
 import { EditorState } from "@codemirror/state";
 
-import { findCodeRegions, inCodeContent, inCodeRegion, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
+import { findCodeRegions, inCodeRegion, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
 
 describe("findCodeRegions", () => {
 	test("backtick fence", () => {
@@ -149,30 +149,6 @@ describe("inCodeRegion", () => {
 		expect(inCodeRegion(regions, 1)).toBeUndefined();
 		expect(inCodeRegion(regions, 25)).toBe(regions[1]);
 		expect(inCodeRegion([], 0)).toBeUndefined();
-	});
-});
-
-describe("inCodeContent", () => {
-	// "a\n```\nxy\n```\nb": region 2..12; content runs from 6 (after the opening line) to 9 (the closing line)
-	const regions = findCodeRegions("a\n```\nxy\n```\nb");
-	test("inside content", () => {
-		expect(inCodeContent(regions, 6, 6)).toBe(true);
-		expect(inCodeContent(regions, 6, 9)).toBe(true);
-		expect(inCodeContent(regions, 9, 9)).toBe(true);
-	});
-	test("an insertion at the end of the opening fence line is content; a deletion there is not", () => {
-		expect(inCodeContent(regions, 5, 5)).toBe(true);
-		expect(inCodeContent(regions, 4, 4)).toBe(false);
-		expect(inCodeContent(regions, 5, 6)).toBe(false);
-		expect(inCodeContent(regions, 4, 5)).toBe(false);
-	});
-	test("touching a fence line is not content", () => {
-		expect(inCodeContent(regions, 2, 2)).toBe(false);
-		expect(inCodeContent(regions, 5, 6)).toBe(false);
-		expect(inCodeContent(regions, 8, 10)).toBe(false);
-		expect(inCodeContent(regions, 12, 12)).toBe(false);
-		expect(inCodeContent(regions, 2, 12)).toBe(false);
-		expect(inCodeContent([], 0, 0)).toBe(false);
 	});
 });
 

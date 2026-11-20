@@ -163,17 +163,6 @@ export function inCodeRegion(regions: CodeRegion[], pos: number): CodeRegion | u
 }
 
 /**
- * Whether [from, to] lies wholly within some region's content, between its fence lines (an insertion
- * has from === to). Fence lines themselves are not content, except that an insertion may also sit at
- * the end of the opening fence line: Enter there adds a code line, and typing there edits the info
- * string, neither of which can open or close the block. (A backtick typed into a backtick fence's info
- * string does unmake it; that is accepted.)
- */
-export function inCodeContent(regions: CodeRegion[], from: number, to: number): boolean {
-	return regions.some(r => (from === to ? r.head_end : r.inner_from) <= from && to <= r.inner_to);
-}
-
-/**
  * Whether `next` (the regions after `changes`) has the same fenced-code structure as `old` (the regions before):
  * as many regions, and each boundary of each one where `changes` maps it.
  * EXPL: A boundary at an insertion point may land anywhere from before to after the inserted text (between

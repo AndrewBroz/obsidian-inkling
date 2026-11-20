@@ -150,7 +150,8 @@ itself (for the CRI build, `config/critic.py`). Only then should anyone change t
 - **Fenced code blocks are left alone.** CriticMarkup inside a fenced code block (``` or ~~~, including inside
   callouts and quotes) is no longer recognised; inline `code` is unchanged. Before updating, accept or reject any
   pending suggestions or comments inside fenced code blocks. In Suggest mode, typing inside a fenced code block is not
-  tracked, the closing fence stays on its own line, and comments cannot be added inside code blocks.
+  tracked and edits never break a fence: text typed in front of a fence goes on its own line, and Backspace or Delete
+  that would join a fence line onto a non-empty line does nothing. Comments cannot be added inside code blocks.
 - **Broken markup is cleaned up automatically.** Sync tools can leave stray CriticMarkup brackets or orphaned Inkling
   metadata behind. When a note becomes active, or the open note changes from outside the editor, these are removed.
   Text is never removed, and one Undo restores the markup (that note is then left alone until Obsidian restarts). Only

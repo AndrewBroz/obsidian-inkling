@@ -5,9 +5,12 @@ import type { VimEditor } from "obsidian-typings";
 import { type PluginSettings } from "../../../../types";
 
 import {
+	CriticMarkupRanges,
 	cursor_move_range,
 	cursorMoved,
 	deriveUserEvent,
+	type EditorChange,
+	type EditorEditChange,
 	generate_metadata,
 	getEditorRanges,
 	getUserEvents,
@@ -21,9 +24,9 @@ import {
 	SuggestionType,
 } from "../../../base";
 
-import { type CodeRegion, inCodeContent } from "../../../base/edit-util/code-regions";
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
+import { editDelta, type GuardedEdit, guardSuggestions } from "./fence-guard";
 import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
 
 const vim_action_resolver = {
@@ -89,32 +92,6 @@ const vim_action_resolver = {
 // 	{ keys: 'O', motion: 'moveToOtherHighlightedEnd',
 // 	'moveToLineOrEdgeOfDocument':
 
-/**
- * How a suggest-mode change that ends at the start of a closed block's closing fence line must be applied so the
- * fence stays on its own line: undefined if it can be handled as usual, "refuse" if it must not happen, or a plain
- * change to apply instead.
- * EXPL: Text typed (or pasted) at the start of the closing fence line would join the fence's line and unmake it,
- *       turning the rest of the note into code. It is code content, so it goes untracked onto a new line above the
- *       fence, with the cursor after it. A deletion that would join the fence onto the end of a non-empty line
- *       (Backspace at the fence) is refused; one removing an empty line above it is harmless. Changes reaching
- *       before the opening fence line's end, and deletions covering fence characters, are left to the usual
- *       tracking: deleting a fence on purpose stays a tracked change.
- */
-function guardClosingFence(
-	state: EditorState,
-	regions: CodeRegion[],
-	{ from, to, inserted }: { from: number; to: number; inserted: string },
-): { from: number; to: number; insert: string; cursor: number } | "refuse" | undefined {
-	const region = regions.find(r => r.inner_to < r.to && to === r.inner_to && from >= r.head_end);
-	if (!region) return undefined;
-	if (inserted) {
-		if (inserted.endsWith("\n") || from < region.inner_from) return undefined;
-		return { from, to, insert: inserted + "\n", cursor: from + inserted.length };
-	}
-	if (from === to || state.doc.sliceString(from - 1, from) === "\n") return undefined;
-	return "refuse";
-}
-
 export const suggestionMode = (settings: PluginSettings): Extension =>
 	EditorState.transactionFilter.of(tr => applySuggestion(tr, settings));
 
@@ -144,48 +121,13 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		if (is_exempt_from_tracking(tr))
 			return tr;
 
-		// EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so markup written
-		//       there would be inert text and corrupt the code. A change lying wholly inside one block's
-		//       content (between its fence lines) is applied untracked; one touching a fence line is
-		//       still tracked, since it can open, close or remove the block. Decided per change, so a
-		//       multi-cursor edit can be tracked in prose and plain in code. Positions are in the START
-		//       document, so a pure insertion tests its single position.
-		const code_regions = tr.startState.field(rangeParser).code_regions;
-		const in_code = ({ from, to }: { from: number; to: number }) => inCodeContent(code_regions, from, to);
-		const guards = changed_ranges.map(change => guardClosingFence(tr.startState, code_regions, change));
-		if (guards.includes("refuse"))
-			return tr.startState.update({ filter: false });
-		if (changed_ranges.length > 0 && changed_ranges.every(in_code) && guards.every(guard => !guard))
-			return tr;
-
 		const ranges = tr.startState.field(rangeParser).ranges;
-		const changes = [];
-		const selections: SelectionRange[] = [];
-
 		const metadata = generate_metadata(settings);
-
 		const backwards_delete = (latest_event as KeyboardEvent)?.key === "Backspace";
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
-		let offset = 0;
-		// TODO: Consider each editor_change separately to avoid issues where you try to re-insert into a now updated range
-		//        (Or: update ranges with editor_change to reflect the new state)
-		for (let i = 0; i < changed_ranges.length; i++) {
-			let editor_change = changed_ranges[i];
-			const guard = guards[i];
-			if (guard && guard !== "refuse") {
-				changes.push({ from: guard.from, to: guard.to, insert: guard.insert });
-				selections.push(EditorSelection.cursor(guard.cursor + offset));
-				offset += guard.insert.length - (guard.to - guard.from);
-				continue;
-			}
-			if (in_code(editor_change)) {
-				const { from, to, inserted } = editor_change;
-				changes.push({ from, to, insert: inserted });
-				selections.push(EditorSelection.cursor(from + inserted.length + offset));
-				offset += inserted.length - (to - from);
-				continue;
-			}
 
+		/** The change as a tracked suggestion, with the cursor where it would be after only this change. */
+		function track(editor_change: EditorEditChange): GuardedEdit | undefined {
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
 				SuggestionType.ADDITION;
@@ -230,21 +172,68 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				false,
 				settings.metadata_syntax,
 			);
+			if (!edits.length) return undefined;
 			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
-			if (edits) {
-				changes.push(edits);
-				selections.push(
-					EditorSelection.cursor(
-						(backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset) + offset,
-					),
-				);
-				offset += added_offset - (edits[edits.length - 1].to - edits[edits.length - 1].from) +
-					edits[edits.length - 1].insert.length;
-			}
+			return {
+				changes: edits,
+				cursor: backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset,
+			};
 		}
 
-		if (!changes.length)
+		function addition(at: number, text: string): GuardedEdit {
+			const edits = mark_ranges(
+				new CriticMarkupRanges([]),
+				tr.startState.doc,
+				at,
+				at,
+				text,
+				SuggestionType.ADDITION,
+				metadata,
+				false,
+				settings.metadata_syntax,
+			);
+			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
+			return { changes: edits, cursor: edits[edits.length - 1].end + added_offset };
+		}
+
+		// EXPL: Each change is decided on its own by the fence guard (see fence-guard.ts): tracked in prose, plain in
+		//       code, and never in a way that breaks a fence. A change it refuses leaves its cursor where it was and
+		//       does not affect the other cursors' changes. Positions are in the START document; `offset` carries the
+		//       length change of the earlier changes into each cursor.
+		const edits = guardSuggestions(
+			tr.startState.doc,
+			tr.startState.field(rangeParser).code_regions,
+			changed_ranges,
+			{ track, addition },
+		);
+		const changes: EditorChange[] = [];
+		const selections: SelectionRange[] = [];
+		let offset = 0;
+		let unchanged = true;
+		for (let i = 0; i < changed_ranges.length; i++) {
+			const change = changed_ranges[i];
+			const edit = edits[i];
+			if (!edit) {
+				selections.push(EditorSelection.cursor((tr.startState.selection.ranges[i]?.head ?? change.from) + offset));
+				unchanged = false;
+				continue;
+			}
+			const [first] = edit.changes;
+			if (
+				edit.changes.length !== 1 || first.from !== change.from || first.to !== change.to ||
+				first.insert !== change.inserted
+			) {
+				unchanged = false;
+			}
+			changes.push(...edit.changes);
+			selections.push(EditorSelection.cursor(edit.cursor + offset));
+			offset += editDelta(edit);
+		}
+
+		if (unchanged)
 			return tr;
+		if (!changes.length)
+			return tr.startState.update({ filter: false });
 
 		const forwardedEvent = deriveUserEvent(tr);
 		return tr.startState.update({

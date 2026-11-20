@@ -184,3 +184,139 @@ describe("suggest mode and fenced code", () => {
 		});
 	});
 });
+
+describe("the fence guard keeps fenced code intact (B1-B7)", () => {
+	function parsed(view: EditorView) {
+		const text = view.state.doc.toString();
+		const field = view.state.field(rangeParser);
+		expect(field.code_regions).toEqual(findCodeRegions(text));
+		return {
+			text,
+			regions: field.code_regions.map(r => [r.from, r.to]),
+			ranges: field.ranges.ranges.map(r => text.slice(r.from, r.to)),
+		};
+	}
+
+	function typeAtHead(view: EditorView, chars: string) {
+		for (const ch of chars) {
+			const head = view.state.selection.main.head;
+			view.dispatch({
+				changes: { from: head, insert: ch },
+				selection: { anchor: head + 1 },
+				userEvent: ch === "\n" ? "input" : "input.type",
+			});
+		}
+	}
+
+	test("B1: typing a whole nested block into the addition after a closing fence keeps the first block closed", () => {
+		const doc = "before {++y++}\n\n```\nx\n```\nafter";
+		const fence_end = doc.indexOf("```\nafter") + 3;
+		const view = suggestView(doc);
+		view.dispatch({ selection: { anchor: fence_end } });
+		for (const chunk of ["\n", "foo", "\n", "```", "js", "\n", "code", "\n", "```", "\n", "bar"]) {
+			for (const ch of chunk) {
+				typeAtHead(view, ch);
+				const { regions, ranges } = parsed(view);
+				expect(regions[0]).toEqual([16, fence_end]);
+				expect(ranges[0]).toBe("{++y++}");
+				expect(ranges.length).toBe(2);
+			}
+		}
+		const { text, regions } = parsed(view);
+		expect(text).toBe("before {++y++}\n\n```\nx\n```{++\nfoo\n```js\ncode\n```\nbar++}\nafter");
+		const nested = text.indexOf("```js");
+		expect(regions).toEqual([[16, fence_end], [nested, nested + 14]]);
+	});
+
+	test.each([
+		["B2 Enter", "\n", "hi\n\n\n```\nab\n```\nafter {++y++}", 5],
+		["B2 typing", "X", "hi\n\n{++X++}\n```\nab\n```\nafter {++y++}", 8],
+	])("%s at the start of an opening fence line keeps the fence", (_, insert, expected, cursor) => {
+		const view = suggestView("hi\n\n```\nab\n```\nafter {++y++}");
+		view.dispatch({
+			changes: { from: 4, insert },
+			selection: { anchor: 5 },
+			userEvent: insert === "\n" ? "input" : "input.type",
+		});
+		const { text, regions, ranges } = parsed(view);
+		expect(text).toBe(expected);
+		expect(regions).toHaveLength(1);
+		expect(ranges).toContain("{++y++}");
+		expect(view.state.selection.main.head).toBe(cursor);
+	});
+
+	test.each([
+		[
+			"B3 indented, after the indent",
+			"- item\n  ```\n  code\n  ```\nafter {++y++}",
+			22,
+			"- item\n  ```\n  code\n  a\n  ```\nafter {++y++}",
+		],
+		[
+			"B3 indented, column 0",
+			"- item\n  ```\n  code\n  ```\nafter {++y++}",
+			20,
+			"- item\n  ```\n  code\n  a\n  ```\nafter {++y++}",
+		],
+		["B3 quoted, after the marker", "> ```\n> x\n> ```\nafter {++y++}", 12, "> ```\n> x\n> a\n> ```\nafter {++y++}"],
+		["B4 quoted, column 0", "> ```\n> x\n> ```\nafter {++y++}", 10, "> ```\n> x\n> a\n> ```\nafter {++y++}"],
+	])("%s: text typed on a closing fence line goes above it, untracked, inside the prefix", (_, doc, at, expected) => {
+		const view = suggestView(doc);
+		view.dispatch({ changes: { from: at, insert: "a" }, selection: { anchor: at + 1 }, userEvent: "input.type" });
+		const { text, regions, ranges } = parsed(view);
+		expect(text).toBe(expected);
+		expect(regions.map(([, to]) => to)).toEqual([expected.indexOf("```", expected.indexOf("a\n")) + 3]);
+		expect(ranges).toEqual(["{++y++}"]);
+		expect(view.state.selection.main.head).toBe(expected.indexOf("a\n") + 1);
+	});
+
+	test.each([
+		["Backspace at the start of the first code line", "delete.backward"],
+		["Delete at the end of the opening fence line", "delete.forward"],
+	])("B5: %s is refused when that line is not empty", (_, userEvent) => {
+		const view = suggestView(DOC);
+		view.dispatch({ selection: { anchor: userEvent === "delete.backward" ? 4 : 3 } });
+		view.dispatch({ changes: { from: 3, to: 4 }, userEvent });
+		expect(view.state.doc.toString()).toBe(DOC);
+	});
+
+	test("B5: Backspace removing an empty first code line is plain", () => {
+		const view = suggestView("```\n\nab\n```");
+		view.dispatch({ changes: { from: 3, to: 4 }, userEvent: "delete.backward" });
+		const { text, regions } = parsed(view);
+		expect(text).toBe(DOC);
+		expect(regions).toEqual([[0, 10]]);
+	});
+
+	test("B6: replacing everything between the fence lines keeps both fences on their lines", () => {
+		const view = suggestView("```\nx\n```\nafter {++y++}");
+		view.dispatch({ changes: { from: 3, to: 6, insert: "Z" }, selection: { anchor: 4 }, userEvent: "input.type" });
+		const { text, regions, ranges } = parsed(view);
+		expect(text).toBe("```\nZ\n```\nafter {++y++}");
+		expect(regions).toEqual([[0, 9]]);
+		expect(ranges).toEqual(["{++y++}"]);
+		expect(view.state.selection.main.head).toBe(5);
+	});
+
+	test("B7: a refused change does not cancel another cursor's change", () => {
+		const doc = "hi there\n\n```\nab\n```";
+		const view = suggestView(doc);
+		view.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(2), EditorSelection.cursor(17)]) });
+		view.dispatch(view.state.update({
+			changes: [{ from: 1, to: 2 }, { from: 16, to: 17 }],
+			selection: EditorSelection.create([EditorSelection.cursor(1), EditorSelection.cursor(15)]),
+			userEvent: "delete.backward",
+		}));
+		const { text, regions } = parsed(view);
+		expect(text).toBe("h{--i--} there\n\n```\nab\n```");
+		expect(regions).toEqual([[16, 26]]);
+	});
+
+	test("deleting the closing fence leaves a parsed deletion, not inert markup in code", () => {
+		const view = suggestView("```\nx\n```\nafter {++y++}");
+		view.dispatch({ changes: { from: 6, to: 9 }, userEvent: "delete.selection" });
+		const { text, ranges } = parsed(view);
+		expect(text).toBe("```\nx\n{--```--}\nafter {++y++}");
+		expect(ranges).toEqual(["{--```--}", "{++y++}"]);
+	});
+});
