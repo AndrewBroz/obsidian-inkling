@@ -145,17 +145,17 @@ in attribute blocks, and the Name setting shows a warning.
 Update in this order: first every collaborator's Inkling to 0.13 or later, then any tooling that parses the metadata
 itself (for the CRI build, `config/critic.py`). Only then should anyone change the Metadata format setting.
 
-Also new in 0.13:
+### What's new in 0.13
 
 - **Fenced code blocks are left alone.** CriticMarkup inside a fenced code block (``` or ~~~, including inside
   callouts and quotes) is no longer recognised; inline `code` is unchanged. Before updating, accept or reject any
   pending suggestions or comments inside fenced code blocks. In Suggest mode, typing inside a fenced code block is not
-  tracked, and comments cannot be added inside code blocks.
+  tracked, the closing fence stays on its own line, and comments cannot be added inside code blocks.
 - **Broken markup is cleaned up automatically.** Sync tools can leave stray CriticMarkup brackets or orphaned Inkling
   metadata behind. When a note becomes active, or the open note changes from outside the editor, these are removed.
   Text is never removed, and one Undo restores the markup (that note is then left alone until Obsidian restarts). Only
-  the note you are viewing is cleaned, and markup inside fenced or inline code is never touched. Turn it off with **Clean up broken markup automatically** (on by default), or run
-  **Clean up broken markup in this note** yourself.
+  the note you are viewing is cleaned, and markup inside fenced or inline code is never touched. Turn it off with
+  **Clean up broken markup automatically** (on by default), or run **Clean up broken markup in this note** yourself.
 
 ## Developing
 
