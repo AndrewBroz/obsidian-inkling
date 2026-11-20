@@ -446,11 +446,17 @@ function mark_range(
 			if (left_merge.type) {
 				// NOTE: Required for case of '{~~yyyabc~>123~~}{++zzz++}'
 				if (left_range!.type === SuggestionType.SUBSTITUTION) {
+					// EXPL: A deletion starting before the separator already took the whole "old" half (see
+					//       unwrap_in_range), and retracts the part of the pending "new" half it covers. Taking both halves
+					//       whole duplicated "old" and kept the covered "new" as deleted base text, which rejecting then
+					//       restored ("{~~old~>new~~} x" with "new~~} x" deleted became "{--old xnew--}").
 					const parts = (left_range as SubstitutionRange).unwrap_parts();
+					const middle = (left_range as SubstitutionRange).middle;
+					const kept_new = from >= middle + 2 ? parts[1].slice(0, from - middle - 2) : drop_additions ? "" : parts[1];
 					start_offset = parts[0].length;
-					end_offset += parts[1].length;
-					deleted = parts[0] + deleted;
-					insert = parts[1] + inserted;
+					end_offset += kept_new.length;
+					if (!(drop_additions && from < middle)) deleted = parts[0] + deleted;
+					insert = kept_new + inserted;
 				} else {
 					const slice = left_range!.unwrap_slice(0, from);
 					start_offset = slice.length;

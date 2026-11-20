@@ -629,3 +629,16 @@ describe("an operation starting where one range ends and another begins", () => 
 		expect(mark("{++ab++}{--x--} q", 4, 8, "", MarkAction.REGULAR)).toBe("{++a++}{--x--} q");
 	});
 });
+
+describe("a deletion from inside a substitution past its end", () => {
+	test.each([
+		["from its new half", 8, "{--old x--} y"],
+		["from inside its new half", 9, "{~~old~>n~~}{-- x--} y"],
+		["from inside its old half", 4, "{--old x--} y"],
+	])("%s keeps the old text once and retracts the covered new text", (_, from, expected) => {
+		const doc = "{~~old~>new~~} x y";
+		const output = mark(doc, from, 16, "", SuggestionType.DELETION);
+		expect(output).toBe(expected);
+		expect(reject_all(output)).toBe("old x y");
+	});
+});
