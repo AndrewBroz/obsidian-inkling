@@ -115,4 +115,72 @@ describe("suggest mode and fenced code", () => {
 		const heads = view.state.selection.ranges.map(r => r.head).sort((a, b) => a - b);
 		expect(heads).toEqual([text.indexOf("X") + 1, text.indexOf("aX") + 2]);
 	});
+
+	describe("the closing fence is protected", () => {
+		const FENCED = "```\nx\n```\nafter {++y++}";
+
+		function expectIntact(view: EditorView, region_count = 1) {
+			const text = view.state.doc.toString();
+			const parsed = view.state.field(rangeParser);
+			expect(parsed.code_regions).toEqual(findCodeRegions(text));
+			expect(parsed.code_regions).toHaveLength(region_count);
+			expect(parsed.code_regions[0].to).toBe(text.indexOf("```", parsed.code_regions[0].inner_to) + 3);
+			expect(parsed.ranges.ranges.map(r => text.slice(r.from, r.to))).toEqual(["{++y++}"]);
+		}
+
+		test("typing at the start of the closing fence line goes on a new line above it", () => {
+			const view = suggestView(FENCED);
+			view.dispatch({ changes: { from: 6, insert: "a" }, selection: { anchor: 7 }, userEvent: "input.type" });
+			expect(view.state.doc.toString()).toBe("```\nx\na\n```\nafter {++y++}");
+			expect(view.state.selection.main.head).toBe(7);
+			expectIntact(view);
+		});
+
+		test("pasting several lines there keeps the fence on its own line", () => {
+			const view = suggestView(FENCED);
+			view.dispatch({ changes: { from: 6, insert: "\na\nb" }, userEvent: "input.paste" });
+			expect(view.state.doc.toString()).toBe("```\nx\n\na\nb\n```\nafter {++y++}");
+			expectIntact(view);
+		});
+
+		test("Enter there is left alone", () => {
+			const view = suggestView(FENCED);
+			view.dispatch({ changes: { from: 6, insert: "\n" }, userEvent: "input" });
+			expect(view.state.doc.toString()).toBe("```\nx\n\n```\nafter {++y++}");
+			expectIntact(view);
+		});
+
+		test("Backspace joining the closing fence onto a non-empty line is refused", () => {
+			const view = suggestView(FENCED);
+			view.dispatch({ selection: { anchor: 6 } });
+			view.dispatch({ changes: { from: 5, to: 6 }, selection: { anchor: 5 }, userEvent: "delete.backward" });
+			expect(view.state.doc.toString()).toBe(FENCED);
+			expect(view.state.selection.main.head).toBe(6);
+		});
+
+		test("Backspace joining the closing fence onto the opening fence is refused", () => {
+			const doc = "```\n```\nafter {++y++}";
+			const view = suggestView(doc);
+			view.dispatch({ changes: { from: 3, to: 4 }, userEvent: "delete.backward" });
+			expect(view.state.doc.toString()).toBe(doc);
+		});
+
+		test("Backspace removing an empty line above the closing fence is allowed, untracked", () => {
+			const view = suggestView("```\nx\n\n```");
+			view.dispatch({ changes: { from: 6, to: 7 }, userEvent: "delete.backward" });
+			expect(view.state.doc.toString()).toBe("```\nx\n```");
+		});
+
+		test("selecting and deleting the closing fence is tracked", () => {
+			const view = suggestView(FENCED);
+			view.dispatch({ changes: { from: 6, to: 9 }, userEvent: "delete.selection" });
+			expect(view.state.doc.toString()).toContain("{--");
+		});
+
+		test("an unclosed block is not affected", () => {
+			const view = suggestView("```\nx\n");
+			view.dispatch({ changes: { from: 6, insert: "a" }, userEvent: "input.type" });
+			expect(view.state.doc.toString()).toBe("```\nx\na");
+		});
+	});
 });

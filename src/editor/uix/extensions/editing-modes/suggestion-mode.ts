@@ -21,7 +21,7 @@ import {
 	SuggestionType,
 } from "../../../base";
 
-import { inCodeContent } from "../../../base/edit-util/code-regions";
+import { type CodeRegion, inCodeContent } from "../../../base/edit-util/code-regions";
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
 import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
@@ -89,6 +89,32 @@ const vim_action_resolver = {
 // 	{ keys: 'O', motion: 'moveToOtherHighlightedEnd',
 // 	'moveToLineOrEdgeOfDocument':
 
+/**
+ * How a suggest-mode change that ends at the start of a closed block's closing fence line must be applied so the
+ * fence stays on its own line: undefined if it can be handled as usual, "refuse" if it must not happen, or a plain
+ * change to apply instead.
+ * EXPL: Text typed (or pasted) at the start of the closing fence line would join the fence's line and unmake it,
+ *       turning the rest of the note into code. It is code content, so it goes untracked onto a new line above the
+ *       fence, with the cursor after it. A deletion that would join the fence onto the end of a non-empty line
+ *       (Backspace at the fence) is refused; one removing an empty line above it is harmless. Changes reaching
+ *       before the opening fence line's end, and deletions covering fence characters, are left to the usual
+ *       tracking: deleting a fence on purpose stays a tracked change.
+ */
+function guardClosingFence(
+	state: EditorState,
+	regions: CodeRegion[],
+	{ from, to, inserted }: { from: number; to: number; inserted: string },
+): { from: number; to: number; insert: string; cursor: number } | "refuse" | undefined {
+	const region = regions.find(r => r.inner_to < r.to && to === r.inner_to && from >= r.head_end);
+	if (!region) return undefined;
+	if (inserted) {
+		if (inserted.endsWith("\n") || from < region.inner_from) return undefined;
+		return { from, to, insert: inserted + "\n", cursor: from + inserted.length };
+	}
+	if (from === to || state.doc.sliceString(from - 1, from) === "\n") return undefined;
+	return "refuse";
+}
+
 export const suggestionMode = (settings: PluginSettings): Extension =>
 	EditorState.transactionFilter.of(tr => applySuggestion(tr, settings));
 
@@ -126,7 +152,10 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		//       document, so a pure insertion tests its single position.
 		const code_regions = tr.startState.field(rangeParser).code_regions;
 		const in_code = ({ from, to }: { from: number; to: number }) => inCodeContent(code_regions, from, to);
-		if (changed_ranges.length > 0 && changed_ranges.every(in_code))
+		const guards = changed_ranges.map(change => guardClosingFence(tr.startState, code_regions, change));
+		if (guards.includes("refuse"))
+			return tr.startState.update({ filter: false });
+		if (changed_ranges.length > 0 && changed_ranges.every(in_code) && guards.every(guard => !guard))
 			return tr;
 
 		const ranges = tr.startState.field(rangeParser).ranges;
@@ -140,7 +169,15 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		let offset = 0;
 		// TODO: Consider each editor_change separately to avoid issues where you try to re-insert into a now updated range
 		//        (Or: update ranges with editor_change to reflect the new state)
-		for (let editor_change of changed_ranges) {
+		for (let i = 0; i < changed_ranges.length; i++) {
+			let editor_change = changed_ranges[i];
+			const guard = guards[i];
+			if (guard && guard !== "refuse") {
+				changes.push({ from: guard.from, to: guard.to, insert: guard.insert });
+				selections.push(EditorSelection.cursor(guard.cursor + offset));
+				offset += guard.insert.length - (guard.to - guard.from);
+				continue;
+			}
 			if (in_code(editor_change)) {
 				const { from, to, inserted } = editor_change;
 				changes.push({ from, to, insert: inserted });
