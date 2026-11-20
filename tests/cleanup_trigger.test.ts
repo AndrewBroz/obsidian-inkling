@@ -5,7 +5,13 @@ import { editorEditorField } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { cleanupChanges } from "../src/editor/base/edit-logic";
-import { CleanupScheduler, cleanupView, isExternalChange, isTyping } from "../src/editor/uix/cleanup-trigger";
+import {
+	CleanupScheduler,
+	CleanupUndoTracker,
+	cleanupView,
+	isExternalChange,
+	isTyping,
+} from "../src/editor/uix/cleanup-trigger";
 import { suggestionMode } from "../src/editor/uix/extensions";
 import { pluginEditAnnotation } from "../src/editor/uix/extensions/editing-modes";
 import { createRangeState } from "./helpers";
@@ -155,5 +161,79 @@ describe("transaction classification", () => {
 		)
 			.toBe(false);
 		expect(isExternalChange(state.update({ selection: { anchor: 1 } }))).toBe(false);
+	});
+});
+
+describe("CleanupUndoTracker", () => {
+	// EXPL: Feeds every transaction of `view` to the tracker, as the trigger's update listener does.
+	function tracked(doc: string, tracker: CleanupUndoTracker): EditorView {
+		const view = viewOf(doc);
+		const dispatch = view.dispatch.bind(view);
+		jest.spyOn(view, "dispatch").mockImplementation((...args: any[]) => {
+			const tr = args[0] instanceof Transaction ? args[0] : view.state.update(...args);
+			tracker.observe(view, "note.md", tr);
+			dispatch(tr);
+		});
+		return view;
+	}
+
+	function undo(view: EditorView, before: string) {
+		view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: before }, userEvent: "undo" });
+	}
+
+	test("undoing a cleanup marks the file to be skipped", () => {
+		const tracker = new CleanupUndoTracker();
+		const view = tracked("a {++b", tracker);
+		cleanupView(view, DEFAULT_SETTINGS);
+		expect(tracker.skips("note.md")).toBe(false);
+		undo(view, "a {++b");
+		expect(tracker.skips("note.md")).toBe(true);
+		expect(tracker.skips("other.md")).toBe(false);
+	});
+
+	test("an undo after another change does not count", () => {
+		const tracker = new CleanupUndoTracker();
+		const view = tracked("a {++b", tracker);
+		cleanupView(view, DEFAULT_SETTINGS);
+		view.dispatch({ changes: { from: 0, insert: "x" }, userEvent: "input.type" });
+		undo(view, "a b");
+		expect(tracker.skips("note.md")).toBe(false);
+	});
+
+	test("an undo without a cleanup does not count", () => {
+		const tracker = new CleanupUndoTracker();
+		const view = tracked("a b", tracker);
+		view.dispatch({ changes: { from: 0, insert: "x" }, userEvent: "input.type" });
+		undo(view, "a b");
+		expect(tracker.skips("note.md")).toBe(false);
+	});
+
+	test("only the first undo after a cleanup counts", () => {
+		const tracker = new CleanupUndoTracker();
+		const view = tracked("a {++b", tracker);
+		cleanupView(view, DEFAULT_SETTINGS);
+		view.dispatch({ changes: { from: 0, insert: "x" }, userEvent: "redo" });
+		undo(view, "a b");
+		expect(tracker.skips("note.md")).toBe(false);
+	});
+
+	test("a cleanup in another editor does not arm this one", () => {
+		const tracker = new CleanupUndoTracker();
+		const view = viewOf("a {++b");
+		const seen = spyTransactions(view);
+		cleanupView(view, DEFAULT_SETTINGS);
+		tracker.observe({}, "other.md", seen[0]);
+		tracker.observe(view, "note.md", view.state.update({ changes: { from: 0, insert: "x" }, userEvent: "undo" }));
+		expect(tracker.skips("note.md")).toBe(false);
+		expect(tracker.skips("other.md")).toBe(false);
+	});
+
+	test("forget clears the file", () => {
+		const tracker = new CleanupUndoTracker();
+		const view = tracked("a {++b", tracker);
+		cleanupView(view, DEFAULT_SETTINGS);
+		undo(view, "a {++b");
+		tracker.forget("note.md");
+		expect(tracker.skips("note.md")).toBe(false);
 	});
 });

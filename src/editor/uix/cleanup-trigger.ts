@@ -1,6 +1,6 @@
-import { type App, MarkdownView, Notice } from "obsidian";
+import { type App, editorInfoField, MarkdownView, Notice } from "obsidian";
 
-import { ChangeSet, type Extension, type Transaction } from "@codemirror/state";
+import { Annotation, ChangeSet, type EditorState, type Extension, type Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import type CommentatorPlugin from "../../main";
@@ -19,6 +19,9 @@ const MAX_PASSES = 3;
 
 /** How long the user must be idle before automatic cleanup runs. */
 const IDLE_MS = 2000;
+
+/** Marks the transaction of a cleanup run. */
+const cleanupAnnotation = Annotation.define<boolean>();
 
 export function cleanupNotice(count: number): string {
 	return `Inkling cleaned ${count} broken markup fragment${count === 1 ? "" : "s"}. Undo to restore.`;
@@ -42,7 +45,7 @@ export function cleanupView(view: EditorView, settings: PluginSettings): number 
 		count += result.count;
 	}
 	if (count)
-		view.dispatch({ changes, annotations: [pluginEditAnnotation.of(true)] });
+		view.dispatch({ changes, annotations: [pluginEditAnnotation.of(true), cleanupAnnotation.of(true)] });
 	return count;
 }
 
@@ -59,6 +62,42 @@ export function isTyping(tr: Transaction): boolean {
 export function isExternalChange(tr: Transaction): boolean {
 	return tr.docChanged && !tr.annotation(pluginEditAnnotation) &&
 		!["input", "delete", "move", "undo", "redo"].some(event => tr.isUserEvent(event));
+}
+
+/**
+ * Files whose cleanup the user undid this session, which automatic runs then leave alone: the notice says "Undo to
+ * restore", and a run on the next activation would otherwise remove the fragments again.
+ * @remark An undo counts when it is the first document change in that editor after a cleanup; with no other change
+ *         in between, it reverts the cleanup.
+ */
+export class CleanupUndoTracker {
+	private armed = new WeakSet<object>();
+	private undone = new Set<string>();
+
+	observe(editor: object, path: string | undefined, tr: Transaction): void {
+		if (!tr.docChanged) return;
+		if (tr.annotation(cleanupAnnotation)) {
+			this.armed.add(editor);
+			return;
+		}
+		if (!this.armed.delete(editor)) return;
+		if (path !== undefined && tr.isUserEvent("undo")) this.undone.add(path);
+	}
+
+	skips(path: string | undefined): boolean {
+		return path !== undefined && this.undone.has(path);
+	}
+
+	forget(path: string | undefined): void {
+		if (path !== undefined) this.undone.delete(path);
+	}
+}
+
+/** Shared by the automatic trigger and the cleanup command, which runs regardless and forgets the file. */
+export const cleanupUndos = new CleanupUndoTracker();
+
+function filePath(state: EditorState): string | undefined {
+	return state.field(editorInfoField, false)?.file?.path;
 }
 
 /**
@@ -121,7 +160,7 @@ export function cleanupTrigger(plugin: CommentatorPlugin): Extension {
 	//       since left is never cleaned.
 	const scheduler = new CleanupScheduler(() => {
 		const view = plugin.settings.cleanup_broken_markup ? activeEditor(plugin.app) : undefined;
-		if (!view) return;
+		if (!view || cleanupUndos.skips(filePath(view.state))) return;
 		const count = cleanupView(view, plugin.settings);
 		if (count) new Notice(cleanupNotice(count));
 	});
@@ -139,6 +178,7 @@ export function cleanupTrigger(plugin: CommentatorPlugin): Extension {
 	//       change only counts as external once the user has been idle for a while.
 	let last_typing = -Infinity;
 	return EditorView.updateListener.of(update => {
+		for (const tr of update.transactions) cleanupUndos.observe(update.view, filePath(tr.startState), tr);
 		if (update.transactions.some(isTyping)) {
 			last_typing = Date.now();
 			scheduler.noteTyping();
