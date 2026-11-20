@@ -93,7 +93,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	add_style_metadata: false,
 	add_color_metadata: false,
 	metadata_syntax: "legacy",
-	remove_on_resolve: false,
+	remove_on_resolve: true,
+	remove_on_resolve_migrated: true,
 
 	author: "",
 
@@ -164,6 +165,22 @@ export function disableDiffGutterOnce(
 	if (!("diff_gutter_migrated" in saved)) {
 		settings.diff_gutter = false;
 		settings.diff_gutter_migrated = true;
+	}
+}
+
+// EXPL: 0.13.0 flips `remove_on_resolve` to ON for everyone. Saves predating the flag hold the old
+//       `false` default, so it is switched on exactly once; the flag is then persisted so a user who
+//       turns it off afterwards is never migrated again. No-op when `saved` is null/undefined (fresh
+//       installs already get the new default). Runs on every load, like disableDiffGutterOnce.
+export function enableRemoveOnResolveOnce(
+	settings: PluginSettings,
+	saved: Partial<PluginSettings> | null | undefined,
+): void {
+	if (saved == null)
+		return;
+	if (!("remove_on_resolve_migrated" in saved)) {
+		settings.remove_on_resolve = true;
+		settings.remove_on_resolve_migrated = true;
 	}
 }
 

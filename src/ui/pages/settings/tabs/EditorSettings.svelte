@@ -168,7 +168,7 @@ let comment_rendering_mode_notices = {
 
 <SettingItem
 	name="Remove comments on resolve"
-	description="Resolving a thread deletes it instead of marking it done. Highlighted text is kept. Undo restores it."
+	description="Resolving a thread deletes it instead of marking it done. Highlighted text is kept. Undo restores it. Threads resolved earlier can be removed with &quot;Remove resolved comments in this note&quot;."
 	type="toggle"
 >
 	{#snippet control()}

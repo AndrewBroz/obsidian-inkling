@@ -73,6 +73,7 @@ import {
 	DATABASE_VERSION,
 	DEFAULT_SETTINGS,
 	disableDiffGutterOnce,
+	enableRemoveOnResolveOnce,
 	REQUIRES_DATABASE_REINDEX,
 	REQUIRES_EDITOR_RELOAD,
 	REQUIRES_FULL_RELOAD,
@@ -466,6 +467,12 @@ export default class CommentatorPlugin extends Plugin {
 			//       (flag absent from the saved data), so it survives a restart.
 			disableDiffGutterOnce(this.settings, new_settings);
 			if (!("diff_gutter_migrated" in new_settings))
+				await this.setSettings();
+
+			// EXPL: Same every-load, flag-gated pattern: remove_on_resolve is switched on once for
+			//       existing installs, persisted immediately so a later opt-out sticks.
+			enableRemoveOnResolveOnce(this.settings, new_settings);
+			if (!("remove_on_resolve_migrated" in new_settings))
 				await this.setSettings();
 		}
 

@@ -65,7 +65,7 @@ proto.empty = function() {
 
 // EXPL: `add_metadata: false` keeps the written markup deterministic (no author/timestamp blob).
 function setup(doc: string) {
-	const state = createRangeState(doc, { add_metadata: false }, [editorInfoField]);
+	const state = createRangeState(doc, { add_metadata: false, remove_on_resolve: false }, [editorInfoField]);
 	const view = new EditorView({ state });
 	const ranges = view.state.field(rangeParser).ranges.ranges;
 	return { view, ranges };

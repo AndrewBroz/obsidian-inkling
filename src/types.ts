@@ -296,6 +296,8 @@ export interface PluginSettings {
 	 * Whether resolving a comment thread removes it instead of marking it done
 	 */
 	remove_on_resolve: boolean;
+	/** One-time flag: the 0.13.0 default-on migration of `remove_on_resolve` has run */
+	remove_on_resolve_migrated: boolean;
 
 	/**
 	 * Author name to use for metadata
