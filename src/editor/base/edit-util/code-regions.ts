@@ -7,6 +7,8 @@ export interface CodeRegion {
 	 * before "{++"), or text.length if unclosed.
 	 */
 	to: number;
+	/** End of the opening fence line (excluding newline). */
+	head_end: number;
 	/** Start of the line after the opening fence line, or `to` if there is none. */
 	inner_from: number;
 	/** Start of the closing fence line, or text.length if unclosed. */
@@ -25,7 +27,7 @@ const CLOSE_FENCE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(?:(?:\+\+\}|--\}|==\}|~~\})(.*
 /** Finds fenced code blocks (``` / ~~~, including inside `>` quotes). Sorted, non-overlapping. */
 export function findCodeRegions(text: string): CodeRegion[] {
 	const regions: CodeRegion[] = [];
-	let open: { from: number; inner_from: number; char: string; length: number } | null = null;
+	let open: { from: number; head_end: number; inner_from: number; char: string; length: number } | null = null;
 	let pos = 0;
 
 	while (pos <= text.length) {
@@ -37,7 +39,13 @@ export function findCodeRegions(text: string): CodeRegion[] {
 			const m = CLOSE_FENCE.exec(line);
 			if (m && m[1][0] === open.char && m[1].length >= open.length) {
 				const outside = m[2]?.length ?? m[3]?.length ?? 0;
-				regions.push({ from: open.from, to: pos + line.length - outside, inner_from: open.inner_from, inner_to: pos });
+				regions.push({
+					from: open.from,
+					to: pos + line.length - outside,
+					head_end: open.head_end,
+					inner_from: open.inner_from,
+					inner_to: pos,
+				});
 				open = null;
 			}
 		} else {
@@ -46,6 +54,7 @@ export function findCodeRegions(text: string): CodeRegion[] {
 				// A range prefix stays outside the region so the range remains valid.
 				open = {
 					from: m[2] ? pos + m[1].length + m[2].length : pos,
+					head_end: pos + line.length,
 					inner_from: Math.min(end + 1, text.length),
 					char: m[3][0],
 					length: m[3].length,
@@ -56,7 +65,15 @@ export function findCodeRegions(text: string): CodeRegion[] {
 		pos = end + 1;
 	}
 
-	if (open) regions.push({ from: open.from, to: text.length, inner_from: open.inner_from, inner_to: text.length });
+	if (open) {
+		regions.push({
+			from: open.from,
+			to: text.length,
+			head_end: open.head_end,
+			inner_from: open.inner_from,
+			inner_to: text.length,
+		});
+	}
 	return regions;
 }
 
@@ -76,15 +93,19 @@ export function inCodeRegion(regions: CodeRegion[], pos: number): CodeRegion | u
 
 /**
  * Whether [from, to] lies wholly within some region's content, between its fence lines (an insertion
- * has from === to). Fence lines themselves are not content.
+ * has from === to). Fence lines themselves are not content, except that an insertion may also sit at
+ * the end of the opening fence line: Enter there adds a code line, and typing there edits the info
+ * string, neither of which can open or close the block. (A backtick typed into a backtick fence's info
+ * string does unmake it; that is accepted.)
  */
 export function inCodeContent(regions: CodeRegion[], from: number, to: number): boolean {
-	return regions.some(r => r.inner_from <= from && to <= r.inner_to);
+	return regions.some(r => (from === to ? r.head_end : r.inner_from) <= from && to <= r.inner_to);
 }
 
 export function sameRegions(a: CodeRegion[], b: CodeRegion[]): boolean {
 	return a.length === b.length &&
 		a.every((r, i) =>
-			r.from === b[i].from && r.to === b[i].to && r.inner_from === b[i].inner_from && r.inner_to === b[i].inner_to
+			r.from === b[i].from && r.to === b[i].to && r.head_end === b[i].head_end &&
+			r.inner_from === b[i].inner_from && r.inner_to === b[i].inner_to
 		);
 }
