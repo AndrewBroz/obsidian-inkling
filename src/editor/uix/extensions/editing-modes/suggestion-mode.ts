@@ -147,14 +147,14 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					const range = ranges_in_range[0];
 					if (
 						range.encloses_range(editor_change.from, editor_change.to) &&
-						range_metadata_compatible(range, metadata) &&
+						range_metadata_compatible(range, metadata).compatible &&
 						(range.type === SuggestionType.ADDITION ||
 							(range.type === SuggestionType.SUBSTITUTION &&
-									(range as SubstitutionRange).contains_part(
+								(range as SubstitutionRange).contains_part(
 										editor_change.from,
 										editor_change.to,
 										false,
-									)) === false)
+									) === false))
 					) {
 						type = MarkAction.REGULAR;
 					}
