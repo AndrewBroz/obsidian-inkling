@@ -37,7 +37,9 @@ describe("findCodeRegions", () => {
 	test.each(["++}", "--}", "==}", "~~}"])("closing fence may carry a CriticMarkup closer %s", (closer) => {
 		const open = "{" + closer.slice(0, 2);
 		const t = `${open}\`\`\`\nx\n\`\`\`${closer}\nafter`;
-		expect(findCodeRegions(t)).toEqual([{ from: 0, to: t.indexOf("\nafter") }]);
+		const regions = findCodeRegions(t);
+		expect(regions).toEqual([{ from: 3, to: t.indexOf("\nafter") }]);
+		expect(inCodeRegion(regions, 0)).toBeUndefined();
 	});
 
 	test("inline code is not a region", () => {
