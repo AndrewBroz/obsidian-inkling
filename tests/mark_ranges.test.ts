@@ -603,3 +603,16 @@ describe("boundary snapping: an operation never half-swallows a range's delimite
 		expect(base_text(output)).toBe(base_text("cc{--r--}"));
 	});
 });
+
+describe("a deletion reaching into a substitution's old half", () => {
+	test.each([
+		["from prose into the old half", 0, 7, "{~~x old~>new~~} y"],
+		["from the opener into the old half", 2, 6, "x {~~old~>new~~} y"],
+		["from prose to one character into the old half", 0, 6, "{~~x old~>new~~} y"],
+	])("%s keeps the old text once", (_, from, to, expected) => {
+		const doc = "x {~~old~>new~~} y";
+		const output = mark(doc, from, to, "", SuggestionType.DELETION);
+		expect(output).toBe(expected);
+		expect(base_text(output)).toBe(base_text(doc));
+	});
+});

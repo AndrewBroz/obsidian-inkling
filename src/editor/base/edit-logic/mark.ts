@@ -464,7 +464,9 @@ function mark_range(
 				if (right_range!.type === SuggestionType.SUBSTITUTION) {
 					const parts = (right_range as SubstitutionRange).unwrap_slice_parts_inverted(from, to);
 					insert = inserted + parts[1];
-					deleted += parts[0];
+					// EXPL: A deletion reaching into the substitution already took its whole "old" half (see
+					//       unwrap_in_range); adding the uncovered rest again duplicated it ("{~~x oldd~>new~~}").
+					if (!(drop_additions && right_range!.from < to)) deleted += parts[0];
 				} else {
 					insert += right_range!.unwrap_slice(to, Infinity);
 				}
