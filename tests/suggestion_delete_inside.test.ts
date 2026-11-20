@@ -59,13 +59,23 @@ describe("Backspace inside an existing range in Suggest mode", () => {
 
 describe("deleting a selection from an addition's opener", () => {
 	test.each([
-		["after a deletion", `{--x--}{++{"author":"alice"}@@ab++} q`, `{--x--}{++{"author":"alice"}@@b++} q`],
-		["on its own", `p {++{"author":"alice"}@@ab++} q`, `p {++{"author":"alice"}@@b++} q`],
-	])("%s removes the selected own text", (_, doc, expected) => {
+		["after a deletion", `{--x--}{++{"author":"alice"}@@ab++} q`, `{--x--}{++{"author":"alice"}@@b++} q`, 0],
+		["on its own", `p {++{"author":"alice"}@@ab++} q`, `p {++{"author":"alice"}@@b++} q`, 0],
+		["from inside a highlight's closer", `{==h==}{++{"author":"alice"}@@ab++} q`, `{==h==}{++{"author":"alice"}@@b++} q`, 1],
+	])("%s removes the selected own text", (_, doc, expected, back) => {
 		const v = view(doc);
-		const from = doc.indexOf("{++"), to = doc.indexOf("ab") + 1;
+		const from = doc.indexOf("{++") - back, to = doc.indexOf("ab") + 1;
 		v.dispatch({ selection: { anchor: from, head: to } });
 		v.dispatch({ changes: { from, to }, selection: { anchor: from }, userEvent: "delete.selection" });
 		expect(v.state.doc.toString()).toBe(expected);
 	});
+});
+
+test("a selection from own text into the next range's opener removes the own text", () => {
+	const doc = `{++{"author":"alice"}@@ab++}{--x--} q`;
+	const v = view(doc);
+	const from = doc.indexOf("b"), to = doc.indexOf("{--") + 1;
+	v.dispatch({ selection: { anchor: from, head: to } });
+	v.dispatch({ changes: { from, to }, selection: { anchor: from }, userEvent: "delete.selection" });
+	expect(v.state.doc.toString()).toBe(`{++{"author":"alice"}@@a++}{--x--} q`);
 });

@@ -118,11 +118,13 @@ function mark_range(
 ): EditorSuggestion | undefined {
 	const in_range = ranges.ranges_in_interval(from, to);
 
-	// EXPL: Where one range ends and the next starts, an operation starting there and reaching into the next one starts
-	//       in it: taking the range that ends there split the next one as if the operation began outside it,
-	//       re-emitting its opener (and metadata) inside itself ("{--x--}{++ab++}" with "{++a" deleted).
-	const left_range = ranges.at_cursor(from, from < to);
-	const right_range = ranges.at_cursor(to, true);
+	// EXPL: Where one range ends and the next starts, an operation lying inside one of them (starting at its opener or
+	//       ending at its closer) belongs to that one. Taking the other split it as if the operation lay outside it,
+	//       re-emitting its delimiters inside itself ("{--x--}{++ab++}" with "{++a" deleted, "{++ab++}{--x--}" with
+	//       "b++}" deleted). An operation covering a whole range still sees the range beyond as its neighbour.
+	const starting = ranges.at_cursor(from, true), ending = ranges.at_cursor(to, false);
+	const left_range = from < to && starting?.from === from && to < starting.to ? starting : ranges.at_cursor(from, false);
+	const right_range = from < to && ending?.to === to && ending.from < from ? ending : ranges.at_cursor(to, true);
 	const affixes: [string, string] = ["", ""];
 	let special_case = false;
 

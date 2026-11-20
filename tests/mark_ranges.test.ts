@@ -624,4 +624,8 @@ describe("an operation starting where one range ends and another begins", () => 
 		const output = mark(doc, from, to, "", MarkAction.REGULAR);
 		expect(output).toBe(`{--x--}{++{"author":"a"}@@b++} q`);
 	});
+
+	test("a deletion from inside an addition to its closer, right before a deletion, does not re-emit the closer", () => {
+		expect(mark("{++ab++}{--x--} q", 4, 8, "", MarkAction.REGULAR)).toBe("{++a++}{--x--} q");
+	});
 });
