@@ -119,12 +119,14 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			return tr;
 
 		// EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so markup written
-		//       there would be inert text and corrupt the code. An edit lying wholly inside one block's
-		//       content (between its fence lines) passes through untracked; one touching a fence line
-		//       is still tracked, since it can open, close or remove the block. Positions are in the
-		//       START document, so a pure insertion tests its single position.
+		//       there would be inert text and corrupt the code. A change lying wholly inside one block's
+		//       content (between its fence lines) is applied untracked; one touching a fence line is
+		//       still tracked, since it can open, close or remove the block. Decided per change, so a
+		//       multi-cursor edit can be tracked in prose and plain in code. Positions are in the START
+		//       document, so a pure insertion tests its single position.
 		const code_regions = tr.startState.field(rangeParser).code_regions;
-		if (changed_ranges.length > 0 && changed_ranges.every(({ from, to }) => inCodeContent(code_regions, from, to)))
+		const in_code = ({ from, to }: { from: number; to: number }) => inCodeContent(code_regions, from, to);
+		if (changed_ranges.length > 0 && changed_ranges.every(in_code))
 			return tr;
 
 		const ranges = tr.startState.field(rangeParser).ranges;
@@ -139,6 +141,14 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		// TODO: Consider each editor_change separately to avoid issues where you try to re-insert into a now updated range
 		//        (Or: update ranges with editor_change to reflect the new state)
 		for (let editor_change of changed_ranges) {
+			if (in_code(editor_change)) {
+				const { from, to, inserted } = editor_change;
+				changes.push({ from, to, insert: inserted });
+				selections.push(EditorSelection.cursor(from + inserted.length + offset));
+				offset += inserted.length - (to - from);
+				continue;
+			}
+
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
 				SuggestionType.ADDITION;

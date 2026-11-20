@@ -1,3 +1,4 @@
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { editorEditorField } from "obsidian";
@@ -14,6 +15,7 @@ function suggestView(doc: string): EditorView {
 	return new EditorView({
 		state: createRangeState(doc, { add_metadata: false }, [
 			editorEditorField,
+			EditorState.allowMultipleSelections.of(true),
 			suggestionMode({ ...DEFAULT_SETTINGS, add_metadata: false }),
 		]),
 	});
@@ -97,5 +99,20 @@ describe("suggest mode and fenced code", () => {
 		const view = suggestView(DOC);
 		view.dispatch({ changes: { from: 3, insert: "js" }, userEvent: "input.type" });
 		expect(view.state.doc.toString()).toBe("```js\nab\n```");
+	});
+
+	test.each([false, true])("a multi-cursor edit tracks the prose change and leaves the code change plain (code first: %s)", code_first => {
+		const doc = "hi\n\n```\nab\n```";
+		const view = suggestView(doc);
+		const cursors = code_first ? [9, 2] : [2, 9];
+		view.dispatch(view.state.update({
+			changes: cursors.map(at => ({ from: at, insert: "X" })),
+			selection: EditorSelection.create(cursors.map(at => EditorSelection.cursor(at)), 0),
+			userEvent: "input.type",
+		}));
+		const text = view.state.doc.toString();
+		expect(text).toBe("hi{++X++}\n\n```\naXb\n```");
+		const heads = view.state.selection.ranges.map(r => r.head).sort((a, b) => a - b);
+		expect(heads).toEqual([text.indexOf("X") + 1, text.indexOf("aX") + 2]);
 	});
 });
