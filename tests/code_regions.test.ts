@@ -1,5 +1,8 @@
 import { EditorState } from "@codemirror/state";
 
+import { DEFAULT_SETTINGS } from "../src/constants";
+import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
+
 import { findCodeRegions, inCodeRegion, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
 
 describe("findCodeRegions", () => {
@@ -201,9 +204,10 @@ describe("a trailing opener on a closing fence line skips nested blocks (B1)", (
 		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 9], [17, 31]]);
 	});
 
-	test("a nested fence line carrying the closer", () => {
+	test("a nested fence line carrying the closer, never closed, makes the opener line code (N5)", () => {
+		// Closing at "```{++" would leave "```++}" opening a block that never closes; read as content, it closes.
 		const t = "```\nx\n```{++\nfoo\n```++}\nafter";
-		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 9], [17, t.length]]);
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 23]]);
 	});
 
 	test("an unclosed nested block containing the closer", () => {
@@ -224,5 +228,29 @@ describe("a trailing opener on a closing fence line skips nested blocks (B1)", (
 	test("a code line starting with an opener and fence but no closer does not close", () => {
 		const t = "```\n{==```\nx\n```";
 		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, t.length]]);
+	});
+});
+
+describe("a fence line carrying CriticMarkup closes a block only if that leaves no block unclosed (N5)", () => {
+	test.each([
+		["a deletion", "```markdown\n{--```--}\n```\nafter {++y++}"],
+		["a highlight and comment", "```markdown\n{==```==}{>>c<<}\n```\nafter {++y++}"],
+		["a multi-line addition", "```markdown\n{++```js\ncode\n```++}\n```\nafter {++y++}"],
+	])("a block showing %s around a fence stays one block", (_, t) => {
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, t.indexOf("\nafter")]]);
+		expect(getRangesInText(t, { ...DEFAULT_SETTINGS }).map(r => t.slice(r.from, r.to))).toEqual(["{++y++}"]);
+	});
+
+	test("a deletion wrapping the last fence still closes the block", () => {
+		const t = "```\nx\n{--```--}\nafter {++y++}";
+		expect(findCodeRegions(t).map(r => [r.from, r.to])).toEqual([[0, 6]]);
+		expect(getRangesInText(t, { ...DEFAULT_SETTINGS }).map(r => t.slice(r.from, r.to))).toEqual([
+			"{--```--}",
+			"{++y++}",
+		]);
+	});
+
+	test("bare fences follow CommonMark", () => {
+		expect(findCodeRegions("```\nx\n```\n```\ny").map(r => [r.from, r.to])).toEqual([[0, 9], [10, 15]]);
 	});
 });

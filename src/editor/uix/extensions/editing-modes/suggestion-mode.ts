@@ -196,6 +196,25 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			return { changes: edits, cursor: edits[edits.length - 1].end + added_offset };
 		}
 
+		function deletion(from: number, to: number): GuardedEdit {
+			const edits = mark_ranges(
+				new CriticMarkupRanges([]),
+				tr.startState.doc,
+				from,
+				to,
+				"",
+				SuggestionType.DELETION,
+				metadata,
+				false,
+				settings.metadata_syntax,
+			);
+			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
+			return {
+				changes: edits,
+				cursor: backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset,
+			};
+		}
+
 		// EXPL: Each change is decided on its own by the fence guard (see fence-guard.ts): tracked in prose, plain in
 		//       code, and never in a way that breaks a fence. A change it refuses leaves its cursor where it was and
 		//       does not affect the other cursors' changes. Positions are in the START document; `offset` carries the
@@ -204,7 +223,16 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			tr.startState.doc,
 			tr.startState.field(rangeParser).code_regions,
 			changed_ranges,
-			{ track, addition },
+			{
+				track,
+				addition,
+				deletion,
+				ownText: (from, to) => {
+					const inside = ranges.ranges_in_interval(from, to);
+					return inside.length === 1 && inside[0].type === SuggestionType.ADDITION &&
+						inside[0].encloses_range(from, to);
+				},
+			},
 		);
 		const changes: EditorChange[] = [];
 		const selections: SelectionRange[] = [];

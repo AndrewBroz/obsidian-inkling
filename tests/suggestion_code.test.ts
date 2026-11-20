@@ -213,12 +213,22 @@ describe("the fence guard keeps fenced code intact (B1-B7)", () => {
 		const fence_end = doc.indexOf("```\nafter") + 3;
 		const view = suggestView(doc);
 		view.dispatch({ selection: { anchor: fence_end } });
+		// EXPL: While the nested block is open (from its opening fence's third backtick to its closing fence's), closing
+		//       the first block at "```{++" leaves a fence unclosed, so that line may read as code (N5) and the addition
+		//       with it, until the nested block is closed. Every other keystroke keeps the first block closed.
+		let nested_open = false;
 		for (const chunk of ["\n", "foo", "\n", "```", "js", "\n", "code", "\n", "```", "\n", "bar"]) {
-			for (const ch of chunk) {
+			for (const [i, ch] of [...chunk].entries()) {
 				typeAtHead(view, ch);
-				const { regions, ranges } = parsed(view);
-				expect(regions[0]).toEqual([16, fence_end]);
+				if (chunk === "```" && i === 2) nested_open = !nested_open;
+				const { text, regions, ranges } = parsed(view);
 				expect(ranges[0]).toBe("{++y++}");
+				if (nested_open) {
+					expect(regions[0][0]).toBe(16);
+					expect(text.indexOf("{++y++}")).toBe(7);
+					continue;
+				}
+				expect(regions[0]).toEqual([16, fence_end]);
 				expect(ranges.length).toBe(2);
 			}
 		}
@@ -318,5 +328,125 @@ describe("the fence guard keeps fenced code intact (B1-B7)", () => {
 		const { text, ranges } = parsed(view);
 		expect(text).toBe("```\nx\n{--```--}\nafter {++y++}");
 		expect(ranges).toEqual(["{--```--}", "{++y++}"]);
+	});
+});
+
+describe("fence guard, round 2 (N1-N4)", () => {
+	function parsed(view: EditorView) {
+		const text = view.state.doc.toString();
+		const field = view.state.field(rangeParser);
+		expect(field.code_regions).toEqual(findCodeRegions(text));
+		return {
+			text,
+			regions: field.code_regions.map(r => [r.from, r.to]),
+			ranges: field.ranges.ranges.map(r => text.slice(r.from, r.to)),
+		};
+	}
+
+	function edit(
+		view: EditorView,
+		selection: [number, number][],
+		changes: { from: number; to?: number; insert?: string }[],
+	) {
+		view.dispatch({ selection: EditorSelection.create(selection.map(([a, h]) => EditorSelection.range(a, h))) });
+		let offset = 0;
+		const cursors = changes.map(c => {
+			const at = c.from + (c.insert?.length ?? 0) + offset;
+			offset += (c.insert?.length ?? 0) - ((c.to ?? c.from) - c.from);
+			return EditorSelection.cursor(at);
+		});
+		view.dispatch(view.state.update({ changes, selection: EditorSelection.create(cursors), userEvent: "input" }));
+	}
+
+	test("N1: pasting text with a whole code block into prose is tracked", () => {
+		const view = suggestView("hello\n\nworld {++y++}");
+		const paste = "Intro text\n\n```js\ncode\n```\n\nMore text\n";
+		edit(view, [[6, 6]], [{ from: 6, insert: paste }]);
+		const { text, regions, ranges } = parsed(view);
+		expect(text).toBe(`hello\n{++${paste}++}\nworld {++y++}`);
+		expect(ranges).toEqual([`{++${paste}++}`, "{++y++}"]);
+		expect(regions).toEqual([[text.indexOf("```js"), text.indexOf("```\n\nMore") + 3]]);
+	});
+
+	test.each(
+		[
+			["typing in an addition", "a {++abcdef++} b", [[6, 6], [10, 10]], [{ from: 6, insert: "X" }, {
+				from: 10,
+				insert: "Y",
+			}], "a {++aXbcdeYf++} b"],
+			["typing in a substitution's new text", "x {~~old~>new~~} y", [[11, 11], [12, 12]], [{ from: 11, insert: "X" }, {
+				from: 12,
+				insert: "Y",
+			}], "x {~~old~>nXeYw~~} y"],
+			["replacing in a substitution's new text", "x {~~old~>new~~} y", [[10, 11], [12, 13]], [{
+				from: 10,
+				to: 11,
+				insert: "P",
+			}, { from: 12, to: 13, insert: "Q" }], "x {~~old~>PeQ~~} y"],
+		] as const,
+	)("N2: two cursors %s keep both keystrokes", (_, doc, selection, changes, expected) => {
+		const view = suggestView(doc);
+		edit(
+			view,
+			selection as unknown as [number, number][],
+			changes as unknown as { from: number; to?: number; insert?: string }[],
+		);
+		expect(view.state.doc.toString()).toBe(expected);
+	});
+
+	const FENCED = "p\n```\nab\n```\nafter {++y++}";
+	test.each(
+		[
+			[
+				"Backspace at the end of the closing fence",
+				[12, 12],
+				{ from: 11, to: 12 },
+				"p\n```\nab\n{--```--}\nafter {++y++}",
+			],
+			["Delete at the start of the closing fence", [9, 9], { from: 9, to: 10 }, "p\n```\nab\n{--```--}\nafter {++y++}"],
+			["Backspace at the end of the opening fence", [5, 5], { from: 4, to: 5 }, "p\n{--```--}\nab\n```\nafter {++y++}"],
+		] as const,
+	)("N3: %s deletes the whole fence, tracked, and the block stays", (_, selection, change, expected) => {
+		const view = suggestView(FENCED);
+		edit(view, [selection as unknown as [number, number]], [change]);
+		const { text, regions, ranges } = parsed(view);
+		expect(text).toBe(expected);
+		expect(regions).toHaveLength(1);
+		expect(ranges).toEqual([expect.stringContaining("```"), "{++y++}"]);
+	});
+
+	test("N3: Backspace in an opening fence with an info string deletes the fence and its info string", () => {
+		const view = suggestView("p\n```js\nab\n```\nafter {++y++}");
+		edit(view, [[5, 5]], [{ from: 4, to: 5 }]);
+		const { text, regions, ranges } = parsed(view);
+		expect(text).toBe("p\n{--```js--}\nab\n```\nafter {++y++}");
+		expect(regions).toHaveLength(1);
+		expect(ranges).toEqual(["{--```js--}", "{++y++}"]);
+	});
+
+	const DOC2 = "p\n```\nx\n```\nafter text {++y++}";
+	test.each(
+		[
+			[
+				"from the closing fence into prose, deleted",
+				[9, 16],
+				{ from: 9, to: 16 },
+				"p\n```\nx\n{--```\nafte--}r text {++y++}",
+			],
+			[
+				"from the closing fence into prose, replaced",
+				[9, 16],
+				{ from: 9, to: 16, insert: "Z" },
+				"p\n```\nx\n{--```\nafte--}{++Z++}r text {++y++}",
+			],
+			["from code into the closing fence", [7, 10], { from: 7, to: 10 }, "p\n```\nx\n{--```--}\nafter text {++y++}"],
+		] as const,
+	)("N4: a selection %s is a tracked deletion of the whole fence", (_, selection, change, expected) => {
+		const view = suggestView(DOC2);
+		edit(view, [selection as unknown as [number, number]], [change]);
+		const { text, regions, ranges } = parsed(view);
+		expect(text).toBe(expected);
+		expect(regions).toEqual([[2, 8]]);
+		expect(ranges).toContain("{++y++}");
 	});
 });
