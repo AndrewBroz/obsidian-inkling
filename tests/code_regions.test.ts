@@ -42,6 +42,13 @@ describe("findCodeRegions", () => {
 		expect(inCodeRegion(regions, 0)).toBeUndefined();
 	});
 
+	test("range prefix after a quote marker stays outside the region", () => {
+		const t = "> {++```\n> x\n> ```++}";
+		const regions = findCodeRegions(t);
+		expect(regions).toEqual([{ from: 5, to: t.length }]);
+		expect(inCodeRegion(regions, 2)).toBeUndefined();
+	});
+
 	test("inline code is not a region", () => {
 		expect(findCodeRegions("`{++x++}`")).toEqual([]);
 	});

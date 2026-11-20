@@ -7,7 +7,7 @@ export interface CodeRegion {
 
 // Optional "{++" style CriticMarkup opener may precede the fence, so a fence
 // wrapped by a range ("{++```") is still recognised as a code block.
-const OPEN_FENCE = /^ {0,3}(?:> ?)*(\{(?:\+\+|--|==|~~))?(`{3,}|~{3,})(.*)$/;
+const OPEN_FENCE = /^( {0,3}(?:> ?)*)(\{(?:\+\+|--|==|~~))?(`{3,}|~{3,})(.*)$/;
 const CLOSE_FENCE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(?:\+\+\}|--\}|==\}|~~\})?\s*$/;
 
 /** Finds fenced code blocks (``` / ~~~, including inside `>` quotes). Sorted, non-overlapping. */
@@ -29,9 +29,9 @@ export function findCodeRegions(text: string): CodeRegion[] {
 			}
 		} else {
 			const m = OPEN_FENCE.exec(line);
-			if (m && !(m[2][0] === "`" && m[3].includes("`"))) {
+			if (m && !(m[3][0] === "`" && m[4].includes("`"))) {
 				// A range prefix stays outside the region so the range remains valid.
-				open = { from: pos + (m[1]?.length ?? 0), char: m[2][0], length: m[2].length };
+				open = { from: m[2] ? pos + m[1].length + m[2].length : pos, char: m[3][0], length: m[3].length };
 			}
 		}
 
