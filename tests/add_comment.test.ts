@@ -1,6 +1,7 @@
 import { type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
+import * as obsidian from "obsidian";
 import { editorEditorField } from "obsidian";
 
 import { addCommentToView } from "../src/editor/base/edit-logic/add-comment";
@@ -156,5 +157,19 @@ describe("addCommentToView with a selection", () => {
 		addCommentToView(view, undefined);
 
 		expect(view.state.doc.toString()).toBe("{>>hello<<}{>><<}");
+	});
+});
+
+describe("addCommentToView inside fenced code", () => {
+	test("a selection inside a fence is refused with a notice and writes nothing", () => {
+		const doc = "```\nab\n```";
+		const view = viewWith(doc, 4, 5);
+		const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
+		addCommentToView(view, undefined);
+
+		expect(view.state.doc.toString()).toBe(doc);
+		expect(view.state.field(commentDraftField)).toBeNull();
+		expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
+		notice.mockRestore();
 	});
 });

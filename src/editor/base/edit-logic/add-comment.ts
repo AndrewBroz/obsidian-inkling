@@ -6,6 +6,7 @@ import { Notice } from "obsidian";
 import { CriticMarkupRange, SuggestionType } from "../ranges";
 
 import { rangeParser } from "../edit-util";
+import { inCodeRegion } from "../edit-util/code-regions";
 import { create_anchored_comment, create_range } from "../edit-util/range-create";
 
 import {
@@ -30,6 +31,14 @@ export function addCommentToView(
 	const settings = editor.state.field(pluginSettingsField);
 
 	const selection = editor.state.selection.main;
+
+	// EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so a comment written
+	//       there would be inert text spliced into the code. Refuse rather than corrupt it. A reply
+	//       (`range` given) targets an existing thread, which by construction is outside any fence.
+	if (!range && inCodeRegion(editor.state.field(rangeParser).code_regions, selection.from)) {
+		new Notice("Comments can't be added inside code blocks");
+		return;
+	}
 
 	// EXPL: GDocs-style anchored comment. A clean selection no longer writes markup here — it opens
 	//       a DRAFT (comment-draft.ts) that the gutter renders a provisional card for, and the note
