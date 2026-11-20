@@ -63,7 +63,10 @@ describe("cleanupChanges", () => {
 		["{{!-- note --}}"],
 		["{{- x -}}"],
 		["{{-- blade --}}"],
-	])("template braces are not debris: %j", input => {
+		["{---}"],
+		["{===}"],
+		["{>>>}"],
+	])("template braces and overlapping delimiters are not debris: %j", input => {
 		expect(clean(input)).toEqual({ text: input, count: 0 });
 	});
 
@@ -78,6 +81,10 @@ describe("cleanupChanges", () => {
 		["{not attributes}"],
 		["{\"author\":\"A\"} no at-signs"],
 		["{[1]}@@"],
+		["{\"note\":\"my precious words\"}@@"],
+		["{\"x\":1}@@ in prose"],
+		["{}@@ in prose"],
+		["{\"style\":\"a\"}@@"],
 	])("ambiguous text is kept: %j", input => {
 		expect(clean(input)).toEqual({ text: input, count: 0 });
 	});
@@ -90,16 +97,37 @@ describe("cleanupChanges", () => {
 		expect(clean("w{\"author\":\"{++x\"}@@ z")).toEqual({ text: "w z", count: 1 });
 	});
 
-	test("changes are expressed against the original text across passes", () => {
-		// EXPL: Removing the inner `{++` (4..7) joins `{+` (2..4) and `+` (7..8) into a new opener, found on the
-		//       second pass at 2..5 of the intermediate text. Mapped back, the two passes cover 2..8.
+	test.each([
+		["{+{--+ x {==y++} z==}"],
+		["{+{--+ x {>>y++} z<<}"],
+	])("a removal that would re-pair a valid range is dropped: %j", input => {
+		expect(clean(input)).toEqual({ text: input, count: 0 });
+	});
+
+	test("a removal that would move a fenced region is dropped", () => {
+		const input = "--}```\nx\n```\nkeep {==this\n";
+		expect(clean(input)).toEqual({ text: input, count: 0 });
+	});
+
+	test("safe removals are kept when another is dropped", () => {
+		// EXPL: Removing `{--` would pair `{++ x {==y++}`; the stray `<<}` at the end is safe on its own.
+		expect(clean("{+{--+ x {==y++} z==} w <<}")).toEqual({ text: "{+{--+ x {==y++} z==} w ", count: 1 });
+	});
+
+	test("one pass: debris exposed by a removal waits for the next run", () => {
+		// EXPL: Removing the inner `{++` joins `{+` and `+` into a new opener; the next run removes it.
 		const input = "a {+{+++ b";
-		expect(cleanupChanges(input, DEFAULT_SETTINGS)).toEqual({ changes: [{ from: 2, to: 8, insert: "" }], count: 2 });
-		expect(clean(input).text).toBe("a  b");
+		expect(cleanupChanges(input, DEFAULT_SETTINGS)).toEqual({ changes: [{ from: 4, to: 7, insert: "" }], count: 1 });
+		expect(clean(clean(input).text)).toEqual({ text: "a  b", count: 1 });
+	});
+
+	test("adjacent removals merge into one change", () => {
+		expect(cleanupChanges("a {++{author=A} b", DEFAULT_SETTINGS))
+			.toEqual({ changes: [{ from: 2, to: 15, insert: "" }], count: 2 });
 	});
 
 	test("idempotent", () => {
-		for (const input of ["a {++new text", "{++a {==b <<}", "a {+{+++ b", "w{author=A}--} {==x"]) {
+		for (const input of ["a {++new text", "{++a {==b <<}", "w{author=A}--} {==x"]) {
 			const once = clean(input);
 			expect(clean(once.text)).toEqual({ text: once.text, count: 0 });
 		}
@@ -151,6 +179,10 @@ const SEGMENTS = [
 	"q<<}",
 	"{{-- t --}}",
 	"{color=red}",
+	"{+{--+",
+	"--}```\n",
+	"{---}",
+	"{\"note\":\"n\"}@@",
 ];
 
 const SHAPES = {
@@ -161,7 +193,7 @@ const SHAPES = {
 };
 
 describe("findDebris (property)", () => {
-	test("reports only delimiters outside code and ranges; cleanup leaves nothing behind", () => {
+	test("reports only delimiters outside code and ranges; cleanup preserves every range and fenced region", () => {
 		const random = mulberry32(0x13C1EA);
 		for (let doc = 0; doc < 500; doc++) {
 			let text = "";
@@ -184,13 +216,35 @@ describe("findDebris (property)", () => {
 				last = span.to;
 			}
 
-			// EXPL: Output equals the input with exactly the reported spans removed (first pass), and no run
-			//       after cleanup finds anything more.
+			// EXPL: Every change removes reported debris only, never touches an original range or fenced region, and
+			//       leaves all of them exactly as they were (so a later run cannot be fighting this one).
 			const { changes, count } = cleanupChanges(text, DEFAULT_SETTINGS);
-			const once = apply(text, changes);
-			const expected = apply(text, debris.map(span => ({ ...span, insert: "" })));
-			if (count === debris.length) expect([context, once]).toEqual([context, expected]);
-			expect([context, cleanupChanges(once, DEFAULT_SETTINGS).count]).toEqual([context, 0]);
+			const output = apply(text, changes);
+			let removed = "";
+			let kept = "";
+			let last_change = 0;
+			for (const change of changes) {
+				const ok = change.from >= last_change && change.to > change.from && change.insert === "" &&
+					areas.every(area => change.to <= area.from || change.from >= area.to) &&
+					debris.some(span => span.from === change.from) && debris.some(span => span.to === change.to);
+				expect([context, change, ok]).toEqual([context, change, true]);
+				kept += text.slice(last_change, change.from);
+				removed += text.slice(change.from, change.to);
+				last_change = change.to;
+			}
+			kept += text.slice(last_change);
+			expect([context, output]).toEqual([context, kept]);
+			expect(output.length + removed.length).toBe(text.length);
+			expect(count).toBeLessThanOrEqual(debris.length);
+
+			const shapes = (doc: string) => [
+				...getRangesInText(doc, { ...DEFAULT_SETTINGS, enable_metadata: true }, false)
+					.map(r => `${r.type}:${doc.slice(r.from, r.to)}`),
+				...findCodeRegions(doc).map(r => `code:${doc.slice(r.from, r.to)}`),
+			];
+			expect([context, shapes(output)]).toEqual([context, shapes(text)]);
+			const again = cleanupChanges(output, DEFAULT_SETTINGS);
+			if (again.count) expect([context, shapes(apply(output, again.changes))]).toEqual([context, shapes(text)]);
 		}
 	});
 });
