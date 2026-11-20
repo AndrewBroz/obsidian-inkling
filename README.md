@@ -115,8 +115,9 @@ Pandoc-grammar tools such as ZotLit read `@@some` as a citation; attribute block
 readers also show a trailing block as stray text after a correct range, rather than inside the highlighted content.
 
 Choose the format you write in **Settings, Metadata, Metadata format**. The default is **Legacy**. Opening a note never
-changes it. Ranges that Inkling rewrites anyway (an edit, a reply, a resolve) switch to the chosen format, and a range
-already in attribute blocks is never silently written back as legacy. Two commands convert a whole note on request:
+converts its metadata format. Ranges that Inkling rewrites anyway (an edit, a reply, a resolve) switch to the chosen
+format, and a range already in attribute blocks is never silently written back as legacy. Two commands convert a whole
+note on request:
 
 - **Convert metadata in this note to attribute blocks**
 - **Convert metadata in this note back to legacy**
@@ -152,8 +153,8 @@ Also new in 0.13:
   tracked, and comments cannot be added inside code blocks.
 - **Broken markup is cleaned up automatically.** Sync tools can leave stray CriticMarkup brackets or orphaned Inkling
   metadata behind. When a note becomes active, or the open note changes from outside the editor, these are removed.
-  Text is never removed, and one Undo restores the markup. Only the note you are viewing is cleaned, and markup inside
-  fenced code is never touched. Turn it off with **Clean up broken markup automatically** (on by default), or run
+  Text is never removed, and one Undo restores the markup (that note is then left alone until Obsidian restarts). Only
+  the note you are viewing is cleaned, and markup inside fenced or inline code is never touched. Turn it off with **Clean up broken markup automatically** (on by default), or run
   **Clean up broken markup in this note** yourself.
 
 ## Developing
