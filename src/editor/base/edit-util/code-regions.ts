@@ -3,22 +3,29 @@ export interface CodeRegion {
 	from: number;
 	/**
 	 * End of the closing fence line (excluding newline), or of the CriticMarkup closer that ends it
-	 * ("```++} more" ends after "++}"), or text.length if unclosed.
+	 * ("```++} more" ends after "++}"), or the start of a CriticMarkup opener after it ("```{++" ends
+	 * before "{++"), or text.length if unclosed.
 	 */
 	to: number;
+	/** Start of the line after the opening fence line, or `to` if there is none. */
+	inner_from: number;
+	/** Start of the closing fence line, or text.length if unclosed. */
+	inner_to: number;
 }
 
 // Optional "{++" style CriticMarkup opener may precede the fence, so a fence
 // wrapped by a range ("{++```") is still recognised as a code block.
 const OPEN_FENCE = /^( {0,3}(?:> ?)*)(\{(?:\+\+|--|==|~~))?(`{3,}|~{3,})(.*)$/;
 // A closing fence may carry the closer of a range wrapping the block; text may follow that closer
-// ("```++} {--d--}"), and is outside the region.
-const CLOSE_FENCE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(?:(?:\+\+\}|--\}|==\}|~~\})(.*)|\s*)$/;
+// ("```++} {--d--}"), and is outside the region. It may instead carry the opener of a range that
+// starts after it ("```{++" from pressing Enter at the fence's end in suggest mode); the opener and
+// everything after it are outside the region.
+const CLOSE_FENCE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(?:(?:\+\+\}|--\}|==\}|~~\})(.*)|(\{(?:\+\+|--|~~|==|>>).*)|\s*)$/;
 
 /** Finds fenced code blocks (``` / ~~~, including inside `>` quotes). Sorted, non-overlapping. */
 export function findCodeRegions(text: string): CodeRegion[] {
 	const regions: CodeRegion[] = [];
-	let open: { from: number; char: string; length: number } | null = null;
+	let open: { from: number; inner_from: number; char: string; length: number } | null = null;
 	let pos = 0;
 
 	while (pos <= text.length) {
@@ -29,21 +36,27 @@ export function findCodeRegions(text: string): CodeRegion[] {
 		if (open) {
 			const m = CLOSE_FENCE.exec(line);
 			if (m && m[1][0] === open.char && m[1].length >= open.length) {
-				regions.push({ from: open.from, to: pos + line.length - (m[2]?.length ?? 0) });
+				const outside = m[2]?.length ?? m[3]?.length ?? 0;
+				regions.push({ from: open.from, to: pos + line.length - outside, inner_from: open.inner_from, inner_to: pos });
 				open = null;
 			}
 		} else {
 			const m = OPEN_FENCE.exec(line);
 			if (m && !(m[3][0] === "`" && m[4].includes("`"))) {
 				// A range prefix stays outside the region so the range remains valid.
-				open = { from: m[2] ? pos + m[1].length + m[2].length : pos, char: m[3][0], length: m[3].length };
+				open = {
+					from: m[2] ? pos + m[1].length + m[2].length : pos,
+					inner_from: Math.min(end + 1, text.length),
+					char: m[3][0],
+					length: m[3].length,
+				};
 			}
 		}
 
 		pos = end + 1;
 	}
 
-	if (open) regions.push({ from: open.from, to: text.length });
+	if (open) regions.push({ from: open.from, to: text.length, inner_from: open.inner_from, inner_to: text.length });
 	return regions;
 }
 
@@ -61,6 +74,16 @@ export function inCodeRegion(regions: CodeRegion[], pos: number): CodeRegion | u
 	return undefined;
 }
 
+/**
+ * Whether [from, to] lies wholly within some region's content, between its fence lines (an insertion
+ * has from === to). Fence lines themselves are not content.
+ */
+export function inCodeContent(regions: CodeRegion[], from: number, to: number): boolean {
+	return regions.some(r => r.inner_from <= from && to <= r.inner_to);
+}
+
 export function sameRegions(a: CodeRegion[], b: CodeRegion[]): boolean {
-	return a.length === b.length && a.every((r, i) => r.from === b[i].from && r.to === b[i].to);
+	return a.length === b.length && a.every((r, i) =>
+		r.from === b[i].from && r.to === b[i].to && r.inner_from === b[i].inner_from && r.inner_to === b[i].inner_to
+	);
 }

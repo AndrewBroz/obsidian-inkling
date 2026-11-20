@@ -21,7 +21,7 @@ import {
 	SuggestionType,
 } from "../../../base";
 
-import { inCodeRegion } from "../../../base/edit-util/code-regions";
+import { inCodeContent } from "../../../base/edit-util/code-regions";
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
 import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
@@ -119,16 +119,12 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			return tr;
 
 		// EXPL: The parser ignores CriticMarkup opened inside a fenced code block, so markup written
-		//       there would be inert text and corrupt the code. An edit lying wholly inside one region
-		//       passes through untracked; one crossing a fence edge is still tracked. Positions are in
-		//       the START document, so a pure insertion tests its single position.
+		//       there would be inert text and corrupt the code. An edit lying wholly inside one block's
+		//       content (between its fence lines) passes through untracked; one touching a fence line
+		//       is still tracked, since it can open, close or remove the block. Positions are in the
+		//       START document, so a pure insertion tests its single position.
 		const code_regions = tr.startState.field(rangeParser).code_regions;
-		if (
-			changed_ranges.length > 0 && changed_ranges.every(({ from, to }) => {
-				const region = inCodeRegion(code_regions, from);
-				return region !== undefined && region === inCodeRegion(code_regions, Math.max(from, to - 1));
-			})
-		)
+		if (changed_ranges.length > 0 && changed_ranges.every(({ from, to }) => inCodeContent(code_regions, from, to)))
 			return tr;
 
 		const ranges = tr.startState.field(rangeParser).ranges;

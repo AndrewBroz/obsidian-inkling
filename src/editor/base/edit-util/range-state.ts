@@ -69,10 +69,14 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		//       a region's first or last character), and changing which closer ends a region. An edit inside a
 		//       region, or outside every region, keeps them. A region that ran to the end of the document still
 		//       does once mapped (`mapPos` would leave text appended at the end outside an unclosed region).
+		//       Content bounds map so that text typed at either edge of the content stays inside it.
 		const code_regions = findCodeRegions(text);
+		const old_length = tr.startState.doc.length;
 		const mapped_regions = value.code_regions.map(region => ({
 			from: tr.changes.mapPos(region.from, 1),
-			to: region.to === tr.startState.doc.length ? text.length : tr.changes.mapPos(region.to, -1),
+			to: region.to === old_length ? text.length : tr.changes.mapPos(region.to, -1),
+			inner_from: region.inner_from === old_length ? text.length : tr.changes.mapPos(region.inner_from, -1),
+			inner_to: region.inner_to === old_length ? text.length : tr.changes.mapPos(region.inner_to, 1),
 		}));
 		if (!sameRegions(mapped_regions, code_regions))
 			return this.create(tr.state) as ParserData;
