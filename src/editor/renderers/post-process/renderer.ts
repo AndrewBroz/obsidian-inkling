@@ -42,6 +42,33 @@ export function rangePostProcess(
 	}
 }
 
+const PRE_START = "\uE000";
+const PRE_END = "\uE001";
+
+/**
+ * Decodes an element's HTML, marking its <pre> elements with private-use sentinels.
+ * EXPL: Real tags are found before decoding, where text reading "<pre>" is still `&lt;pre&gt;`.
+ */
+function decodeMarkingCodeBlocks(html: string): string {
+	const marked = html.replace(/<pre(?=[\s>])/g, PRE_START + "<pre").replace(/<\/pre>/g, "</pre>" + PRE_END);
+	return decodeHTML(marked, DecodingMode.Strict);
+}
+
+/** Removes the sentinels of `decodeMarkingCodeBlocks`, returning where the <pre> elements are in the result. */
+function extractCodeBlocks(decoded: string): { text: string; code_blocks: { from: number; to: number }[] } {
+	const code_blocks: { from: number; to: number }[] = [];
+	let text = "";
+	let start: number | null = null;
+	for (const part of decoded.split(/([\uE000\uE001])/)) {
+		if (part === PRE_START) start ??= text.length;
+		else if (part === PRE_END) {
+			if (start !== null) code_blocks.push({ from: start, to: text.length });
+			start = null;
+		} else text += part;
+	}
+	return { text, code_blocks };
+}
+
 export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorContext, plugin: CommentatorPlugin) {
 	// EXPL: A code block's contents are code, not markup.
 	if (el.closest("pre")) return;
@@ -50,7 +77,7 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 	let start_char: number | null = null, end_char: number | null = null;
 
 	// Undo HTML encoding of specific characters
-	let element_contents = decodeHTML(el.getHTML(), DecodingMode.Strict);
+	let element_contents = decodeMarkingCodeBlocks(el.getHTML());
 
 	let preview_mode = plugin.settings.default_preview_mode;
 	if (ctx) {
@@ -96,6 +123,8 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 				}
 
 				if (in_range) {
+					element_contents = extractCodeBlocks(element_contents).text;
+
 					// TEMPORARY: Remove the ~> from the element contents
 					if (range.type === SuggestionType.SUBSTITUTION)
 						element_contents = element_contents.replace(/~>/g, "");
@@ -153,8 +182,8 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 	// EXPL: The element's HTML has no fence lines left, so markup inside a rendered code block (one nested in a
 	//       callout or list section, or inside a wrapper passed without context) parses as ranges. Ranges starting
 	//       inside a <pre> stay as text.
-	const code_blocks = [...element_contents.matchAll(/<pre[\s>][\s\S]*?<\/pre>/g)]
-		.map(m => ({ from: m.index!, to: m.index! + m[0].length }));
+	const { text, code_blocks } = extractCodeBlocks(element_contents);
+	element_contents = text;
 	const element_ranges = getRangesInText(element_contents, plugin.settings)
 		.filter(range => !code_blocks.some(block => block.from <= range.from && range.from < block.to));
 

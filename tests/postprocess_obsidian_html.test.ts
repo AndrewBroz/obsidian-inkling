@@ -89,6 +89,18 @@ describe("code blocks inside a rendered section", () => {
 		expect(el.querySelector("pre code")?.textContent).toBe("{++code++}\n");
 	});
 
+	test("the text \"<pre>…</pre>\" in a paragraph does not hide a range inside it", async () => {
+		const el = await render(`<p dir="auto">use &lt;pre&gt; {++x++} &lt;/pre&gt;</p>`, null);
+		expect(el.querySelector(".cmtr-addition")?.textContent).toBe("x");
+	});
+
+	test("a strikethrough before a code block does not shift which ranges are inside it", async () => {
+		const html = `<p dir="auto">a {<del>old</del>} b</p><pre><code>{++code++}\n</code></pre><p dir="auto">{++x++}</p>`;
+		const el = await render(html, null);
+		expect(Array.from(el.querySelectorAll(".cmtr-addition"), e => e.textContent)).toEqual(["x"]);
+		expect(el.querySelector("pre code")?.textContent).toBe("{++code++}\n");
+	});
+
 	test("a wrapper without context holding a code block is left untouched", async () => {
 		const html = `<pre><code>{++x++} {==y==}\n</code></pre>`;
 		const el = await render(html, null);
