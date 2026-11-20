@@ -616,3 +616,12 @@ describe("a deletion reaching into a substitution's old half", () => {
 		expect(base_text(output)).toBe(base_text(doc));
 	});
 });
+
+describe("an operation starting where one range ends and another begins", () => {
+	test("a deletion from an addition's opener into it, right after a deletion, does not re-emit the opener", () => {
+		const doc = `{--x--}{++{"author":"a"}@@ab++} q`;
+		const from = doc.indexOf("{++"), to = doc.indexOf("ab") + 1;
+		const output = mark(doc, from, to, "", MarkAction.REGULAR);
+		expect(output).toBe(`{--x--}{++{"author":"a"}@@b++} q`);
+	});
+});

@@ -142,7 +142,10 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					settings.suggestion_mode_operations.bracket_movement,
 				);
 
-				const ranges_in_range = ranges.ranges_in_interval(editor_change.from, editor_change.to);
+				// EXPL: Only ranges the deletion overlaps: one that merely touches it (a deletion ending where an addition
+				//       starts) is beside it, and counting it made deleting the start of that addition do nothing.
+				const ranges_in_range = ranges.ranges_in_interval(editor_change.from, editor_change.to)
+					.filter(range => range.from < editor_change.to && editor_change.from < range.to);
 				if (ranges_in_range.length === 1) {
 					const range = ranges_in_range[0];
 					if (

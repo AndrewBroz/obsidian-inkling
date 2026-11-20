@@ -20,14 +20,16 @@ const SETTINGS: Partial<PluginSettings> = {
 	enable_metadata: true,
 };
 
-function backspace(doc: string, at: number): string {
+function view(doc: string): EditorView {
 	const settings = { ...DEFAULT_SETTINGS, ...SETTINGS };
-	const view = new EditorView({
-		state: createRangeState(doc, SETTINGS, [editorEditorField, suggestionMode(settings)]),
-	});
-	view.dispatch({ selection: { anchor: at } });
-	view.dispatch({ changes: { from: at - 1, to: at }, selection: { anchor: at - 1 }, userEvent: "delete.backward" });
-	return view.state.doc.toString();
+	return new EditorView({ state: createRangeState(doc, SETTINGS, [editorEditorField, suggestionMode(settings)]) });
+}
+
+function backspace(doc: string, at: number): string {
+	const v = view(doc);
+	v.dispatch({ selection: { anchor: at } });
+	v.dispatch({ changes: { from: at - 1, to: at }, selection: { anchor: at - 1 }, userEvent: "delete.backward" });
+	return v.state.doc.toString();
 }
 
 describe("Backspace inside an existing range in Suggest mode", () => {
@@ -52,5 +54,18 @@ describe("Backspace inside an existing range in Suggest mode", () => {
 	test("inside one's own addition removes the text outright", () => {
 		const doc = `p {++{"author":"alice"}@@abc++} q`;
 		expect(backspace(doc, doc.indexOf("abc") + 2)).toBe(`p {++{"author":"alice"}@@ac++} q`);
+	});
+});
+
+describe("deleting a selection from an addition's opener", () => {
+	test.each([
+		["after a deletion", `{--x--}{++{"author":"alice"}@@ab++} q`, `{--x--}{++{"author":"alice"}@@b++} q`],
+		["on its own", `p {++{"author":"alice"}@@ab++} q`, `p {++{"author":"alice"}@@b++} q`],
+	])("%s removes the selected own text", (_, doc, expected) => {
+		const v = view(doc);
+		const from = doc.indexOf("{++"), to = doc.indexOf("ab") + 1;
+		v.dispatch({ selection: { anchor: from, head: to } });
+		v.dispatch({ changes: { from, to }, selection: { anchor: from }, userEvent: "delete.selection" });
+		expect(v.state.doc.toString()).toBe(expected);
 	});
 });
