@@ -150,7 +150,13 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 
 	// Part of the block is one or more CriticMarkup ranges
 
-	const element_ranges = getRangesInText(element_contents, plugin.settings);
+	// EXPL: The element's HTML has no fence lines left, so markup inside a rendered code block (one nested in a
+	//       callout or list section, or inside a wrapper passed without context) parses as ranges. Ranges starting
+	//       inside a <pre> stay as text.
+	const code_blocks = [...element_contents.matchAll(/<pre[\s>][\s\S]*?<\/pre>/g)]
+		.map(m => ({ from: m.index!, to: m.index! + m[0].length }));
+	const element_ranges = getRangesInText(element_contents, plugin.settings)
+		.filter(range => !code_blocks.some(block => block.from <= range.from && range.from < block.to));
 
 	// If markup exists in heading or similar, the text might get duplicated into a data-... field
 	// Fix: if two duplicate ranges adjacent to each other, remove the former
