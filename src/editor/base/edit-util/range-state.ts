@@ -67,8 +67,8 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		//       matching regions keep every range outside the dirty spans on the same side of every fence. Edits
 		//       that rebuild: adding, removing or breaking a fence line, an edit that joins or splits one (touching
 		//       a region's first or last character), and changing which closer ends a region. An edit inside a
-		//       region, or outside every region, keeps them. A region that ran to the end of the document still
-		//       does once mapped (`mapPos` would leave text appended at the end outside an unclosed region).
+		//       region, or outside every region, keeps them. A region that ended at the old document end maps to the
+		//       new end, since `mapPos(…, -1)` would leave appended text outside an unclosed region.
 		//       Content bounds (and the opening line's end) map so that text typed at either edge of the content stays
 		//       inside it.
 		const code_regions = findCodeRegions(text);

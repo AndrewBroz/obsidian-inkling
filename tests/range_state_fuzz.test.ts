@@ -12,9 +12,9 @@ import { createRangeState } from "./helpers";
 //       gets regenerated, and it is what Accept All composes into overlapping, document-corrupting changes.
 //
 //       Deterministic (seeded PRNG) so a failure is reproducible. On the broken `visitNode` this reported
-//       37/1000 duplicate-range sequences; the fix takes it to 0. (A separate, pre-existing "stale range
-//       at a NON-coincident position" class -- Task 3b's KNOWN RESIDUAL -- is unaffected by `max` and out
-//       of scope here; it is measured and characterised in the task report, not asserted on.)
+//       37/1000 duplicate-range sequences; the fix takes it to 0. The same sequences also assert that the
+//       incremental ranges and code regions equal a full parse after every edit (`staleState`), which catches
+//       a stale range at a non-coincident position too.
 
 // Obsidian global, absent under jest -- test-env artifact only.
 (Math as any).clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -56,7 +56,23 @@ const SEGMENTS = [
 	"\n> ```\n", // fence inside a quote
 ];
 
-const INSERTS = ["z", "x", "ab", " ", "qq", "}", "{a=1}", "=", "\n```\n", "\n~~~\n", "```", "\n> ```\n"];
+const INSERTS = [
+	"z",
+	"x",
+	"ab",
+	" ",
+	"qq",
+	"}",
+	"{a=1}",
+	"=",
+	"\n```\n",
+	"\n~~~\n",
+	"```",
+	"\n> ```\n",
+	"`", // lengthens or shortens a fence
+	"\n", // splits a fence line or moves it to a line start
+	">", // quotes a fence line
+];
 
 const SEQUENCES = 1000;
 const EDITS_PER_SEQUENCE = 6;

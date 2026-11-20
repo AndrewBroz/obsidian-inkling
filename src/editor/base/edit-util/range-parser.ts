@@ -129,7 +129,8 @@ export function cursorGenerateRanges(
 			//       re-parse from the end of the block so the text after it is read as written.
 			const region = code && inCodeRegion(code, range.from + offset);
 			if (region) {
-				if (end !== range.to + offset || end > region.to) {
+				const untrusted = end !== range.to + offset || end > region.to;
+				if (untrusted) {
 					resume = region.to;
 					break;
 				}
