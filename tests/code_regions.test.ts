@@ -62,11 +62,51 @@ describe("findCodeRegions", () => {
 		expect(inCodeRegion(regions, 2)).toBeUndefined();
 	});
 
-	test.each(["{++", "{--", "{~~", "{==", "{>>"])("closing fence may carry a trailing range opener %s", (opener) => {
-		const t = `\`\`\`\nx\n\`\`\`${opener}\nmore`;
+	test.each([
+		["{++", "++}"],
+		["{--", "--}"],
+		["{~~", "~~}"],
+		["{==", "==}"],
+		["{>>", "<<}"],
+	])("closing fence may carry a trailing range opener %s closed later", (opener, closer) => {
+		const t = `\`\`\`\nx\n\`\`\`${opener}\nmore${closer}`;
 		const regions = findCodeRegions(t);
 		expect(regions).toEqual([{ from: 0, to: 9, head_end: 3, inner_from: 4, inner_to: 6 }]);
 		expect(inCodeRegion(regions, 9)).toBeUndefined();
+	});
+
+	test("a trailing opener with no closer before the next fence line does not close", () => {
+		const t = "```\n```{==\nx\n```";
+		expect(findCodeRegions(t)).toEqual([{ from: 0, to: t.length, head_end: 3, inner_from: 4, inner_to: 13 }]);
+		const unclosed = "```\nx\n```{++\nmore";
+		expect(findCodeRegions(unclosed)).toEqual([{
+			from: 0,
+			to: unclosed.length,
+			head_end: 3,
+			inner_from: 4,
+			inner_to: unclosed.length,
+		}]);
+	});
+
+	test("a trailing opener closed on the same line closes", () => {
+		expect(findCodeRegions("```\nx\n```{>><<}")[0]).toMatchObject({ from: 0, to: 9 });
+	});
+
+	test("a closing fence without a range prefix may still carry a closer and a tail", () => {
+		const t = "```\nx\n```++} tail";
+		expect(findCodeRegions(t)).toEqual([{ from: 0, to: 12, head_end: 3, inner_from: 4, inner_to: 6 }]);
+	});
+
+	test.each([
+		[">  ```\n>  {++x++}\n>  ```"],
+		[">   ```\n>   {++x++}\n>   ```"],
+		["> >  ~~~\n> >  x\n> >  ~~~"],
+	])("a fence indented after a quote marker is recognised: %j", t => {
+		expect(findCodeRegions(t)).toEqual([expect.objectContaining({ from: 0, to: t.length })]);
+	});
+
+	test("a quoted line indented four spaces past the marker's space is not a fence", () => {
+		expect(findCodeRegions(">     ```\nx")).toEqual([]);
 	});
 
 	test("Enter at the end of a closing fence in suggest mode leaves the fence closed", () => {

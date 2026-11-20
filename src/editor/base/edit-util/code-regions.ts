@@ -16,13 +16,34 @@ export interface CodeRegion {
 }
 
 // Optional "{++" style CriticMarkup opener may precede the fence, so a fence
-// wrapped by a range ("{++```") is still recognised as a code block.
-const OPEN_FENCE = /^( {0,3}(?:> ?)*)(\{(?:\+\+|--|==|~~))?(`{3,}|~{3,})(.*)$/;
+// wrapped by a range ("{++```") is still recognised as a code block. Each `>` quote marker may be
+// followed by its optional space and up to 3 spaces of indent (CommonMark).
+const OPEN_FENCE = /^( {0,3}(?:> {0,4})*)(\{(?:\+\+|--|==|~~))?(`{3,}|~{3,})(.*)$/;
 // A closing fence may carry the closer of a range wrapping the block; text may follow that closer
 // ("```++} {--d--}"), and is outside the region. It may instead carry the opener of a range that
 // starts after it ("```{++" from pressing Enter at the fence's end in suggest mode); the opener and
-// everything after it are outside the region.
-const CLOSE_FENCE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(?:(?:\+\+\}|--\}|==\}|~~\})(.*)|(\{(?:\+\+|--|~~|==|>>).*)|\s*)$/;
+// everything after it are outside the region. Such an opener only counts if its closer follows
+// before the next fence line (see `closerFollows`), so a code line like "```{==" does not close.
+const CLOSE_FENCE = /^ {0,3}(?:> {0,4})*(`{3,}|~{3,})(?:(?:\+\+\}|--\}|==\}|~~\})(.*)|(\{(\+\+|--|~~|==|>>).*)|\s*)$/;
+
+const CLOSER_OF: Record<string, string> = { "++": "++}", "--": "--}", "~~": "~~}", "==": "==}", ">>": "<<}" };
+
+/**
+ * Whether `closer` occurs in `text` from `from` on, before the next line that is itself a fence line.
+ * `from` lies inside a line; that line's rest is searched too.
+ */
+function closerFollows(text: string, from: number, closer: string): boolean {
+	let pos = from;
+	while (pos < text.length) {
+		let end = text.indexOf("\n", pos);
+		if (end === -1) end = text.length;
+		const line = text.slice(pos, end);
+		if (pos !== from && OPEN_FENCE.test(line.replace(/\r$/, ""))) return false;
+		if (line.includes(closer)) return true;
+		pos = end + 1;
+	}
+	return false;
+}
 
 /** Finds fenced code blocks (``` / ~~~, including inside `>` quotes). Sorted, non-overlapping. */
 export function findCodeRegions(text: string): CodeRegion[] {
@@ -30,14 +51,17 @@ export function findCodeRegions(text: string): CodeRegion[] {
 	let open: { from: number; head_end: number; inner_from: number; char: string; length: number } | null = null;
 	let pos = 0;
 
-	while (pos <= text.length) {
+	while (pos < text.length) {
 		let end = text.indexOf("\n", pos);
 		if (end === -1) end = text.length;
 		const line = text.slice(pos, end).replace(/\r$/, "");
 
 		if (open) {
 			const m = CLOSE_FENCE.exec(line);
-			if (m && m[1][0] === open.char && m[1].length >= open.length) {
+			if (
+				m && m[1][0] === open.char && m[1].length >= open.length &&
+				(!m[3] || closerFollows(text, pos + line.length - m[3].length + 3, CLOSER_OF[m[4]]))
+			) {
 				const outside = m[2]?.length ?? m[3]?.length ?? 0;
 				regions.push({
 					from: open.from,
