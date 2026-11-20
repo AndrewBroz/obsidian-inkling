@@ -83,7 +83,8 @@ export function inCodeContent(regions: CodeRegion[], from: number, to: number): 
 }
 
 export function sameRegions(a: CodeRegion[], b: CodeRegion[]): boolean {
-	return a.length === b.length && a.every((r, i) =>
-		r.from === b[i].from && r.to === b[i].to && r.inner_from === b[i].inner_from && r.inner_to === b[i].inner_to
-	);
+	return a.length === b.length &&
+		a.every((r, i) =>
+			r.from === b[i].from && r.to === b[i].to && r.inner_from === b[i].inner_from && r.inner_to === b[i].inner_to
+		);
 }
