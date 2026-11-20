@@ -1,3 +1,4 @@
+import { history, undo } from "@codemirror/commands";
 import { Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
@@ -13,8 +14,8 @@ import {
 	isTyping,
 	updateRouter,
 } from "../src/editor/uix/cleanup-trigger";
-import { bracketMatcher } from "../src/editor/uix/extensions/bracket-matcher";
 import { suggestionMode } from "../src/editor/uix/extensions";
+import { bracketMatcher } from "../src/editor/uix/extensions/bracket-matcher";
 import { pluginEditAnnotation } from "../src/editor/uix/extensions/editing-modes";
 import { createRangeState } from "./helpers";
 
@@ -215,9 +216,10 @@ describe("transaction classification", () => {
 });
 
 describe("CleanupUndoTracker", () => {
-	// EXPL: Feeds every transaction of `view` to the tracker, as the trigger's update listener does.
+	// EXPL: Feeds every transaction of `view` to the tracker, as the trigger's update listener does. The view has
+	//       CodeMirror's real history, so `undo` is the command Obsidian runs.
 	function tracked(doc: string, tracker: CleanupUndoTracker): EditorView {
-		const view = viewOf(doc);
+		const view = new EditorView({ state: createRangeState(doc, { add_metadata: false }, [history()]) });
 		const dispatch = view.dispatch.bind(view);
 		jest.spyOn(view, "dispatch").mockImplementation((...args: any[]) => {
 			const tr = args[0] instanceof Transaction ? args[0] : view.state.update(...args);
@@ -227,16 +229,13 @@ describe("CleanupUndoTracker", () => {
 		return view;
 	}
 
-	function undo(view: EditorView, before: string) {
-		view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: before }, userEvent: "undo" });
-	}
-
 	test("undoing a cleanup marks the file to be skipped", () => {
 		const tracker = new CleanupUndoTracker();
 		const view = tracked("a {++b", tracker);
 		cleanupView(view, DEFAULT_SETTINGS);
 		expect(tracker.skips("note.md")).toBe(false);
-		undo(view, "a {++b");
+		expect(undo(view)).toBe(true);
+		expect(view.state.doc.toString()).toBe("a {++b");
 		expect(tracker.skips("note.md")).toBe(true);
 		expect(tracker.skips("other.md")).toBe(false);
 	});
@@ -246,7 +245,7 @@ describe("CleanupUndoTracker", () => {
 		const view = tracked("a {++b", tracker);
 		cleanupView(view, DEFAULT_SETTINGS);
 		view.dispatch({ changes: { from: 0, insert: "x" }, userEvent: "input.type" });
-		undo(view, "a b");
+		expect(undo(view)).toBe(true);
 		expect(tracker.skips("note.md")).toBe(false);
 	});
 
@@ -254,7 +253,7 @@ describe("CleanupUndoTracker", () => {
 		const tracker = new CleanupUndoTracker();
 		const view = tracked("a b", tracker);
 		view.dispatch({ changes: { from: 0, insert: "x" }, userEvent: "input.type" });
-		undo(view, "a b");
+		expect(undo(view)).toBe(true);
 		expect(tracker.skips("note.md")).toBe(false);
 	});
 
@@ -263,7 +262,7 @@ describe("CleanupUndoTracker", () => {
 		const view = tracked("a {++b", tracker);
 		cleanupView(view, DEFAULT_SETTINGS);
 		view.dispatch({ changes: { from: 0, insert: "x" }, userEvent: "redo" });
-		undo(view, "a b");
+		expect(undo(view)).toBe(true);
 		expect(tracker.skips("note.md")).toBe(false);
 	});
 
@@ -282,7 +281,7 @@ describe("CleanupUndoTracker", () => {
 		const tracker = new CleanupUndoTracker();
 		const view = tracked("a {++b", tracker);
 		cleanupView(view, DEFAULT_SETTINGS);
-		undo(view, "a {++b");
+		expect(undo(view)).toBe(true);
 		tracker.forget("note.md");
 		expect(tracker.skips("note.md")).toBe(false);
 	});
