@@ -5,6 +5,7 @@ import * as obsidian from "obsidian";
 import { editorEditorField } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
+import { rangeParser } from "../src/editor/base";
 import { suggestionMode } from "../src/editor/uix/extensions";
 import { editorKeypressCatcher } from "../src/editor/uix/extensions/keypress-catcher";
 import type { PluginSettings } from "../src/types";
@@ -89,6 +90,96 @@ describe("several cursors in Suggest mode", () => {
 		expect(strip(press(view(doc, settings), "Delete", [21, 26]))).toBe(
 			strip(inTurn(doc, "Delete", [21, 26], settings)),
 		);
+		expect(notices).not.toHaveBeenCalled();
+	});
+});
+
+/** Every suggestion accepted (`accept`) or rejected. */
+function resolve(v: EditorView, accept: boolean) {
+	let text = v.state.doc.toString();
+	for (const r of [...v.state.field(rangeParser).ranges.ranges].reverse())
+		text = text.slice(0, r.from) + (accept ? r.accept() : r.reject()) + text.slice(r.to);
+	return text;
+}
+
+/** Replaces each selection [from, to) with `insert` (or deletes it with Backspace, or presses a key at a cursor). */
+function edit(doc: string, changes: { from: number; to: number; insert: string }[], key = "a", settings = OFF) {
+	const v = view(doc, settings);
+	v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+	v.dispatch({
+		selection: EditorSelection.create(
+			changes.map(c =>
+				key === "Backspace" && c.to - c.from === 1 ? EditorSelection.cursor(c.to) : EditorSelection.range(c.from, c.to)
+			),
+		),
+	});
+	let shift = 0;
+	const cursors = changes.map(c => {
+		const at = c.from + c.insert.length + shift;
+		shift += c.insert.length - (c.to - c.from);
+		return EditorSelection.cursor(at);
+	});
+	const backspace = key === "Backspace" && changes.every(c => c.to - c.from === 1 && !c.insert);
+	v.dispatch(v.state.update({
+		changes,
+		selection: EditorSelection.create(cursors),
+		userEvent: changes.some(c => c.insert) ? "input.type" : backspace ? "delete.backward" : "delete.selection",
+	}));
+	return { out: v.state.doc.toString(), accept: resolve(v, true), reject: resolve(v, false) };
+}
+
+describe("re-review 2", () => {
+	const own = "intro{++\n```js\nlet a = 1;\nlet b = 2;\n```\n++}\nafter";
+	const f = own.indexOf("```js"), c = own.indexOf("1;");
+
+	test.each(
+		[
+			["selecting two backticks and typing", [{ from: f, to: f + 2, insert: "x" }], "a"],
+			["the same, with a second cursor typing in the code", [{ from: f, to: f + 2, insert: "x" }, {
+				from: c,
+				to: c,
+				insert: "9",
+			}], "a"],
+			["one Backspace in the fence", [{ from: f + 1, to: f + 2, insert: "" }], "Backspace"],
+			["selecting two backticks and deleting", [{ from: f, to: f + 2, insert: "" }], "Delete"],
+		] as const,
+	)("R1: in one's own pending block, %s is refused, not widened over the code", (_, changes, key) => {
+		const { out } = edit(own, [...changes], key);
+		const expected = changes.length > 1 ? own.replace("1;", "91;") : own;
+		expect(out).toBe(expected);
+		expect(notices).toHaveBeenCalledTimes(1);
+	});
+
+	test.each([
+		["x {++abcdef++} y", 5, 7, "x {++Xcdef++} y"],
+		["x {++abcdef++} y", 6, 11, "x {++aX++} y"],
+		["x {++ab\ncd\nef++} y", 6, 9, "x {++aXd\nef++} y"],
+		["a {++h++}{++xyz++} b", 10, 14, "a {++h++}{++Xz++} b"],
+	])("R2: retyping inside one's own addition %j [%i, %i) replaces its text in place", (doc, from, to, expected) => {
+		expect(edit(doc, [{ from, to, insert: "X" }]).out).toBe(expected);
+	});
+
+	test.each([
+		["xy {~~de~>fg~~} z", 1, 9, "", "x{~~y de~>fg~~} z", "xfg z"],
+		["xy {~~de~>fg~~} z", 1, 9, "Q", "x{~~y de~>Qfg~~} z", "xQfg z"],
+		["a{++bc++}{~~de~>fg~~}{++hi++}j", 3, 15, "", undefined, "afghij"],
+	])(
+		"R3: a selection %j [%i, %i) ending inside a substitution's separator leaves no stray '>'",
+		(doc, from, to, insert, out, accepted) => {
+			const result = edit(doc, [{ from, to, insert }]);
+			if (out) expect(result.out).toBe(out);
+			expect(result.out).not.toContain("~>>");
+			expect(result.accept).toBe(accepted);
+			expect(result.reject).toBe(doc.includes("{++bc++}") ? "adej" : "xy de z");
+		},
+	);
+
+	test("R4: text typed over part of a fence line in prose goes on a line of its own", () => {
+		const doc = "intro\n```js\nlet a = 1;\nlet b = 2;\n```\nafter", g = doc.indexOf("```js");
+		const result = edit(doc, [{ from: g, to: g + 2, insert: "x" }]);
+		expect(result.out).toBe("intro\n{--\n```js\nlet a = 1;\nlet b = 2;\n```\n--}{++x\n++}after");
+		expect(result.accept).toBe("intro\nx\nafter");
+		expect(result.reject).toBe("intro\n\n```js\nlet a = 1;\nlet b = 2;\n```\nafter");
 		expect(notices).not.toHaveBeenCalled();
 	});
 });

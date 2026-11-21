@@ -16,6 +16,8 @@ export interface SuggestionTracker {
 	ownText(from: number, to: number): boolean;
 	rangeEnd(pos: number): number | undefined;
 	inRange(pos: number): boolean;
+	/** Whether pending added text (an addition, or a substitution's new part) lies in [from, to). */
+	pending(from: number, to: number): boolean;
 }
 
 const FENCE_TEXT = /```|~~~/;
@@ -172,6 +174,8 @@ export function guardChange(doc: Text, regions: CodeRegion[], change: EditorEdit
 			b = Math.max(b, r.to);
 		}
 	}
+	// Widening would remove pending text (it isn't tracked) the user didn't select: refused.
+	if (tracker.pending(a, from) || tracker.pending(to, b)) return null;
 	const deletion = (s: number, e: number, inserted = "") =>
 		tracker.track({ ...change, from: s, to: e, inserted, deleted: doc.sliceString(s, e), selection: true });
 	const widened = deletion(a, b, inserted);
@@ -213,7 +217,14 @@ export function guardChange(doc: Text, regions: CodeRegion[], change: EditorEdit
 			const del = wrap(deletion(s, e), before, after);
 			if (!del) continue;
 			if (!inserted && valid(del, s, e)) return del;
-			const add = inserted && del.changes.every(c => c.to <= e) ? tracker.addition(e, inserted) : undefined;
+			// Typed text before a line's text goes on a line of its own (Accept doesn't join it to that line).
+			const next = doc.lineAt(e), lead = /^[ \t>]*/.exec(next.text)![0];
+			const glued = e === next.from && !!next.text.trim() && !inserted.endsWith("\n");
+			const add = !inserted || !del.changes.every(c => c.to <= e) ?
+				undefined :
+				glued ?
+				tracker.addition(e + lead.length, inserted + "\n" + lead) :
+				tracker.addition(e, inserted);
 			const delta = del.changes.reduce((n, c) => n + c.insert.length - (c.to - c.from), 0);
 			const edit = add && { changes: [...del.changes, ...add.changes], cursor: add.cursor + delta };
 			if (valid(edit, s, e)) return edit;

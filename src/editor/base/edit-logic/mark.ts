@@ -407,12 +407,26 @@ function mark_range(
 				//       into the next, "{++ab++}{++cd++}" less "b++}{++c") retracts that part too: split the range there.
 				//       Bounding the removal by the wholly covered ranges alone silently kept it, or did nothing.
 				if (drop_additions && in_range.some(r => (r.from < from && from < r.to) || (r.from < to && to < r.to))) {
-					// Within one addition's text, its text is simply removed.
+					// Within one addition's text, its text is simply removed, or replaced in place when the typed text
+					// can join that addition.
+					// (An end in its opener or closer, snapped to the range's ends above, is at the end of its text.)
+					const overlapping = in_range.filter(r => r.from < to && from < r.to);
+					const only = overlapping.length === 1 && overlapping[0].type === SuggestionType.ADDITION ?
+						overlapping[0] :
+						undefined;
+					const text_from = only ? Math.max(from, only.range_start) : 0;
+					const text_to = only ? Math.min(to, only.closer_to - 3) : -1;
 					if (
-						!inserted && in_range.length === 1 && in_range[0].type === SuggestionType.ADDITION &&
-						in_range[0].range_start <= from && to <= in_range[0].closer_to - 3
+						only && only.from <= from && to <= only.to && text_from < text_to &&
+						(!inserted || range_metadata_compatible(only, metadata_fields).compatible)
 					) {
-						return { from, to, insert: "", start: from, end: from };
+						return {
+							from: text_from,
+							to: text_to,
+							insert: inserted,
+							start: text_from,
+							end: text_from + inserted.length,
+						};
 					}
 					split_left_range();
 					split_right_range();

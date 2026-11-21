@@ -472,11 +472,6 @@ describe.each(CONFIGS)(
 					}
 					const hidden_before = hidden(before_ranges), hidden_after = hidden(after_ranges);
 					const markup_before = markup(before_ranges), markup_after = markup(after_ranges);
-					const own_blocks = before_regions.filter(r =>
-						before_ranges.some(range =>
-							range.type === SuggestionType.ADDITION && range.from < r.from && r.to < range.to
-						)
-					);
 					const dropped = (cluster: Change[]) => {
 						// Window ends outside every range and every changed span, so both windows hold the same text.
 						let lo = Math.max(0, cluster[0].from - W), hi = Math.min(len, cluster.at(-1)!.to + W);
@@ -497,16 +492,23 @@ describe.each(CONFIGS)(
 							visible(after, tr.changes.mapPos(lo, -1), tr.changes.mapPos(hi, 1), skip_after),
 						];
 						const typed = cluster.map(c => c.insert).join("");
-						// Typed characters are all there, in the text without markup (a change into a block inside an
-						// addition may remove the whole block, one's own suggested text).
+						// Typed characters are all there, in the text without markup.
 						const [text_before, text_after] = window(markup_before, markup_after);
 						// (With several cursors, one's selection may cover text another typed: checked step by step below.)
-						const lost = cluster.length === 1 && !cluster.some(c =>
-							own_blocks.some(r => c.from <= r.to && r.from <= c.to)
-						) &&
+						const lost = cluster.length === 1 &&
 							[...new Set(typed)].some(ch =>
 								count(text_after, ch) < count(text_before, ch) + count(typed, ch) -
 										cluster.reduce((n, c) => n + count(visible(before, c.from, c.to, markup_before), ch), 0)
+							);
+						// Nor is text outside the change removed: tracked deletions keep it, and pending text (not tracked) is
+						// removed only where selected (a Backspace or Delete may take the one character its cursor reaches).
+						// (The window may reach another cursor's change: what every cursor selected may go.)
+						const selected = disjoint.map(c => visible(before, c.from, c.to, markup_before)).join("");
+						const removed_more = cluster.length === 1 &&
+							[...new Set(text_before)].some(ch =>
+								count(text_after, ch) <
+									count(text_before, ch) + count(typed, ch) - count(selected, ch) -
+										(kind === 2 || kind === 3 ? disjoint.length : 0)
 							);
 						const [accepted_before, accepted_after] = window(hidden_before, hidden_after);
 						const deleted = cluster.filter(c => !c.insert).flatMap(c =>
@@ -517,7 +519,7 @@ describe.each(CONFIGS)(
 						const kept = [...new Set(deleted)].some(ch =>
 							count(accepted_before, ch) + count(typed, ch) - count(accepted_after, ch) < count(deleted, ch)
 						);
-						return lost || kept;
+						return lost || kept || removed_more;
 					};
 					for (const cluster of clusters) {
 						if (cluster.every(c => !refused_changes.includes(c)) && dropped(cluster))
@@ -538,6 +540,23 @@ describe.each(CONFIGS)(
 							fail("f", `${kind === 2 ? "Backspace" : "Delete"} left ${JSON.stringify(ch)} at ${k}`);
 						}
 					}
+					// Away from blocks (no widening), Accept gives the text without the selection (selection deletes), and
+					// retyping inside one addition of one's own replaces its text in place (no new range).
+					const off_blocks = (c: Change) => !before_regions.some(r => r.from - 1 <= c.to && c.from <= r.to + 1);
+					if (disjoint.length === 1 && accepted.length === 1 && off_blocks(accepted[0])) {
+						const c = accepted[0];
+						if (kind === 6) {
+							const want = visible(before, 0, c.from, hidden_before) + visible(before, c.to, len, hidden_before);
+							if (visible(after, 0, after.length, hidden_after) !== want)
+								fail("f", `Accept does not give the text without the selection: ${JSON.stringify(want)}`);
+						}
+						const home = before_ranges.find(r =>
+							r.type === SuggestionType.ADDITION && r.start <= c.from && c.to <= r.closer - 3 &&
+							(!settings.add_metadata || before.slice(r.from, r.start).includes(`"author":"me"`))
+						);
+						if (kind === 5 && home && after_ranges.length !== before_ranges.length)
+							fail("f", "retyping inside one addition split it");
+					}
 					if (shown.length !== (refused_changes.length ? 1 : 0) || shown.some(text => text !== NOTICE))
 						fail("f", `notices ${JSON.stringify(shown)}, refused ${refused_changes.length}`);
 
@@ -553,8 +572,8 @@ describe.each(CONFIGS)(
 							const from = Math.min(Math.max(0, start), end);
 							const to = Math.min(kind === 2 || kind === 3 ? start + 1 : Math.max(from, made.mapPos(c.to, -1)), end);
 							if (from === to && !c.insert) continue;
-							// Each step keeps the text it types (outside markup), unless it is refused. What it may remove is
-							// what it selected, or what it actually removed (such as a whole pending block of the user's own).
+							// Each step keeps the text it types (outside markup), unless it is refused, and removes no more of
+							// it than it selected (widening over another cursor's typed text is refused).
 							const text_and_markup = () => {
 								const text = alone.state.doc.toString();
 								return [text, markup(alone.state.field(rangeParser).ranges.ranges.map(copy))] as const;
@@ -565,15 +584,10 @@ describe.each(CONFIGS)(
 							if (notice.mock.calls.length === notices_now) {
 								const [text_after, markup_after_step] = text_and_markup();
 								const selected = visible(text_before, from, to, markup_before_step);
-								// (The span of its changes: a character diff may match a typed character to an equal one.)
-								let lo = Infinity, hi = -Infinity;
-								tr_alone.changes.iterChangedRanges((fromA, toA) => (lo = Math.min(lo, fromA), hi = Math.max(hi, toA)));
-								const removed = lo <= hi ? visible(text_before, lo, hi, markup_before_step) : "";
 								const shown_before = visible(text_before, 0, text_before.length, markup_before_step);
 								const shown_after = visible(text_after, 0, text_after.length, markup_after_step);
 								for (const ch of new Set(c.insert)) {
-									const may_remove = Math.max(count(selected, ch), count(removed, ch));
-									if (count(shown_after, ch) < count(shown_before, ch) + count(c.insert, ch) - may_remove)
+									if (count(shown_after, ch) < count(shown_before, ch) + count(c.insert, ch) - count(selected, ch))
 										fail("f", `a cursor's typed ${JSON.stringify(ch)} is lost when applied in turn`);
 								}
 							}

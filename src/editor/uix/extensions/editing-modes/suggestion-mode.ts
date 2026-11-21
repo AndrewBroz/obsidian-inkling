@@ -129,6 +129,15 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		function track(editor_change: EditorEditChange, state: EditorState, ranges: CriticMarkupRanges): GuardedEdit {
 			// EXPL: A selection only of a range's markup (its opener and metadata, or its closer) deletes nothing; text
 			//       typed over it goes after the range.
+			// A selection end inside a substitution's "~>" separator is at its start (or, for the start, its end).
+			for (const r of ranges.ranges_in_interval(editor_change.from, editor_change.to)) {
+				if (r.type !== SuggestionType.SUBSTITUTION || !editor_change.selection) continue;
+				const middle = (r as SubstitutionRange).middle;
+				if (editor_change.to === middle + 1) editor_change = { ...editor_change, to: middle };
+				if (editor_change.from === middle + 1) editor_change = { ...editor_change, from: middle + 2 };
+				if (editor_change.to < editor_change.from) editor_change = { ...editor_change, to: editor_change.from };
+				editor_change.deleted = state.doc.sliceString(editor_change.from, editor_change.to);
+			}
 			const { from: start, to: end } = editor_change;
 			const zone = editor_change.selection && start < end &&
 				ranges.ranges_in_interval(start, end).find(r =>
@@ -225,6 +234,15 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			},
 			rangeEnd: pos => ranges.ranges_in_interval(pos, pos).find(r => r.closer_to - 3 === pos)?.full_range_back,
 			inRange: pos => ranges.ranges_in_interval(pos, pos).some(r => r.from <= pos && pos < r.to),
+			pending: (from, to) =>
+				from < to && ranges.ranges_in_interval(from, to).some(r => {
+					const start = r.type === SuggestionType.ADDITION ?
+						r.range_start :
+						r.type === SuggestionType.SUBSTITUTION ?
+						(r as SubstitutionRange).middle + 2 :
+						Infinity;
+					return start < to && from < r.closer_to - 3 && start < r.closer_to - 3;
+				}),
 		});
 
 		// EXPL: The changes are decided by the fence guard one by one, from the last cursor to the first, each in the
