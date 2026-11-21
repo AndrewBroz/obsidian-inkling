@@ -101,6 +101,13 @@ describe("code blocks inside a rendered section", () => {
 		expect(el.querySelector("pre code")?.textContent).toBe("{++code++}\n");
 	});
 
+	test("a closer inside a code block does not close a range opened before it (review M2)", async () => {
+		const html = `<p dir="auto">intro {++x</p><pre><code>a ++} b\n</code></pre><p dir="auto">done</p>`;
+		const el = await render(html, null);
+		expect(el.querySelector(".cmtr-addition")).toBeNull();
+		expect(el.querySelector("pre code")?.textContent).toBe("a ++} b\n");
+	});
+
 	test("a wrapper without context holding a code block is left untouched", async () => {
 		const html = `<pre><code>{++x++} {==y==}\n</code></pre>`;
 		const el = await render(html, null);

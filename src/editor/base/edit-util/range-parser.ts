@@ -82,11 +82,7 @@ function rangeEnd(range: SyntaxNode, text: string, offset: number): number | und
 	return close === -1 ? undefined : close + closer.length;
 }
 
-/**
- * The CriticMarkup ranges in `text` that start in `[start, to]`.
- * @param source The text `tree` was parsed from: `text`, or `text` with its fenced code masked (`maskCode`), so that
- *   no range opens or closes inside code. Range contents are always read from `text`.
- */
+/** The ranges in `text` starting in `[start, to]`; `tree` is parsed from `source`, `text` with code blanked. */
 export function cursorGenerateRanges(
 	tree: Tree,
 	text: string,
@@ -154,9 +150,13 @@ export function cursorGenerateRanges(
 	}
 }
 
-/** The ranges in `text`; with `ignore_code`, CriticMarkup inside fenced code is code, not markup. */
-export function getRangesInText(text: string, settings: PluginSettings, ignore_code = true) {
-	const source = ignore_code ? maskCode(text, findCodeRegions(text)) : text;
+/** The ranges in `text`; with `ignore_code`, those in fenced code (or blanked in `source`) are not markup. */
+export function getRangesInText(
+	text: string,
+	settings: PluginSettings,
+	ignore_code = true,
+	source = ignore_code ? maskCode(text, findCodeRegions(text)) : text,
+) {
 	return cursorGenerateRanges(criticmarkupLanguage.parser.parse(source), text, settings, 0, text.length, source);
 }
 

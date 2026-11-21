@@ -1,5 +1,7 @@
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
+import * as obsidian from "obsidian";
 import { editorEditorField } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
@@ -46,9 +48,11 @@ describe("Backspace inside an existing range in Suggest mode", () => {
 		expect(backspace("p {==abc==} q", 7)).toBe(`p {==a==}{--{"author":"alice"}@@b--}{==c==} q`);
 	});
 
-	test("inside another author's addition leaves their text alone", () => {
-		const doc = `p {++{"author":"bob"}@@abc++} q`;
-		expect(backspace(doc, doc.indexOf("abc") + 2)).toBe(doc);
+	test.each([
+		["another author's addition", `p {++{"author":"bob"}@@abc++} q`, `p {++{"author":"bob"}@@ac++} q`],
+		["an addition without metadata (I1)", "p {++abc++} q", "p {++ac++} q"],
+	])("inside %s removes the text outright", (_, doc, expected) => {
+		expect(backspace(doc, doc.indexOf("abc") + 2)).toBe(expected);
 	});
 
 	test("inside one's own addition removes the text outright", () => {
@@ -61,7 +65,12 @@ describe("deleting a selection from an addition's opener", () => {
 	test.each([
 		["after a deletion", `{--x--}{++{"author":"alice"}@@ab++} q`, `{--x--}{++{"author":"alice"}@@b++} q`, 0],
 		["on its own", `p {++{"author":"alice"}@@ab++} q`, `p {++{"author":"alice"}@@b++} q`, 0],
-		["from inside a highlight's closer", `{==h==}{++{"author":"alice"}@@ab++} q`, `{==h==}{++{"author":"alice"}@@b++} q`, 1],
+		[
+			"from inside a highlight's closer",
+			`{==h==}{++{"author":"alice"}@@ab++} q`,
+			`{==h==}{++{"author":"alice"}@@b++} q`,
+			1,
+		],
 	])("%s removes the selected own text", (_, doc, expected, back) => {
 		const v = view(doc);
 		const from = doc.indexOf("{++") - back, to = doc.indexOf("ab") + 1;
@@ -78,4 +87,27 @@ test("a selection from own text into the next range's opener removes the own tex
 	v.dispatch({ selection: { anchor: from, head: to } });
 	v.dispatch({ changes: { from, to }, selection: { anchor: from }, userEvent: "delete.selection" });
 	expect(v.state.doc.toString()).toBe(`{++{"author":"alice"}@@a++}{--x--} q`);
+});
+
+test("two cursors in an older own addition with timestamps both type, with no notice (review I2)", () => {
+	const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
+	const settings = { ...DEFAULT_SETTINGS, ...SETTINGS, author: "me", add_timestamp_metadata: true };
+	const doc = `x {++{"author":"me","time":1000}@@abcdef++} y`;
+	const v = new EditorView({
+		state: createRangeState(doc, settings, [
+			editorEditorField,
+			EditorState.allowMultipleSelections.of(true),
+			suggestionMode(settings),
+		]),
+	});
+	const at = doc.indexOf("abcdef");
+	v.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(at + 2), EditorSelection.cursor(at + 4)]) });
+	v.dispatch(v.state.update({
+		changes: [{ from: at + 2, insert: "X" }, { from: at + 4, insert: "X" }],
+		selection: EditorSelection.create([EditorSelection.cursor(at + 3), EditorSelection.cursor(at + 6)]),
+		userEvent: "input.type",
+	}));
+	expect(v.state.doc.toString()).toMatch(/^x \{\+\+\{"author":"me","time":\d+\}@@abXcdXef\+\+\} y$/);
+	expect(notice).not.toHaveBeenCalled();
+	notice.mockRestore();
 });

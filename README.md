@@ -148,10 +148,17 @@ itself (for the CRI build, `config/critic.py`). Only then should anyone change t
 ### What's new in 0.13
 
 - **Fenced code blocks are left alone.** CriticMarkup inside a fenced code block (``` or ~~~, including inside
-  callouts and quotes) is no longer recognised; inline `code` is unchanged. Before updating, accept or reject any
+  callouts, quotes and lists) is no longer recognised; inline `code` is unchanged. Before updating, accept or reject any
   pending suggestions or comments inside fenced code blocks. In Suggest mode, typing inside a fenced code block is not
-  tracked and edits never break a fence: text typed in front of a fence goes on its own line, and Backspace or Delete
-  that would join a fence line onto a non-empty line does nothing. Comments cannot be added inside code blocks.
+  tracked and edits never break a fence: text typed on a fence line goes on a line of its own, a suggestion that adds
+  or removes whole code blocks keeps its `{++`/`++}` (or `{--`/`--}`) on lines of their own, and Backspace or Delete
+  in a fence's characters deletes the whole block as a tracked deletion. An edit that would otherwise break a fence
+  (such as joining a fence line onto its neighbour) is not applied, and a notice says so. Comments cannot be added on a
+  fence line or inside a code block.
+- **Fix code-block suggestions made by 0.12 by hand.** Inkling 0.12 could write a suggested code block with the markup
+  on its fence lines, such as `{++```js` … ```` ```++} ````. A fence line carrying anything after its backticks opens a
+  new code block (as Obsidian renders it), so the rest of the note is read as code. Put `{++` and `++}` on lines of
+  their own, around the block, to fix it.
 - **Broken markup is cleaned up automatically.** Sync tools can leave stray CriticMarkup brackets or orphaned Inkling
   metadata behind. When a note becomes active, or the open note changes from outside the editor, these are removed.
   Text is never removed, and one Undo restores the markup (that note is then left alone until Obsidian restarts). Only

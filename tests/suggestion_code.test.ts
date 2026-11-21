@@ -58,13 +58,14 @@ function edit(
 	view.dispatch(view.state.update({ changes, selection: EditorSelection.create(cursors), userEvent: "input" }));
 }
 
-/** The text with every suggestion accepted. */
-function accepted(view: EditorView): string {
+/** The text with every suggestion accepted (or rejected). */
+function accepted(view: EditorView, accept = true): string {
 	let text = view.state.doc.toString();
 	for (const range of [...view.state.field(rangeParser).ranges.ranges].reverse())
-		text = text.slice(0, range.from) + range.accept() + text.slice(range.to);
+		text = text.slice(0, range.from) + (accept ? range.accept() : range.reject()) + text.slice(range.to);
 	return text;
 }
+const rejected = (view: EditorView) => accepted(view, false);
 
 describe("rule 1: edits inside a code block are plain", () => {
 	test.each([
@@ -223,7 +224,7 @@ describe("rule 4: fence lines are protected", () => {
 
 	test.each([
 		["B2 Enter", "\n", "hi\n\n\n```\nab\n```\nafter {++y++}", 5],
-		["B2 typing", "X", "hi\n\n{++X++}\n```\nab\n```\nafter {++y++}", 8],
+		["B2 typing", "X", "hi\n{++\nX++}\n```\nab\n```\nafter {++y++}", 8],
 	])("%s at the start of an opening fence line keeps the fence", (_, insert, expected, cursor) => {
 		const view = suggestView("hi\n\n```\nab\n```\nafter {++y++}");
 		view.dispatch({
@@ -290,11 +291,41 @@ describe("rule 4: fence lines are protected", () => {
 		expect(ranges).toEqual(["{++y++}"]);
 	});
 
-	test("text typed after a closing fence goes on a new line below it, tracked", () => {
-		const view = suggestView("```\nx\n```\nafter");
+	test.each([
+		["at the start of an opening fence", "p\n```\nx\n```", 2, "p{++\na++}\n```\nx\n```", 6, "p\na\n```\nx\n```"],
+		[
+			"at the start of a quoted opening fence",
+			"> p\n> ```\n> x\n> ```",
+			4,
+			"> p{++\n> a++}\n> ```\n> x\n> ```",
+			10,
+			"> p\n> a\n> ```\n> x\n> ```",
+		],
+		["after a closing fence", "```\nx\n```\nafter", 9, "```\nx\n```\n{++a\n++}after", 14, "```\nx\n```\na\nafter"],
+		[
+			"after a quoted closing fence",
+			"> ```\n> x\n> ```\n> q",
+			15,
+			"> ```\n> x\n> ```\n> {++a\n> ++}q",
+			22,
+			"> ```\n> x\n> ```\n> a\n> q",
+		],
+	])(
+		"text typed %s goes on a line of its own, tracked, and Accept and Reject are exact (M1)",
+		(_, doc, at, expected, head, accept) => {
+			const view = suggestView(doc);
+			view.dispatch({ changes: { from: at, insert: "a" }, userEvent: "input.type" });
+			expect(parsed(view).text).toBe(expected);
+			expect(view.state.selection.main.head).toBe(head);
+			expect(accepted(view)).toBe(accept);
+			expect(rejected(view)).toBe(doc);
+		},
+	);
+
+	test("text typed after a closing fence at the end of the note goes on a new line below it", () => {
+		const view = suggestView("```\nx\n```");
 		view.dispatch({ changes: { from: 9, insert: "a" }, userEvent: "input.type" });
-		expect(parsed(view).text).toBe("```\nx\n```\n{++a++}\nafter");
-		expect(view.state.selection.main.head).toBe(14);
+		expect(parsed(view).text).toBe("```\nx\n```\n{++a++}");
 	});
 
 	test.each([
@@ -386,5 +417,34 @@ describe("B1: typing a code block after a closing fence", () => {
 		}
 		expect(notices).not.toHaveBeenCalled();
 		expect(parsed(view).blocks).toEqual(["```\nx\n```"]);
+	});
+});
+
+describe("review round 1", () => {
+	test("I3: a quoted block elsewhere does not stop a pasted block from being tracked", () => {
+		for (const prefix of ["", "> ```\n> q\n> ```\n\n"]) {
+			const doc = prefix + "ab\ncd\n";
+			const view = suggestView(doc);
+			const at = doc.indexOf("cd");
+			edit(view, [[at, at]], [{ from: at, insert: "```\nz\n```\n" }]);
+			expect(parsed(view).text).toBe(prefix + "ab\n{++\n```\nz\n```\n++}cd\n");
+			expect(notices).not.toHaveBeenCalled();
+		}
+	});
+
+	test("C1: typing in prose after a list-marker block is tracked, and the block's code is plain", () => {
+		const view = suggestView("- ```js\n  code\n  ```\n\nafter {++y++}");
+		view.dispatch({ changes: { from: 24, insert: "X" }, userEvent: "input.type" });
+		const { text, ranges } = parsed(view);
+		expect(text).toBe("- ```js\n  code\n  ```\n\naf{++X++}ter {++y++}");
+		expect(ranges).toEqual(["{++X++}", "{++y++}"]);
+		view.dispatch({ changes: { from: 11, insert: "Y" }, userEvent: "input.type" });
+		expect(parsed(view).text).toBe("- ```js\n  cYode\n  ```\n\naf{++X++}ter {++y++}");
+	});
+
+	test("C1: typing in a nested list's block is plain", () => {
+		const view = suggestView("- a\n  - b\n    ```\n    code\n    ```\n");
+		view.dispatch({ changes: { from: 24, insert: "X" }, userEvent: "input.type" });
+		expect(parsed(view).text).toBe("- a\n  - b\n    ```\n    coXde\n    ```\n");
 	});
 });

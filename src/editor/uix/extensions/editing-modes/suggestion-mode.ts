@@ -1,4 +1,4 @@
-import { EditorSelection, EditorState, type Extension, SelectionRange, Transaction } from "@codemirror/state";
+import { ChangeSet, EditorSelection, EditorState, type Extension, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { editorEditorField, Notice } from "obsidian";
 import type { VimEditor } from "obsidian-typings";
@@ -9,7 +9,6 @@ import {
 	cursor_move_range,
 	cursorMoved,
 	deriveUserEvent,
-	type EditorChange,
 	type EditorEditChange,
 	generate_metadata,
 	getEditorRanges,
@@ -18,15 +17,16 @@ import {
 	mark_ranges,
 	MarkAction,
 	type MarkType,
-	range_metadata_compatible,
 	rangeParser,
 	SubstitutionRange,
 	SuggestionType,
 } from "../../../base";
 
+import { findCodeRegions } from "../../../base/edit-util/code-regions";
+import { getRangesInText } from "../../../base/edit-util/range-parser";
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
-import { editDelta, type GuardedEdit, guardSuggestions } from "./fence-guard";
+import { guardChange, type GuardedEdit, minimalChanges, type SuggestionTracker } from "./fence-guard";
 import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
 
 const vim_action_resolver = {
@@ -121,13 +121,12 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		if (is_exempt_from_tracking(tr))
 			return tr;
 
-		const ranges = tr.startState.field(rangeParser).ranges;
 		const metadata = generate_metadata(settings);
 		const backwards_delete = (latest_event as KeyboardEvent)?.key === "Backspace";
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
 
-		/** The change as a tracked suggestion, with the cursor where it would be after only this change. */
-		function track(editor_change: EditorEditChange): GuardedEdit | undefined {
+		/** The change as a tracked suggestion in `state` (whose ranges are `ranges`), and where its cursor ends up. */
+		function track(editor_change: EditorEditChange, state: EditorState, ranges: CriticMarkupRanges): GuardedEdit {
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
 				SuggestionType.ADDITION;
@@ -137,15 +136,14 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					ranges,
 					backwards_delete,
 					group_delete,
-					tr.startState,
+					state,
 					settings.suggestion_mode_operations.cursor_movement,
 					settings.suggestion_mode_operations.bracket_movement,
 				);
 
-				// EXPL: Only ranges the deletion overlaps, once its ends are out of a neighbour's delimiters (mark_ranges
-				//       snaps them the same way): a range that merely touches it (a deletion ending where an addition
-				//       starts), or whose closer or opener it only clips, is beside it. Counting it made deleting the start
-				//       or end of the next addition do nothing.
+				// EXPL: Only ranges the deletion overlaps, once its ends are out of a neighbour's delimiters
+				//       (mark_ranges snaps them the same way): a range that merely touches it, or whose closer or
+				//       opener it only clips, is beside it.
 				const { from, to } = editor_change;
 				for (const range of ranges.ranges_in_interval(from, to)) {
 					if (range.closer_to - 3 < from && from < range.to && range.to < to) editor_change.from = range.to;
@@ -153,11 +151,12 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				}
 				const ranges_in_range = ranges.ranges_in_interval(editor_change.from, editor_change.to)
 					.filter(range => range.from < editor_change.to && editor_change.from < range.to);
+				// EXPL: Pending added text (an addition, or a substitution's new part), whoever wrote it, is
+				//       removed outright; base text inside a deletion or a highlight never is.
 				if (ranges_in_range.length === 1) {
 					const range = ranges_in_range[0];
 					if (
 						range.encloses_range(editor_change.from, editor_change.to) &&
-						range_metadata_compatible(range, metadata).compatible &&
 						(range.type === SuggestionType.ADDITION ||
 							(range.type === SuggestionType.SUBSTITUTION &&
 								(range as SubstitutionRange).contains_part(
@@ -173,7 +172,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 
 			const edits = mark_ranges(
 				ranges,
-				tr.startState.doc,
+				state.doc,
 				editor_change.from,
 				editor_change.to,
 				editor_change.inserted,
@@ -191,102 +190,84 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			};
 		}
 
-		/** Whether no range overlaps `[from, to)` (or, for a position, holds it inside). */
-		const free = (from: number, to: number) =>
-			ranges.ranges_in_interval(from, to).every(r =>
-				from === to ? r.from >= from || r.to <= from : r.from >= to || r.to <= from
-			);
-
-		/** A range of its own (one change) marking `[from, to)` as deleted or `text` as added there. */
-		const fresh = (from: number, to: number, text: string) =>
-			mark_ranges(
-				new CriticMarkupRanges([]),
-				tr.startState.doc,
-				from,
-				to,
-				text,
-				text ? SuggestionType.ADDITION : SuggestionType.DELETION,
-				metadata,
-				false,
-				settings.metadata_syntax,
-			)[0];
-
-		function addition(at: number, text: string): GuardedEdit | undefined {
-			if (!free(at, at)) return undefined;
-			const edit = fresh(at, at, text);
-			return { changes: [edit], cursor: edit.end };
-		}
-
-		/** A deletion of its own, with `before` and `after` added inside it around the deleted text. */
-		function deletion(from: number, to: number, before = "", after = ""): GuardedEdit | undefined {
-			if (!free(from, to)) return undefined;
-			const edit = fresh(from, to, "");
-			const start = edit.start - from, end = edit.end - from + before.length;
-			const insert = edit.insert.slice(0, start) + before + edit.insert.slice(start);
-			const wrapped = insert.slice(0, end) + after + insert.slice(end);
-			return {
-				changes: [{ from, to, insert: wrapped }],
-				cursor: from + (backwards_delete ? start : end + after.length),
-			};
-		}
-
-		// EXPL: Each change is decided on its own by the fence guard (see fence-guard.ts): tracked in prose, plain in
-		//       code, and never with markup on a fence line or in code. A change it refuses leaves its cursor where it
-		//       was, does not affect the other cursors' changes, and shows a notice. Positions are in the START
-		//       document; `offset` carries the length change of the earlier changes into each cursor.
-		const edits = guardSuggestions(
-			tr.startState.doc,
-			tr.startState.field(rangeParser).code_regions,
-			changed_ranges,
-			{
-				track,
-				addition,
-				deletion,
-				ownText: (from, to) => {
-					const inside = ranges.ranges_in_interval(from, to);
-					return inside.length === 1 && inside[0].type === SuggestionType.ADDITION &&
-						inside[0].encloses_range(from, to);
-				},
-				rangeEnd: pos => {
-					const range = ranges.ranges_in_interval(pos, pos).find(r => r.closer_to - 3 === pos);
-					return range?.full_range_back;
-				},
+		/** How changes are tracked in `state`, whose ranges are `ranges`. */
+		const trackerFor = (state: EditorState, ranges: CriticMarkupRanges): SuggestionTracker => ({
+			track: change => track(change, state, ranges),
+			addition(at, text) {
+				if (ranges.ranges_in_interval(at, at).some(r => r.from < at && at < r.to)) return undefined;
+				const [edit] = mark_ranges(
+					new CriticMarkupRanges([]),
+					state.doc,
+					at,
+					at,
+					text,
+					SuggestionType.ADDITION,
+					metadata,
+					false,
+					settings.metadata_syntax,
+				);
+				return { changes: [edit], cursor: edit.end };
 			},
-		);
-		if (edits.includes(null)) new Notice("Inkling: this edit would break a code fence in Suggest mode.");
-		const changes: EditorChange[] = [];
-		const selections: SelectionRange[] = [];
-		let offset = 0;
-		let unchanged = true;
-		for (let i = 0; i < changed_ranges.length; i++) {
-			const change = changed_ranges[i];
-			const edit = edits[i];
+			ownText(from, to) {
+				const inside = ranges.ranges_in_interval(from, to);
+				return inside.length === 1 && inside[0].type === SuggestionType.ADDITION && inside[0].encloses_range(from, to);
+			},
+			rangeEnd: pos => ranges.ranges_in_interval(pos, pos).find(r => r.closer_to - 3 === pos)?.full_range_back,
+			inRange: pos => ranges.ranges_in_interval(pos, pos).some(r => r.from <= pos && pos < r.to),
+		});
+
+		// EXPL: Each change is decided by the fence guard in the document the earlier cursors' edits left (parsed afresh:
+		//       range-state updates its ranges in place). A refused change, or one overlapping an earlier edit, keeps
+		//       its cursor and leaves the others alone.
+		let state = tr.startState, all = ChangeSet.empty(state.doc.length), unchanged = true;
+		let { ranges, code_regions } = state.field(rangeParser);
+		let refused: string | undefined;
+		const cursors: number[] = [];
+		changed_ranges.forEach((change, i) => {
+			let overlaps = false;
+			all.iterChangedRanges((fromA, toA) => {
+				overlaps ||= fromA < change.to && change.from < toA ||
+					(fromA === toA && change.from < fromA && fromA < change.to);
+			});
+			const at = {
+				...change,
+				from: all.mapPos(change.from, 1),
+				to: Math.max(all.mapPos(change.from, 1), all.mapPos(change.to, -1)),
+			};
+			const edit = !overlaps && guardChange(state.doc, code_regions, at, trackerFor(state, ranges));
 			if (!edit) {
-				selections.push(EditorSelection.cursor((tr.startState.selection.ranges[i]?.head ?? change.from) + offset));
+				refused ??= overlaps ?
+					"Inkling: this edit overlaps another cursor's edit, so Suggest mode didn't apply it." :
+					"Inkling: this edit would break a code fence in Suggest mode.";
+				cursors.push(all.mapPos(tr.startState.selection.ranges[i]?.head ?? change.from));
 				unchanged = false;
-				continue;
+				return;
 			}
 			const [first] = edit.changes;
-			if (
-				edit.changes.length !== 1 || first.from !== change.from || first.to !== change.to ||
-				first.insert !== change.inserted
-			) {
+			if (edit.changes.length !== 1 || first.from !== at.from || first.to !== at.to || first.insert !== at.inserted)
 				unchanged = false;
+			const changes = ChangeSet.of(minimalChanges(state.doc, edit.changes), state.doc.length);
+			for (let k = 0; k < cursors.length; k++) cursors[k] = changes.mapPos(cursors[k]);
+			cursors.push(edit.cursor);
+			all = all.compose(changes);
+			if (i < changed_ranges.length - 1 && !changes.empty) {
+				state = EditorState.create({ doc: changes.apply(state.doc) });
+				const text = state.doc.toString();
+				ranges = new CriticMarkupRanges(getRangesInText(text, settings));
+				code_regions = findCodeRegions(text);
 			}
-			changes.push(...edit.changes);
-			selections.push(EditorSelection.cursor(edit.cursor + offset));
-			offset += editDelta(edit);
-		}
+		});
+		if (refused) new Notice(refused);
 
 		if (unchanged)
 			return tr;
-		if (!changes.length)
+		if (all.empty)
 			return tr.startState.update({ filter: false });
 
 		const forwardedEvent = deriveUserEvent(tr);
 		return tr.startState.update({
-			changes,
-			selection: EditorSelection.create(selections),
+			changes: all,
+			selection: EditorSelection.create(cursors.map(cursor => EditorSelection.cursor(cursor))),
 			annotations: forwardedEvent ?
 				[Transaction.userEvent.of(forwardedEvent), pluginEditAnnotation.of(true)] :
 				[pluginEditAnnotation.of(true)],

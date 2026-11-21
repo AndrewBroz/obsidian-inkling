@@ -61,10 +61,8 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		let fragments = TreeFragment.applyChanges(value.fragments, changed_ranges);
 		// stringify-doc: 0.98 - 8.99 ms
 		const text = tr.state.doc.toString();
-		// EXPL: The parser reads the text with fenced code masked, so a fence line opening or closing a block changes
-		//       the masked text far from the edit. Unless the old regions map onto the new ones through the changes
-		//       (`regionsPreserved`), the state is rebuilt. When they map, the masked text differs only in the changed
-		//       spans (a boundary moves only across text inserted at it), so the fragments stay valid.
+		// EXPL: The parser reads the text with code blanked: unless the old blocks map onto the new ones (so the blanked
+		//       text differs only in the changed spans), the state is rebuilt.
 		const code_regions = findCodeRegions(text);
 		if (!regionsPreserved(value.code_regions, tr.changes, code_regions))
 			return this.create(tr.state) as ParserData;
