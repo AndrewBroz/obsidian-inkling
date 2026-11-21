@@ -34,20 +34,19 @@
   // EXPL: An anchored highlight is READ far more often than it is selected, so at rest it should sit
   //       quietly under the text — a wash, not a marker pen. The selected state is the marker pen.
   //
-  //       The rest state dilutes the ALPHA (a wash of Obsidian's `--text-highlight-bg`). The selected
+  //       Obsidian 1.x renamed `--text-highlight-bg` to `--highlight-background` (already ~30% alpha), and an
+  //       undefined variable made both tokens invalid, so highlights painted nothing. The rest state is now
+  //       Obsidian's own highlight colour, the same as a native `==highlight==`; the old 62% dilution of the
+  //       new, already pale variable would be close to invisible. The selected
   //       state goes the other way: mixing toward black both DARKENS the hue and, because black is
   //       opaque, raises the alpha — so it reads as a deliberate, saturated mark rather than a
   //       slightly stronger wash. Darkening alone would not do it: the original tokens were
   //       base + base-darkened-15%, and darkening a ~0.4-alpha colour barely moves the composite,
   //       which is exactly why the two states used to be indistinguishable.
-  --highlight-color: color-mix(
-    in srgb,
-    var(--text-highlight-bg),
-    transparent 62%
-  );
+  --highlight-color: var(--highlight-background, var(--text-highlight-bg));
   --highlight-color-alt: color-mix(
     in srgb,
-    var(--text-highlight-bg),
+    var(--highlight-background, var(--text-highlight-bg)),
     black 18%
   );
 
@@ -89,14 +88,10 @@
   // EXPL: See the light-theme note above — pale at rest, saturated when selected. Dark themes mix
   //       toward WHITE rather than black: a darker mark on a dark surface recedes instead of
   //       advancing, which is the opposite of what selection should do.
-  --highlight-color: color-mix(
-    in srgb,
-    var(--text-highlight-bg),
-    transparent 62%
-  );
+  --highlight-color: var(--highlight-background, var(--text-highlight-bg));
   --highlight-color-alt: color-mix(
     in srgb,
-    var(--text-highlight-bg),
+    var(--highlight-background, var(--text-highlight-bg)),
     white 18%
   );
 
