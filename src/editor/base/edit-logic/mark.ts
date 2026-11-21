@@ -227,7 +227,9 @@ function mark_range(
 					} else if (left === false) {
 						deleted = parts[0];
 						const l_inserted = left_range.unwrap_slice((left_range as SubstitutionRange).middle + 2, from);
-						start_offset = deleted.length + l_inserted.length;
+						// (The separator, which construct_suggestion counts into the end instead.)
+						start_offset = deleted.length + 2 + l_inserted.length;
+						end_offset -= 2;
 						const r_inserted = left_range.unwrap_slice(to, Infinity);
 						insert = l_inserted + inserted + r_inserted;
 					} else {
@@ -249,6 +251,13 @@ function mark_range(
 						end_offset,
 						write_syntax(syntax, left_range),
 					));
+				} else if (
+					!inserted && left_range.type === SuggestionType.ADDITION && !left_range.replies.length &&
+					from <= left_range.range_start && left_range.closer_to - 3 <= to
+				) {
+					// EXPL: Deleting all of an addition's text removes the range, not leaving an empty one.
+					from = left_range.from;
+					to = left_range.to;
 				}
 			} else {
 				const cursor = left_range.cursor_move_inside(from, true);

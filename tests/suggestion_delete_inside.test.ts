@@ -263,3 +263,55 @@ describe("Backspace or Delete at several cursors next to suggestions", () => {
 		expect(result).not.toBe(doc);
 	});
 });
+
+describe("Backspace after typing", () => {
+	function view(doc: string, settings: Partial<PluginSettings>) {
+		return new EditorView({
+			state: createRangeState(doc, settings, [
+				editorEditorField,
+				editorKeypressCatcher,
+				suggestionMode({ ...DEFAULT_SETTINGS, ...settings }),
+			]),
+		});
+	}
+	function key(v: EditorView, ch: string) {
+		v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true }));
+		const { from, to } = v.state.selection.main;
+		if (ch === "Backspace") {
+			const at = from === to ? from - 1 : from;
+			v.dispatch({ changes: { from: at, to }, selection: { anchor: at }, userEvent: "delete.backward" });
+		} else {
+			v.dispatch({ changes: { from, to, insert: ch }, selection: { anchor: from + 1 }, userEvent: "input.type" });
+		}
+	}
+	const DEFAULTS = { author: "me" };
+	const strip = (text: string) => text.replace(/"time":\d+/g, "T");
+
+	test("typing a replacement over a word, then Backspace keeps deleting the new text", () => {
+		const v = view("a foo b", DEFAULTS);
+		v.dispatch({ selection: { anchor: 2, head: 5 } });
+		for (const ch of ["q", "u", "x"]) key(v, ch);
+		key(v, "Backspace");
+		expect(strip(v.state.doc.toString())).toBe(`a {~~{"author":"me",T}@@foo~>qu~~} b`);
+		expect(v.state.selection.main.head).toBe(v.state.doc.toString().indexOf("qu") + 2);
+		key(v, "Backspace");
+		key(v, "Backspace");
+		expect(strip(v.state.doc.toString())).toBe(`a {--{"author":"me",T}@@foo--} b`);
+	});
+
+	test("Backspacing away all of one's typed text leaves no empty addition", () => {
+		const v = view("x a", DEFAULTS);
+		v.dispatch({ selection: { anchor: 2 } });
+		for (const ch of ["-", " ", "Backspace", "Backspace"]) key(v, ch);
+		expect(v.state.doc.toString()).toBe("x a");
+		expect(v.state.selection.main.head).toBe(2);
+	});
+
+	test("a delete.backward without a Backspace keydown is a Backspace", () => {
+		const v = view("x {++abc++} y", { add_metadata: false });
+		v.dispatch({ selection: { anchor: 8 } });
+		v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+		v.dispatch({ changes: { from: 7, to: 8 }, selection: { anchor: 7 }, userEvent: "delete.backward" });
+		expect(v.state.doc.toString()).toBe("x {++ab++} y");
+	});
+});

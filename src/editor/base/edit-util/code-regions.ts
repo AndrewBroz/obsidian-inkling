@@ -8,7 +8,7 @@ export interface CodeRegion {
 	close_from: number;
 }
 
-const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+export const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
 
 /** `line` with its tabs expanded to the next multiple of 4 columns. */
 const expand = (line: string) =>

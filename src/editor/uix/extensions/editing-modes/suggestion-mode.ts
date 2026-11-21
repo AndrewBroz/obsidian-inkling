@@ -10,6 +10,7 @@ import {
 	cursor_move_range,
 	cursorMoved,
 	deriveUserEvent,
+	type EditorEditChange,
 	generate_metadata,
 	getEditorRanges,
 	getRangesInText,
@@ -23,6 +24,7 @@ import {
 	SuggestionType,
 } from "../../../base";
 
+import { FENCE } from "../../../base/edit-util/code-regions";
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
 import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
@@ -108,6 +110,8 @@ function minimal(old: string, edit: { from: number; insert: string }) {
 	return out;
 }
 
+const FENCE_LINE = new RegExp(FENCE.source, "m");
+
 // TODO: Functionality: Double click mouse should also floodfill (problem: no specific userevent attached)
 function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction {
 	const editor = tr.startState.field(editorEditorField) as EditorView & { cm: VimEditor };
@@ -135,36 +139,40 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			return tr;
 
 		const { ranges: start_ranges, code_regions } = tr.startState.field(rangeParser);
-		let ranges = start_ranges;
-		// EXPL: A change touching a code block (its content or a fence line, start-document positions) is applied as
-		//       typed, untracked: markup there would be inert text in the code. A user who breaks a fence breaks it.
-		const in_code = ({ from, to }: { from: number; to: number }) =>
-			code_regions.some(region => region.from <= to && from <= region.to);
+		let ranges: CriticMarkupRanges;
+		// EXPL: A change touching a code block (its content or a fence line, start-document positions), or inserting a
+		//       fence-shaped line, is applied as typed, untracked: markup there would be inert text in the code, or would
+		//       sit on a fence line. A user who breaks a fence breaks it.
+		const in_code = ({ from, to, inserted }: EditorEditChange) =>
+			FENCE_LINE.test(inserted) || code_regions.some(region => region.from <= to && from <= region.to);
 		if (changed_ranges.length > 0 && changed_ranges.every(in_code))
 			return tr;
 
 		const metadata = generate_metadata(settings);
 
-		const backwards_delete = (latest_event as KeyboardEvent)?.key === "Backspace";
+		const backwards_delete = tr.isUserEvent("delete.backward") || (latest_event as KeyboardEvent)?.key === "Backspace";
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
 		// EXPL: Each change is tracked in turn, from the last cursor to the first, in the document the later ones left
-		//       (its positions mapped there, its ranges parsed afresh): tracked against the start document, two cursors
-		//       in one range each rewrote it and duplicated its text. Edits are reduced to what they change, so other
-		//       positions map through them.
-		let state = tr.startState, doc = state.doc, all = ChangeSet.empty(doc.length);
+		//       (its positions mapped there): tracked against the start document, two cursors in one range each rewrote
+		//       it and duplicated its text. Before `low`, the first position the later ones changed, the document and
+		//       its ranges are the start ones; a change whose line or ranges reach `low` gets them parsed afresh. With several
+		//       changes, edits are reduced to what they change, so other positions map through them.
+		let state = tr.startState, doc = state.doc, all = ChangeSet.empty(doc.length), low = Infinity;
+		let fresh: CriticMarkupRanges | undefined;
 		const cursors: number[] = [];
 		/** Applies change `i`'s `edits` (in `doc`), with its cursor at `cursor`, for the changes before it. */
 		const apply = (i: number, edits: { from: number; to: number; insert: string }[], cursor: number) => {
 			const changes = ChangeSet.of(
-				edits.flatMap(edit => minimal(doc.sliceString(edit.from, edit.to), edit)),
+				changed_ranges.length > 1 ? edits.flatMap(edit => minimal(doc.sliceString(edit.from, edit.to), edit)) : edits,
 				doc.length,
 			);
 			for (let k = i + 1; k < cursors.length; k++) cursors[k] = changes.mapPos(cursors[k]);
 			cursors[i] = cursor;
 			all = all.compose(changes);
 			if (changes.empty || i === 0) return;
+			changes.iterChangedRanges(fromA => low = Math.min(low, fromA));
 			doc = changes.apply(doc);
-			ranges = new CriticMarkupRanges(getRangesInText(doc.toString(), settings));
+			fresh = undefined;
 			state = { doc, charCategorizer: tr.startState.charCategorizer.bind(tr.startState) } as EditorState;
 		};
 		for (let i = changed_ranges.length - 1; i >= 0; i--) {
@@ -182,6 +190,11 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			const to = keystroke ?
 				Math.min(doc.length, from + original.to - original.from) :
 				Math.max(from, all.mapPos(original.to, -1));
+			// (A Delete may reach the next line's start, or move through a range there.)
+			const reach = doc.lineAt(to).to + 1;
+			ranges = reach < low && start_ranges.ranges_in_interval(from, reach).every(r => r.to < low) ?
+				start_ranges :
+				(fresh ??= new CriticMarkupRanges(getRangesInText(doc.toString(), settings)));
 			let editor_change = { ...original, from, to, anchor, deleted: doc.sliceString(from, to) };
 			if (in_code(original)) {
 				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length);
