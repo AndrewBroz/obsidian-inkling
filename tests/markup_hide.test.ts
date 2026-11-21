@@ -1,4 +1,4 @@
-import { EditorSelection, type Range } from "@codemirror/state";
+import { EditorSelection, type Range, RangeSet } from "@codemirror/state";
 import type { Decoration, EditorView } from "@codemirror/view";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
@@ -57,5 +57,28 @@ describe("live preview with @@ in the content", () => {
 		const spans = replaceSpans(decorations);
 		expect(spans).toEqual(expect.arrayContaining([{ from: 0, to: 3 }, { from: 7, to: 10 }]));
 		for (const span of spans) expect(span.to <= 3 || span.from >= 7).toBe(true);
+	});
+});
+
+describe("live preview decorations with trailing attribute blocks", () => {
+	test.each([
+		["{++added++}{author=A time=1} end", "added"],
+		["{==hi==}{>>my note<<}{author=A time=1} end", "my note"],
+		["{~~old~>new~~}{author=A time=1} end", "new"],
+	])("%j builds a valid decoration set and styles only the content", (doc, last_content) => {
+		const settings = { comment_style: "inline" } as Partial<PluginSettings>;
+		const state = createRangeState(doc, settings);
+		const ranges = state.field(rangeParser).ranges.ranges;
+		const decorations = constructDecorations(
+			null as unknown as EditorView,
+			ranges,
+			null,
+			PreviewMode.ALL,
+			EditMode.CORRECTED,
+			{ ...DEFAULT_SETTINGS, ...settings },
+		);
+		expect(() => RangeSet.of(decorations)).not.toThrow();
+		const marks = decorations.filter(deco => deco.value.spec.attributes?.class !== undefined);
+		expect(doc.slice(marks.at(-1)!.from, marks.at(-1)!.to)).toBe(last_content);
 	});
 });

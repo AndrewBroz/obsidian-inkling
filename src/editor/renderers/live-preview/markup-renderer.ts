@@ -72,7 +72,7 @@ function markContents(
 		if (!range.empty()) {
 			decorations.push(
 				rangeMarkupDecoration(range, cls, show_styling)
-					.range(range.from + offset, range.to - offset),
+					.range(range.from + offset, range.closer_to - offset),
 			);
 		}
 	} else {
@@ -87,7 +87,7 @@ function markContents(
 			if (!range.part_is_empty(false)) {
 				decorations.push(
 					rangeMarkupDecoration(range, cls, show_styling)
-						.range((range as SubstitutionRange).middle + 2, range.to - offset),
+						.range((range as SubstitutionRange).middle + 2, range.closer_to - offset),
 				);
 			}
 		}
@@ -234,7 +234,9 @@ export function constructDecorations(
 		}
 	}
 
-	return decorations;
+	// EXPL: A trailing attribute block sits after the closing bracket, so its hide decoration is pushed before the
+	//       content and closer ones. CodeMirror needs decorations sorted, and throws otherwise.
+	return decorations.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
 }
 
 export const livepreviewRenderer = (settings: PluginSettings) =>
