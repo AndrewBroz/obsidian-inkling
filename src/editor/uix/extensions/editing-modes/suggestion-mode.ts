@@ -1,15 +1,18 @@
-import { EditorSelection, EditorState, type Extension, SelectionRange, Transaction } from "@codemirror/state";
+import { ChangeSet, EditorSelection, EditorState, type Extension, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import DiffMatchPatch from "diff-match-patch";
 import { editorEditorField } from "obsidian";
 import type { VimEditor } from "obsidian-typings";
 import { type PluginSettings } from "../../../../types";
 
 import {
+	CriticMarkupRanges,
 	cursor_move_range,
 	cursorMoved,
 	deriveUserEvent,
 	generate_metadata,
 	getEditorRanges,
+	getRangesInText,
 	getUserEvents,
 	isUserEvent,
 	mark_ranges,
@@ -90,6 +93,21 @@ const vim_action_resolver = {
 export const suggestionMode = (settings: PluginSettings): Extension =>
 	EditorState.transactionFilter.of(tr => applySuggestion(tr, settings));
 
+const dmp = new DiffMatchPatch();
+
+/** `edit` (replacing `old`) as the changes a character diff finds, so positions in text it keeps map through it. */
+function minimal(old: string, edit: { from: number; insert: string }) {
+	const out: { from: number; to: number; insert: string }[] = [];
+	let pos = edit.from;
+	for (const [op, text] of dmp.diff_main(old, edit.insert)) {
+		if (op !== 0 && out.at(-1)?.to !== pos) out.push({ from: pos, to: pos, insert: "" });
+		if (op === 1) out.at(-1)!.insert += text;
+		else pos += text.length;
+		if (op === -1) out.at(-1)!.to = pos;
+	}
+	return out;
+}
+
 // TODO: Functionality: Double click mouse should also floodfill (problem: no specific userevent attached)
 function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction {
 	const editor = tr.startState.field(editorEditorField) as EditorView & { cm: VimEditor };
@@ -116,7 +134,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		if (is_exempt_from_tracking(tr))
 			return tr;
 
-		const { ranges, code_regions } = tr.startState.field(rangeParser);
+		const { ranges: start_ranges, code_regions } = tr.startState.field(rangeParser);
+		let ranges = start_ranges;
 		// EXPL: A change touching a code block (its content or a fence line, start-document positions) is applied as
 		//       typed, untracked: markup there would be inert text in the code. A user who breaks a fence breaks it.
 		const in_code = ({ from, to }: { from: number; to: number }) =>
@@ -124,32 +143,58 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		if (changed_ranges.length > 0 && changed_ranges.every(in_code))
 			return tr;
 
-		const changes = [];
-		const selections: SelectionRange[] = [];
-
 		const metadata = generate_metadata(settings);
 
 		const backwards_delete = (latest_event as KeyboardEvent)?.key === "Backspace";
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
-		let offset = 0;
-		// TODO: Consider each editor_change separately to avoid issues where you try to re-insert into a now updated range
-		//        (Or: update ranges with editor_change to reflect the new state)
-		for (let editor_change of changed_ranges) {
-			if (in_code(editor_change)) {
-				const { from, to, inserted } = editor_change;
-				changes.push({ from, to, insert: inserted });
-				selections.push(EditorSelection.cursor(from + inserted.length + offset));
-				offset += inserted.length - (to - from);
+		// EXPL: Each change is tracked in turn, from the last cursor to the first, in the document the later ones left
+		//       (its positions mapped there, its ranges parsed afresh): tracked against the start document, two cursors
+		//       in one range each rewrote it and duplicated its text. Edits are reduced to what they change, so other
+		//       positions map through them.
+		let state = tr.startState, doc = state.doc, all = ChangeSet.empty(doc.length);
+		const cursors: number[] = [];
+		/** Applies change `i`'s `edits` (in `doc`), with its cursor at `cursor`, for the changes before it. */
+		const apply = (i: number, edits: { from: number; to: number; insert: string }[], cursor: number) => {
+			const changes = ChangeSet.of(
+				edits.flatMap(edit => minimal(doc.sliceString(edit.from, edit.to), edit)),
+				doc.length,
+			);
+			for (let k = i + 1; k < cursors.length; k++) cursors[k] = changes.mapPos(cursors[k]);
+			cursors[i] = cursor;
+			all = all.compose(changes);
+			if (changes.empty || i === 0) return;
+			doc = changes.apply(doc);
+			ranges = new CriticMarkupRanges(getRangesInText(doc.toString(), settings));
+			state = { doc, charCategorizer: tr.startState.charCategorizer.bind(tr.startState) } as EditorState;
+		};
+		for (let i = changed_ranges.length - 1; i >= 0; i--) {
+			const original = changed_ranges[i];
+			// A Backspace or Delete is taken from its mapped cursor, as its character may be one a later cursor rewrote.
+			// In an opener (Backspace) or a closer (Delete) it acts just outside the range, so it is taken from there.
+			const keystroke = !original.selection && !original.inserted, start = original.anchor ?? original.from;
+			let at = start;
+			for (const r of keystroke ? start_ranges.ranges_in_interval(at, at) : []) {
+				if (backwards_delete && r.from < at && at <= r.range_start) at = r.from;
+				else if (!backwards_delete && r.closer_to - 3 <= at && at < r.to) at = r.to;
+			}
+			const anchor = all.mapPos(at, -1);
+			const from = keystroke ? Math.max(0, anchor + original.from - start) : all.mapPos(original.from, 1);
+			const to = keystroke ?
+				Math.min(doc.length, from + original.to - original.from) :
+				Math.max(from, all.mapPos(original.to, -1));
+			let editor_change = { ...original, from, to, anchor, deleted: doc.sliceString(from, to) };
+			if (in_code(original)) {
+				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length);
 				continue;
 			}
 			// EXPL: A selection end inside a substitution's "~>" is at its start (or, for the selection's start, its end):
 			//       splitting the separator left a stray ">".
-			for (const r of editor_change.selection ? ranges.ranges_in_interval(editor_change.from, editor_change.to) : []) {
-				if (r.type !== SuggestionType.SUBSTITUTION) continue;
+			for (const r of ranges.ranges_in_interval(editor_change.from, editor_change.to)) {
+				if (r.type !== SuggestionType.SUBSTITUTION || !editor_change.selection) continue;
 				const middle = (r as SubstitutionRange).middle;
 				const from = editor_change.from === middle + 1 ? middle + 2 : editor_change.from;
 				const to = Math.max(from, editor_change.to === middle + 1 ? middle : editor_change.to);
-				editor_change = { ...editor_change, from, to, deleted: tr.startState.doc.sliceString(from, to) };
+				editor_change = { ...editor_change, from, to, deleted: doc.sliceString(from, to) };
 			}
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
@@ -160,7 +205,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					ranges,
 					backwards_delete,
 					group_delete,
-					tr.startState,
+					state,
 					settings.suggestion_mode_operations.cursor_movement,
 					settings.suggestion_mode_operations.bracket_movement,
 				);
@@ -187,7 +232,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 
 			const edits = mark_ranges(
 				ranges,
-				tr.startState.doc,
+				doc,
 				editor_change.from,
 				editor_change.to,
 				editor_change.inserted,
@@ -197,25 +242,16 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				settings.metadata_syntax,
 			);
 			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
-			if (edits) {
-				changes.push(edits);
-				selections.push(
-					EditorSelection.cursor(
-						(backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset) + offset,
-					),
-				);
-				offset += added_offset - (edits[edits.length - 1].to - edits[edits.length - 1].from) +
-					edits[edits.length - 1].insert.length;
-			}
+			apply(i, edits, backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset);
 		}
 
-		if (!changes.length)
+		if (!changed_ranges.length)
 			return tr;
 
 		const forwardedEvent = deriveUserEvent(tr);
 		return tr.startState.update({
-			changes,
-			selection: EditorSelection.create(selections),
+			changes: all,
+			selection: EditorSelection.create(cursors.map(cursor => EditorSelection.cursor(cursor))),
 			annotations: forwardedEvent ?
 				[Transaction.userEvent.of(forwardedEvent), pluginEditAnnotation.of(true)] :
 				[pluginEditAnnotation.of(true)],

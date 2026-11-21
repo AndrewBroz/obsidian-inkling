@@ -6,6 +6,7 @@ import { editorEditorField } from "obsidian";
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import { suggestionMode } from "../src/editor/uix/extensions";
+import { editorKeypressCatcher } from "../src/editor/uix/extensions/keypress-catcher";
 import type { PluginSettings } from "../src/types";
 import { createRangeState } from "./helpers";
 
@@ -89,10 +90,8 @@ test("a selection from own text into the next range's opener removes the own tex
 	expect(v.state.doc.toString()).toBe(`{++{"author":"alice"}@@a++}{--x--} q`);
 });
 
-// FIXME: Known bug, also on main (2dd9685); fixing it needs the owner's decision. Each cursor's edit is tracked
-//        against the same start state, so two cursors in one addition each rewrite the whole range and the text is
-//        duplicated. Fixing it means tracking the cursors one after another, which the 0.13.0 rebuild removed.
-test.failing("two cursors in one own addition with timestamps both type (review I2)", () => {
+// EXPL: Tracked against the same start state, each cursor rewrote the whole addition, duplicating its text.
+test("two cursors in one own addition with timestamps both type (review I2)", () => {
 	const settings = { ...DEFAULT_SETTINGS, ...SETTINGS, author: "me", add_timestamp_metadata: true };
 	const doc = `x {++{"author":"me","time":1000}@@abcdef++} y`;
 	const v = new EditorView({
@@ -112,8 +111,7 @@ test.failing("two cursors in one own addition with timestamps both type (review 
 	expect(v.state.doc.toString()).toMatch(/^x \{\+\+\{"author":"me","time":\d+\}@@abXcdXef\+\+\} y$/);
 });
 
-// FIXME: The same known bug with metadata off.
-test.failing("two cursors in one own addition both type, metadata off", () => {
+test("two cursors in one own addition both type, metadata off", () => {
 	const settings = { ...DEFAULT_SETTINGS, add_metadata: false };
 	const v = new EditorView({
 		state: createRangeState("x {++abcdef++} y", { add_metadata: false }, [
@@ -209,4 +207,59 @@ describe("typing over text in and beside ranges", () => {
 			expect(result.reject).toBe(doc.includes("{++bc++}") ? "adej" : "xy de z");
 		},
 	);
+});
+
+describe("Backspace or Delete at several cursors next to suggestions", () => {
+	/** `doc` after pressing `key` at each of `cursors` at once, metadata off unless `settings` say otherwise. */
+	function press(doc: string, key: "Backspace" | "Delete", cursors: number[], settings: Partial<PluginSettings>) {
+		const v = new EditorView({
+			state: createRangeState(doc, settings, [
+				editorEditorField,
+				editorKeypressCatcher,
+				EditorState.allowMultipleSelections.of(true),
+				suggestionMode({ ...DEFAULT_SETTINGS, ...settings }),
+			]),
+		});
+		v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+		v.dispatch({ selection: EditorSelection.create(cursors.map(c => EditorSelection.cursor(c))) });
+		const changes = cursors.map(c => key === "Backspace" ? { from: c - 1, to: c } : { from: c, to: c + 1 });
+		v.dispatch(v.state.update({
+			changes,
+			selection: EditorSelection.create(changes.map((c, i) => EditorSelection.cursor(c.from - i))),
+			userEvent: key === "Backspace" ? "delete.backward" : "delete.forward",
+		}));
+		return v.state.doc.toString();
+	}
+
+	/** `doc` with every suggestion accepted, and with every suggestion rejected. */
+	function resolved(doc: string) {
+		const state = createRangeState(doc, {}, []);
+		return [true, false].map(accept => {
+			let text = doc;
+			for (const r of [...state.field(rangeParser).ranges.ranges].reverse())
+				text = text.slice(0, r.from) + (accept ? r.accept() : r.reject()) + text.slice(r.to);
+			return text;
+		});
+	}
+
+	test.each(
+		[
+			["x{++ab++} y{++cd++}", "Backspace", [9, 19], {}],
+			["ab cd {++xy++} ef", "Backspace", [2, 14], {}],
+			["more text plain words {++mine text++} ", "Backspace", [25, 32], {}],
+			["x {~~old~>new~~} y", "Backspace", [4, 6], { add_metadata: true, author: "me" }],
+			["{~~old~>new~~} {~~old~>new~~} {--del--} plain words ", "Delete", [21, 26], {
+				add_metadata: true,
+				author: "me",
+			}],
+		] as const,
+	)("%j: %s at %j accepts and rejects as each cursor alone, last first", (doc, key, cursors, extra) => {
+		const settings = { add_metadata: false, ...extra };
+		let in_turn: string = doc;
+		for (const c of [...cursors].reverse())
+			in_turn = press(in_turn, key, [c], settings);
+		const result = press(doc, key, [...cursors], settings);
+		expect(resolved(result)).toEqual(resolved(in_turn));
+		expect(result).not.toBe(doc);
+	});
 });
