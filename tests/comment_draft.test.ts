@@ -80,6 +80,32 @@ describe("commentDraftField", () => {
 	});
 });
 
+// EXPL: While the user types, the text they are commenting on carries the same `cmtr-highlight` a submitted anchor
+//       gets, drawn as a decoration: the note itself is not touched until commit.
+describe("draft anchor highlight", () => {
+	const highlighted = (view: EditorView) =>
+		Array.from(view.contentDOM.querySelectorAll(".cmtr-highlight")).map(el => el.textContent);
+
+	test("the anchor is highlighted while the draft is open, without writing to the note", () => {
+		const view = viewWith("hello world");
+		expect(highlighted(view)).toEqual([]);
+
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+		expect(highlighted(view)).toEqual(["world"]);
+		expect(view.state.doc.toString()).toBe("hello world");
+	});
+
+	test("the highlight follows the anchor through an edit, and goes when the draft is discarded", () => {
+		const view = viewWith("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+		view.dispatch({ changes: { from: 0, to: 0, insert: "XX" } });
+		expect(highlighted(view)).toEqual(["world"]);
+
+		view.dispatch({ effects: clearCommentDraft.of(null) });
+		expect(highlighted(view)).toEqual([]);
+	});
+});
+
 describe("commitCommentDraft", () => {
 	test("writes highlight + comment in ONE transaction and clears the draft", () => {
 		const view = viewWith("hello world");

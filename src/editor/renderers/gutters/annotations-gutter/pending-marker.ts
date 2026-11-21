@@ -3,7 +3,10 @@ import { EditorView, GutterMarker } from "@codemirror/view";
 
 import { Component, editorEditorField, editorInfoField } from "obsidian";
 
+import { createMetadataInfoElement } from "../../../../ui/snippets";
 import { commitCommentDraft } from "../../../base/edit-logic/add-comment";
+import { generate_metadata } from "../../../base/edit-util/metadata";
+import { pluginSettingsField } from "../../../uix";
 import { clearCommentDraft, commentDraftField } from "../../../uix/extensions/comment-draft";
 import { ReplyBox } from "./reply-box";
 
@@ -73,14 +76,18 @@ export class PendingAnnotationMarker extends GutterMarker {
 
 		const thread = createDiv({ cls: ["cmtr-anno-gutter-thread", "cmtr-anno-gutter-thread-pending"] });
 
-		// EXPL: Echo the text being commented on, the way Docs does — the card floats in the gutter
-		//       with no markup in the note to point back at it yet.
-		thread.createDiv({
-			cls: "cmtr-anno-gutter-pending-quote",
-			text: this.view.state.sliceDoc(this.annotation.from, this.annotation.to),
-		});
-
-		const container = thread.createDiv({ cls: "cmtr-anno-gutter-reply" });
+		// EXPL: Built like a submitted card (AnnotationNode, marker.ts): one entry with the metadata header
+		//       and a body, the reply box sitting where a submitted comment's text sits. The header shows
+		//       the fields the comment WILL be written with (generate_metadata, the same call create_range
+		//       makes on commit), so a setting that leaves out author or time leaves it out here too; the
+		//       time reads "now" rather than a timestamp that would go stale while the user types. No quote
+		//       of the selected text: the anchor is highlighted in the note (comment-draft.ts).
+		const entry = thread.createDiv({ cls: "cmtr-anno-gutter-annotation" });
+		const fields = generate_metadata(this.view.state.field(pluginSettingsField));
+		if (fields)
+			entry.appendChild(createMetadataInfoElement({ fields }, undefined, "icon", "now"));
+		const body = entry.createDiv({ cls: "cmtr-anno-gutter-annotation-view" });
+		const container = body.createDiv({ cls: "cmtr-anno-gutter-reply" });
 		this.reply_box = this.component.addChild(
 			new ReplyBox(app, container, {
 				placeholder: "Comment…",
@@ -89,6 +96,7 @@ export class PendingAnnotationMarker extends GutterMarker {
 				//       is what GutterElement.setMarkers hands to insertBefore, so focusing now would
 				//       be a silent no-op. afterAttach() below focuses explicitly once it is live.
 				focus: false,
+				commitOnBlur: true,
 				onCommit: (text) => {
 					// EXPL: Drop the cache BEFORE dispatching, restore it only if the write was
 					//       refused. commitCommentDraft's dispatch is synchronous and tears this card
@@ -101,7 +109,7 @@ export class PendingAnnotationMarker extends GutterMarker {
 					return false;
 				},
 				onDismiss: () => {
-					// EXPL: An intentional close (Escape, or blur while empty) discards the text —
+					// EXPL: An intentional close (Escape, or blur while blank) discards the text —
 					//       only a rebuild under the user's feet is allowed to carry it over.
 					this.draft_text = "";
 					this.view.dispatch({ effects: clearCommentDraft.of(null) });

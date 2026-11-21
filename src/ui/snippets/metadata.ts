@@ -1,5 +1,5 @@
 import { setIcon } from "obsidian";
-import { CriticMarkupRange } from "../../editor/base";
+import type { MetadataFields } from "../../editor/base";
 
 function addMetadataSeparator(metadata_container: HTMLElement): void {
 	if (metadata_container.children.length > 0) {
@@ -11,10 +11,16 @@ function addMetadataSeparator(metadata_container: HTMLElement): void {
 	}
 }
 
+/**
+ * @param range A range, or anything else carrying metadata fields (the comment draft passes the fields its comment
+ *              will be written with).
+ * @param time_text Shown in place of the formatted `time` field (the draft shows "now").
+ */
 export function createMetadataInfoElement(
-	range: CriticMarkupRange,
+	range: { fields: MetadataFields },
 	cls?: string | string[],
 	type: "none" | "label" | "icon" = "icon",
+	time_text?: string,
 ): HTMLElement {
 	const metadata_container = createDiv({ cls: ["cmtr-metadata-info"].concat(cls ?? []) });
 	if (range.fields.author) {
@@ -57,7 +63,7 @@ export function createMetadataInfoElement(
 
 		const time = createSpan({
 			cls: "cmtr-metadata-info-time-data",
-			text: window.moment.unix(range.fields.time!).format("MMM DD YYYY, HH:mm"),
+			text: time_text ?? window.moment.unix(range.fields.time!).format("MMM DD YYYY, HH:mm"),
 		});
 		timeField.appendChild(time);
 		metadata_container.appendChild(timeField);

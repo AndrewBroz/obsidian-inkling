@@ -18,6 +18,12 @@ export interface ReplyBoxOptions {
 	 * PendingAnnotationMarker.afterAttach).
 	 */
 	focus?: boolean;
+	/**
+	 * Whether losing focus with text in the box commits it, as Enter does. Off by default: a reply
+	 * to an existing thread keeps its box open on blur. The comment draft turns it on, because a
+	 * draft left standing has nowhere to go and blocks every new comment.
+	 */
+	commitOnBlur?: boolean;
 	/** Returns true if the text was accepted and written; false for blank/rejected input. */
 	onCommit: (text: string) => boolean;
 	onDismiss: () => void;
@@ -31,11 +37,11 @@ export interface ReplyBoxOptions {
  *       Returning true from onEnter means "handled, don't insert a newline"; returning false lets
  *       CodeMirror insert one. That single hook is the whole keybinding — no custom keymap.
  *
- * EXPL: Blur NEVER writes. It dismisses only when the box is empty; a blur with text in it leaves
- *       the box standing, so clicking into the note to check a word cannot silently commit a
- *       half-written reply. This deliberately diverges from AnnotationNode's editor, which saves on
- *       blur — that one is editing text the document already holds, this one is composing text the
- *       document has never seen.
+ * EXPL: Blur dismisses an empty (or whitespace-only) box. With text in it, a reply box stays
+ *       standing, so clicking into the note to check a word cannot silently commit a half-written
+ *       reply; a box opened with `commitOnBlur` (the new-comment draft) commits instead, exactly as
+ *       Enter would; for that box, blur caused by the WINDOW losing focus (switching apps) neither
+ *       commits nor discards, since focus comes back to the box with the window.
  *
  * EXPL: `committing` latches the submit path. A successful commit dispatches synchronously, which
  *       rebuilds the gutter and tears this box down; teardown removes the editor from the DOM, and
@@ -89,15 +95,7 @@ export class ReplyBox extends Component {
 				onEnter: (editor, _mod, shift) => {
 					if (shift)
 						return false;
-					if (this.committing)
-						return true;
-
-					// EXPL: Latch BEFORE dispatching (never after): the commit dispatch is synchronous
-					//       and can tear this component down from inside this very call, re-entering
-					//       here via the teardown blur.
-					this.committing = true;
-					if (!this.options.onCommit(editor.get()))
-						this.committing = false;
+					this.commit(editor.get());
 					return true;
 				},
 
@@ -108,11 +106,29 @@ export class ReplyBox extends Component {
 				onBlur: (editor) => {
 					if (this.committing)
 						return;
-					if (!editor.get().trim())
+					// EXPL: The window losing focus (switching apps) blurs the box too, but the user has not
+					//       left the draft: focus comes back to the box with the window.
+					if (this.options.commitOnBlur && !this.container.ownerDocument.hasFocus())
+						return;
+					const text = editor.get();
+					if (!text.trim())
 						this.options.onDismiss();
+					else if (this.options.commitOnBlur)
+						this.commit(text);
 				},
 			}),
 		);
+	}
+
+	private commit(text: string) {
+		if (this.committing)
+			return;
+		// EXPL: Latch BEFORE dispatching (never after): the commit dispatch is synchronous and can
+		//       tear this component down from inside this very call, re-entering here via the
+		//       teardown blur.
+		this.committing = true;
+		if (!this.options.onCommit(text))
+			this.committing = false;
 	}
 
 	onunload() {

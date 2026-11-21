@@ -1,4 +1,5 @@
 import { StateEffect, StateField } from "@codemirror/state";
+import { Decoration, EditorView } from "@codemirror/view";
 
 /** The document span a not-yet-written comment is anchored to. */
 export interface CommentDraft {
@@ -7,6 +8,10 @@ export interface CommentDraft {
 }
 
 export const setCommentDraft = StateEffect.define<CommentDraft>();
+
+// EXPL: The same classes the live-preview renderer gives a submitted anchor (markup-renderer.ts), so the theme's
+//       highlight colour applies while the user is still typing the comment.
+const draftAnchorDecoration = Decoration.mark({ class: "cmtr-inline cmtr-highlight" });
 export const clearCommentDraft = StateEffect.define<null>();
 
 /**
@@ -33,9 +38,9 @@ export const commentDraftField = StateField.define<CommentDraft | null>({
 		if (!draft || !tr.docChanged)
 			return draft;
 
-		// EXPL: Map, do not discard. Discarding on any docChanged would contradict the reply box's
-		//       "blur with text leaves the box open" rule — a user who types a draft, clicks into
-		//       the note to fix a word, and comes back would find their draft silently gone. The
+		// EXPL: Map, do not discard. The note can change while the draft is open without the box
+		//       losing focus (another pane on the same file, a sync, a plugin), and discarding on any
+		//       docChanged would silently throw the user's half-typed comment away. The
 		//       anchor only dies when the text it points AT is deleted, at which point the mapped
 		//       span collapses to empty and there is genuinely nothing left to comment on.
 		// EXPL: The opposite assoc biases give the anchor EXCLUSIVE boundaries: `from` associates
@@ -49,4 +54,9 @@ export const commentDraftField = StateField.define<CommentDraft | null>({
 		const to = tr.changes.mapPos(draft.to, -1);
 		return from < to ? { from, to } : null;
 	},
+
+	// EXPL: A decoration, not markup: nothing is written to the note until the comment is committed, and the
+	//       decoration goes with the draft (the committed range's own highlight takes over on commit).
+	provide: field =>
+		EditorView.decorations.from(field, draft => draft ? Decoration.set([draftAnchorDecoration.range(draft.from, draft.to)]) : Decoration.none),
 });

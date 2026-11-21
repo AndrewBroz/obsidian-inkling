@@ -104,7 +104,10 @@ function stubApp() {
  * GutterView/GutterElement/GutterMarker machinery — which is where the provisional card's one
  * genuinely dangerous behaviour lives (see the "survives an unrelated edit" test).
  */
-function setup(doc: string, { hideOnEmpty = false, foldState = false } = {}) {
+function setup(
+	doc: string,
+	{ hideOnEmpty = false, foldState = false, settings = {} as Record<string, unknown> } = {},
+) {
 	const app = stubApp();
 
 	const { extension } = annotation_gutter({
@@ -118,7 +121,7 @@ function setup(doc: string, { hideOnEmpty = false, foldState = false } = {}) {
 	});
 
 	const pluginSettingsField = providePluginSettingsExtension(
-		<any> { settings: { ...DEFAULT_SETTINGS, add_metadata: false } },
+		<any> { settings: { ...DEFAULT_SETTINGS, add_metadata: false, ...settings } },
 	);
 
 	const parent = document.createElement("div");
@@ -180,7 +183,10 @@ function openEditor(view: EditorView): MockEditor {
 }
 
 describe("provisional comment card", () => {
-	test("opening a draft renders a card quoting the selection, and writes nothing to the note", () => {
+	// EXPL: The draft card is built from a submitted card's DOM: one `.cmtr-anno-gutter-annotation` entry whose body
+	//       (`-annotation-view`) holds the reply box where a submitted card holds the comment text. No quote of the
+	//       selection: submitted cards have none, and the anchor is highlighted in the note instead.
+	test("opening a draft renders a card shaped like a submitted one, and writes nothing to the note", () => {
 		const { view } = setup("hello world");
 		expect(pendingCards(view)).toHaveLength(0);
 
@@ -188,9 +194,43 @@ describe("provisional comment card", () => {
 
 		const cards = pendingCards(view);
 		expect(cards).toHaveLength(1);
-		expect(cards[0].querySelector(".cmtr-anno-gutter-pending-quote")!.textContent).toBe("world");
-		expect(cards[0].querySelector(".cmtr-anno-gutter-reply")).not.toBeNull();
+		const entries = cards[0].querySelectorAll(".cmtr-anno-gutter-annotation");
+		expect(entries).toHaveLength(1);
+		const body = entries[0].querySelector(".cmtr-anno-gutter-annotation-view")!;
+		expect(body.querySelector(".cmtr-anno-gutter-reply")).not.toBeNull();
+		expect(cards[0].querySelector(".cmtr-anno-gutter-pending-quote")).toBeNull();
+		// add_metadata is off here, so the comment will be written without author or time, and a submitted card
+		// would show no header: neither does the draft.
+		expect(cards[0].querySelector(".cmtr-metadata-info")).toBeNull();
 		expect(view.state.doc.toString()).toBe("hello world");
+
+		view.destroy();
+	});
+
+	test("the draft card's header shows the current author and \"now\", above the body", () => {
+		const { view } = setup("hello world", {
+			settings: { add_metadata: true, add_author_metadata: true, add_timestamp_metadata: true, author: "Tester" },
+		});
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const entry = pendingCards(view)[0].querySelector(".cmtr-anno-gutter-annotation")!;
+		const header = entry.querySelector(".cmtr-metadata-info")!;
+		expect(header.querySelector(".cmtr-metadata-info-author-data")!.textContent).toBe("Tester");
+		expect(header.querySelector(".cmtr-metadata-info-time-data")!.textContent).toBe("now");
+		expect(header.nextElementSibling!.classList.contains("cmtr-anno-gutter-annotation-view")).toBe(true);
+
+		view.destroy();
+	});
+
+	test("the header leaves out what the comment will not carry", () => {
+		const { view } = setup("hello world", {
+			settings: { add_metadata: true, add_author_metadata: true, add_timestamp_metadata: false, author: "Tester" },
+		});
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const header = pendingCards(view)[0].querySelector(".cmtr-metadata-info")!;
+		expect(header.querySelector(".cmtr-metadata-info-author-data")!.textContent).toBe("Tester");
+		expect(header.querySelector(".cmtr-metadata-info-time-data")).toBeNull();
 
 		view.destroy();
 	});
@@ -367,12 +407,10 @@ describe("provisional comment card", () => {
 		view.destroy();
 	});
 
-	// EXPL: Both ways out of a draft that ISN'T a commit. The note must come out byte-identical from
-	//       either: that is the whole promise of draft-then-insert (the old flow wrote the markup up
+	// EXPL: The ways out of a draft that AREN'T a commit. The note must come out byte-identical from
+	//       each: that is the whole promise of draft-then-insert (the old flow wrote the markup up
 	//       front, so abandoning a comment left an empty range behind and needed a cleanup).
-	//       Escape discards whatever has been typed; blur only discards an EMPTY box (blurring with
-	//       text in it leaves the card standing, so clicking into the note to check a word cannot
-	//       silently throw the draft away — reply-box.ts).
+	//       Escape discards whatever has been typed; blur discards an empty or whitespace-only box.
 	test.each([
 		["Escape", (editor: MockEditor) => {
 			editor.set("never mind");
@@ -382,16 +420,66 @@ describe("provisional comment card", () => {
 			editor.set("");
 			editor.triggerBlur();
 		}],
+		["blurring a whitespace-only box", (editor: MockEditor) => {
+			editor.set("  \n ");
+			editor.triggerBlur();
+		}],
 	])("%s discards the draft: the card disappears and the note is untouched", (_name, abandon) => {
 		const DOC = "hello world";
 		const { view } = setup(DOC);
 		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
 
+		// EXPL: jsdom's document never has focus; the real window does while the user clicks elsewhere in it.
+		const has_focus = jest.spyOn(document, "hasFocus").mockReturnValue(true);
 		abandon(openEditor(view));
+		has_focus.mockRestore();
 
 		expect(view.state.field(commentDraftField)).toBeNull();
 		expect(pendingCards(view)).toHaveLength(0);
 		expect(view.state.doc.toString()).toBe(DOC);
+
+		view.destroy();
+	});
+
+	// EXPL: Clicking anywhere else submits, exactly as Enter does. A draft left open with text in it
+	//       had nowhere to go, and while it stood it blocked every new comment.
+	test("blurring a box with text in it commits the comment, exactly as Enter does", () => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const editor = openEditor(view);
+		editor.set("nice");
+		// EXPL: jsdom's document never has focus; the real window does while the user clicks elsewhere in it.
+		const has_focus = jest.spyOn(document, "hasFocus").mockReturnValue(true);
+		editor.triggerBlur();
+
+		expect(view.state.doc.toString()).toBe("hello {==world==}{>>nice<<}");
+		expect(view.state.field(commentDraftField)).toBeNull();
+		expect(pendingCards(view)).toHaveLength(0);
+
+		// The teardown blur Chrome fires as the box is removed must not write a second copy
+		editor.triggerBlur();
+		expect(view.state.doc.toString()).toBe("hello {==world==}{>>nice<<}");
+
+		has_focus.mockRestore();
+		view.destroy();
+	});
+
+	// EXPL: The window losing focus (switching apps) blurs the box too. That is not the
+	//       user leaving the draft: focus comes back to the box with the window.
+	test.each([["half-typed"], [""]])("blur caused by the window losing focus leaves the draft open (text: %j)", (text) => {
+		const { view } = setup("hello world");
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+
+		const editor = openEditor(view);
+		editor.set(text);
+		const has_focus = jest.spyOn(document, "hasFocus").mockReturnValue(false);
+		editor.triggerBlur();
+		has_focus.mockRestore();
+
+		expect(view.state.doc.toString()).toBe("hello world");
+		expect(view.state.field(commentDraftField)).toEqual({ from: 6, to: 11 });
+		expect(pendingCards(view)).toHaveLength(1);
 
 		view.destroy();
 	});
@@ -410,6 +498,49 @@ describe("provisional comment card", () => {
 		// The committed comment now renders as a normal card
 		expect(view.dom.querySelectorAll(".cmtr-anno-gutter-thread")).toHaveLength(1);
 
+		view.destroy();
+	});
+
+	// EXPL: Opening a draft sends "unfold" to the gutter. On a gutter that is already open that has to
+	//       be a no-op: re-running the unfold animation started the note's margins from where they
+	//       would be with the gutter FOLDED, so with readable line length on and a wide window the note
+	//       text jumped sideways and slid back, and the margins it froze were never released.
+	test("opening a draft on an already-open gutter does not re-run the unfold animation", () => {
+		const { view } = setup("hello world");
+		const gutter = view.plugin(annotationGutterView)!.gutters[0];
+		const fold = jest.spyOn(gutter, "foldGutter");
+		const save = jest.spyOn(view.state.field(editorInfoField).app.workspace, "requestSaveLayout");
+
+		view.dispatch({ selection: { anchor: 6, head: 11 } });
+		addCommentToView(view, undefined);
+
+		expect(pendingCards(view)).toHaveLength(1);
+		expect(fold).not.toHaveBeenCalled();
+		expect(save).not.toHaveBeenCalled();
+
+		fold.mockRestore();
+		save.mockRestore();
+		view.destroy();
+	});
+
+	// EXPL: ...and the unfold is saved with the layout. It used to be applied to the gutter without
+	//       being saved, so the note reopened with the gutter folded again (cards hidden) although it
+	//       was open when the user last saw it, and the next draft played the unfold slide again.
+	test("opening a draft on a folded gutter unfolds it once and saves the unfolded state", () => {
+		const { view } = setup("hello world", { foldState: true });
+		const gutter = view.plugin(annotationGutterView)!.gutters[0];
+		const fold = jest.spyOn(gutter, "foldGutter");
+		const save = jest.spyOn(view.state.field(editorInfoField).app.workspace, "requestSaveLayout");
+
+		view.dispatch({ selection: { anchor: 6, head: 11 } });
+		addCommentToView(view, undefined);
+
+		expect(fold).toHaveBeenCalledTimes(1);
+		expect(gutter.folded).toBe(false);
+		expect(save).toHaveBeenCalledTimes(1);
+
+		fold.mockRestore();
+		save.mockRestore();
 		view.destroy();
 	});
 

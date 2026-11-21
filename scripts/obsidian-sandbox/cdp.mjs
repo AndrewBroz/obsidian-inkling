@@ -6,6 +6,7 @@
 //   node cdp.mjs mode live|source|reading   switch the active note's view and wait for it to render
 //   node cdp.mjs logs [ms] ['<js>']     listen ms (default 3000) for console messages and uncaught errors; <js>, if
 //                                       given, is evaluated (and awaited) inside that window so its errors are caught
+//   node cdp.mjs size <width> <height>  resize the main window (outer size, px; capped at the screen) and print its inner size
 //
 // `app` (Obsidian's App) and `require` are globals in the window. Port: OBSIDIAN_SANDBOX_PORT (default 9333).
 const PORT = process.env.OBSIDIAN_SANDBOX_PORT ?? "9333";
@@ -102,8 +103,56 @@ if (cmd === "eval") {
 		}
 	}
 	if (!events.length) console.log("(no console output)");
+} else if (cmd === "size") {
+	const [width, height] = args.map(Number);
+	if (!(width > 0 && height > 0)) throw new Error("size: <width> <height>");
+	// EXPL: Window bounds belong to the browser, not the page, so the standard route is the browser endpoint:
+	//       Browser.getWindowForTarget, then Browser.setWindowBounds. Electron (Obsidian 1.15 / Electron 43) does
+	//       not implement those methods ("wasn't found"), so on that error fall back to Electron's own API for
+	//       THIS page's window, which is the sandbox window and nothing else.
+	const { webSocketDebuggerUrl } = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json();
+	const browser = new WebSocket(webSocketDebuggerUrl);
+	await new Promise((resolve, reject) => {
+		browser.onopen = resolve;
+		browser.onerror = reject;
+	});
+	let browser_next = 0;
+	const call = (method, params = {}) =>
+		new Promise(resolve => {
+			const id = ++browser_next;
+			browser.addEventListener("message", function listener(e) {
+				const msg = JSON.parse(e.data);
+				if (msg.id !== id) return;
+				browser.removeEventListener("message", listener);
+				resolve(msg);
+			});
+			browser.send(JSON.stringify({ id, method, params }));
+		});
+	const target = await call("Browser.getWindowForTarget", { targetId: page.id });
+	let via = "cdp";
+	if (target.error) {
+		browser.close();
+		if (!/wasn't found/.test(target.error.message)) throw new Error("Browser.getWindowForTarget: " + target.error.message);
+		via = "electron";
+		const res = await evaluate(`(() => {
+			const w = require("electron").remote.getCurrentWindow();
+			if (w.isFullScreen()) w.setFullScreen(false);
+			if (w.isMaximized()) w.unmaximize();
+			w.setSize(${width}, ${height});
+		})()`);
+		if (res?.error) throw new Error(res.error);
+	} else {
+		const { windowId } = target.result;
+		// EXPL: A maximised or fullscreen window ignores width/height; restore it to normal first.
+		await call("Browser.setWindowBounds", { windowId, bounds: { windowState: "normal" } });
+		const set = await call("Browser.setWindowBounds", { windowId, bounds: { width, height } });
+		browser.close();
+		if (set.error) throw new Error("Browser.setWindowBounds: " + set.error.message);
+	}
+	await sleep(500);
+	console.log(JSON.stringify({ via, inner: await evaluate("({ width: innerWidth, height: innerHeight })") }, null, 2));
 } else {
-	console.error("usage: node cdp.mjs eval '<js>' | shot out.png | open 'Note.md' | mode live|source|reading | logs [ms] ['<js>']");
+	console.error("usage: node cdp.mjs eval '<js>' | shot out.png | open 'Note.md' | mode live|source|reading | logs [ms] ['<js>'] | size <width> <height>");
 	process.exitCode = 1;
 }
 ws.close();

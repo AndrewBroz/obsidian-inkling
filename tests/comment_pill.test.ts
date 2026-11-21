@@ -4,7 +4,7 @@ import { EditorView, type Tooltip } from "@codemirror/view";
 import { editorEditorField } from "obsidian";
 
 import { pendingAnnotationMarkers } from "../src/editor/renderers/gutters/annotations-gutter/pending-marker";
-import { commentDraftField, setCommentDraft } from "../src/editor/uix/extensions/comment-draft";
+import { clearCommentDraft, commentDraftField, setCommentDraft } from "../src/editor/uix/extensions/comment-draft";
 import { commentPill, pill_eligible } from "../src/editor/uix/extensions/comment-pill";
 import { createRangeState } from "./helpers";
 
@@ -133,6 +133,27 @@ function tooltipFor(doc: string, anchor: number, head: number): Tooltip | null {
 	const state = stateWithSelection(doc, anchor, head, [commentPill]);
 	return state.field(commentPillField);
 }
+
+// EXPL: `pill_eligible` already said "no" while a draft was open, but the field only re-asked it on a doc or selection
+//       change. Opening a draft is neither (the pill and the "Add comment" command dispatch just the effect), so the
+//       pill stayed on screen over the selection for the whole draft.
+describe("commentPill while a comment draft is open", () => {
+	test("the pill hides when a draft opens on the same selection, and comes back when it is discarded", () => {
+		const state = stateWithSelection("hello world", 0, 5, [
+			commentDraftField,
+			pendingAnnotationMarkers,
+			editorEditorField,
+			commentPill,
+		]);
+		expect(state.field(commentPillField)).not.toBeNull();
+
+		const drafting = state.update({ effects: setCommentDraft.of({ from: 0, to: 5 }) }).state;
+		expect(drafting.field(commentPillField)).toBeNull();
+
+		const discarded = drafting.update({ effects: clearCommentDraft.of(null) }).state;
+		expect(discarded.field(commentPillField)).not.toBeNull();
+	});
+});
 
 describe("commentPill tooltip placement config", () => {
 	// EXPL: Root cause (confirmed via a Playwright repro against a real EditorView, see

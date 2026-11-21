@@ -106,7 +106,11 @@ function getCommentPillTooltip(state: EditorState): Tooltip | null {
 export const commentPill: Extension = StateField.define<Tooltip | null>({
 	create: getCommentPillTooltip,
 	update(tooltip, tr) {
-		if (!tr.docChanged && !tr.selection)
+		// EXPL: Opening or closing a draft changes eligibility without touching the doc or the selection: the pill and
+		//       the "Add comment" command dispatch only the draft effect. Without this check the pill stayed up over the
+		//       selection for the whole draft.
+		const draft_changed = tr.startState.field(commentDraftField, false) !== tr.state.field(commentDraftField, false);
+		if (!tr.docChanged && !tr.selection && !draft_changed)
 			return tooltip;
 
 		const next = getCommentPillTooltip(tr.state);

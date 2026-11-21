@@ -1,6 +1,9 @@
 // EXPL: Exclude annotation gutter width from the line width setting, if enabled
+// EXPL: The gutter's margin as well as its width (annotation-gutter.ts sets both variables together). Without the
+//       margin the text column came out 24px narrower than the readable line width whenever the gutter was showing,
+//       so the note rewrapped when a draft opened the gutter in a note with no comments yet.
 .markdown-source-view.mod-cm6.is-readable-line-width .cm-sizer {
-  max-width: calc(var(--file-line-width) + var(--cmtr-anno-gutter-width, 0));
+  max-width: calc(var(--file-line-width) + var(--cmtr-anno-gutter-width, 0px) + var(--cmtr-anno-gutter-margin, 0px));
 }
 
 .cm-gutters.cm-gutters.cm-gutters.cm-gutters:has(.is-minimal.cmtr-anno-gutter) {
@@ -190,7 +193,9 @@
   padding: 2px 0;
 }
 
-.cmtr-anno-gutter-annotation-editor.cm-editor {
+// EXPL: Descendant, not compound: EmbeddableMarkdownEditor puts `cls` on its markdown-source-view wrapper
+//       (`editorEl`), and the `.cm-editor` is inside it. The compound selector these rules shipped with never matched.
+.cmtr-anno-gutter-annotation-editor .cm-editor {
   min-height: auto;
 }
 
@@ -383,7 +388,9 @@
 //       mode — either way it separates). The fallback matters: a theme that leaves the token
 //       undefined would otherwise give the input `background-color: transparent`, i.e. an invisible
 //       field sitting on the card.
-.cmtr-anno-gutter-reply-editor.cm-editor {
+// EXPL: Descendant selector for the same reason as `.cmtr-anno-gutter-annotation-editor .cm-editor` above; the
+//       compound form never matched, so the reply box had no surface and read as loose text under the card.
+.cmtr-anno-gutter-reply-editor .cm-editor {
   min-height: auto;
   background-color: var(
     --background-modifier-form-field,
@@ -393,16 +400,16 @@
   padding: var(--size-2-1) var(--size-2-2);
 }
 
-// EXPL: The provisional card has no markup in the note behind it yet, so it quotes the text it is
-//       about — the user needs to see what they are commenting on. Same muted-quote language the
-//       Annotations View uses for anchored highlights (`.cmtr-view-range-anchor-quote`, view.scss).
-.cmtr-anno-gutter-pending-quote {
-  font-size: var(--font-smaller);
-  color: var(--text-muted);
-  padding: var(--size-2-2) var(--size-2-2) 0;
+// EXPL: The draft card puts its reply box in the entry's body, where a submitted comment's text sits
+//       (pending-marker.ts). The entry already pads its content, so the box takes no padding of its own
+//       there: its text lines up with the header above it, as a submitted comment's text does.
+// EXPL: For the same reason the box there has no input surface: the draft card reads as the comment it is about to
+//       become, with the placeholder and caret in the body where its text will sit.
+.cmtr-anno-gutter-annotation-view > .cmtr-anno-gutter-reply {
+  padding: 0;
 
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+  .cmtr-anno-gutter-reply-editor .cm-editor {
+    background-color: transparent;
+    padding: 0;
+  }
 }

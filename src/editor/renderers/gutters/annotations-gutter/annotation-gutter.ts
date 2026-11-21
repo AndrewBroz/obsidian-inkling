@@ -30,6 +30,15 @@ import { annotationGutterMarkers, AnnotationMarker } from "./marker";
 // EXPL: Margin between the gutter and the content
 const ANNOTATION_GUTTER_MARGIN = 24;
 
+/**
+ * The space the gutter takes from the note's readable line width (annotation-gutter.scss `.cm-sizer`): its width and
+ * the margin before it, or nothing while folded. Set as one so the two can never disagree.
+ */
+function setReservedWidth(view: EditorView, width: number, folded: boolean) {
+	view.dom.style.setProperty("--cmtr-anno-gutter-width", folded ? "0px" : width + "px");
+	view.dom.style.setProperty("--cmtr-anno-gutter-margin", folded ? "0px" : ANNOTATION_GUTTER_MARGIN + "px");
+}
+
 // EXPL: Inset (px) from the PANE's right edge used to park the fold button while the gutter is
 //       folded. Small enough that the button sits inside the scroller's right padding strip
 //       (Obsidian: `.cm-scroller { padding: var(--file-margins) }`, --file-margins-x ≥ 20px in
@@ -421,7 +430,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			this.dom.setCssStyles({ width: "0" });
 		else
 			this.dom.style.width = this.width + "px";
-		this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.folded ? "0px" : this.width + "px");
+		setReservedWidth(this.view, this.width, this.folded);
 		this.gutterDom.style.marginInlineStart = this.folded ? "0" : ANNOTATION_GUTTER_MARGIN + "px";
 
 		if (this.add_fold_button)
@@ -573,6 +582,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 	}
 
 	foldGutter() {
+		// EXPL: Measured before anything below restyles the gutter: reading it after the gutter's margin is
+		//       applied forces a layout in which that margin has already squeezed the content.
+		const content_width = this.view.contentDOM.clientWidth;
 		this.setFoldButtonState();
 
 		// EXPL: Set the height for every marker to fixed so that they won't resize while the gutter is changing width
@@ -583,13 +595,13 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				});
 			});
 		} else {
-			this.dom.addEventListener("transitionend", () => {
+			this.afterWidthTransition(() => {
 				this.elements.forEach(element => {
 					Array.from(element.dom.getElementsByClassName("cmtr-anno-gutter-annotation")).forEach(comment => {
 						comment.removeAttribute("style");
 					});
 				});
-			}, { once: true });
+			});
 		}
 		this.dom.style.width = this.folded ? "0" : this.width + "px";
 		this.gutterDom.style.marginInlineStart = this.folded ? "0" : ANNOTATION_GUTTER_MARGIN + "px";
@@ -600,20 +612,25 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				getComputedStyle(this.view.scrollDOM).getPropertyValue("--file-line-width").trim(),
 			);
 			const marginWithoutGutter = Math.max(0, this.view.scrollDOM.innerWidth - readableLineWidth);
-			const marginWithGutter = Math.max(0, marginWithoutGutter - this.width);
+			const marginWithGutter = Math.max(0, marginWithoutGutter - this.width - ANNOTATION_GUTTER_MARGIN);
 			const newMargin = (this.folded ? marginWithoutGutter : marginWithGutter) / 2;
 			const oldMargin = (this.folded ? marginWithGutter : marginWithoutGutter) / 2;
 
 			// EXPL: Freeze the contentDOM to prevent content shifting while the gutter is being folded
-			this.view.contentDOM.style.width = this.view.contentDOM.clientWidth +
-				(this.folded ? ANNOTATION_GUTTER_MARGIN : 0) + "px !important";
+			// EXPL: Through setProperty: assigning `"…px !important"` to `style.width` is an invalid value, which the
+			//       browser drops, so the freeze never applied and the text rewrapped mid-animation. No margin
+			//       correction either way: the text column is the readable line width whether or not the gutter shows
+			//       (`--cmtr-anno-gutter-margin`, annotation-gutter.scss). `flex-shrink` too: the content sits in a flex
+			//       row with the gutters, which otherwise squeezes it below its width while the gutter grows.
+			this.view.contentDOM.style.setProperty("width", content_width + "px", "important");
+			this.view.contentDOM.style.setProperty("flex-shrink", "0", "important");
 			// EXPL: Set the old margin to transition from
 			this.view.scrollDOM.children[0].setAttribute(
 				"style",
 				`margin: 0 ${oldMargin}px; transition: margin 0.4s ease-in-out, max-width 0.4s ease-in-out;`,
 			);
 			if (!this.folded)
-				this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.width + "px");
+				setReservedWidth(this.view, this.width, false);
 
 			setTimeout(() => {
 				// EXPL: Transition to the new margin
@@ -622,14 +639,32 @@ class AnnotationSingleGutterView extends SingleGutterView {
 					`margin: 0 ${newMargin}px; transition: margin 0.4s ease-in-out, max-width 0.4s ease-in-out;`,
 				);
 				// EXPL: Whenever the gutter is finished folding, clean up all freezes
-				this.dom.addEventListener("transitionend", () => {
-					this.view.contentDOM.removeAttribute("style");
+				this.afterWidthTransition(() => {
+					this.view.contentDOM.style.removeProperty("width");
+					this.view.contentDOM.style.removeProperty("flex-shrink");
 					this.view.scrollDOM.children[0].removeAttribute("style");
 					if (this.folded)
-						this.view.dom.setCssProps({ "--cmtr-anno-gutter-width": "0px" });
-				}, { once: true });
+						setReservedWidth(this.view, this.width, true);
+				});
 			});
 		}
+	}
+
+	/**
+	 * Runs `callback` once the gutter's own width transition ends.
+	 *
+	 * EXPL: Not `{ once: true }` on any transitionend: the event bubbles, so a card's background fade or a gutter
+	 *       element's margin transition ending inside the gutter would run the callback early, releasing the frozen
+	 *       margins halfway through the fold animation.
+	 */
+	private afterWidthTransition(callback: () => void) {
+		const listener = (event: TransitionEvent) => {
+			if (event.target !== this.dom || event.propertyName !== "width")
+				return;
+			this.dom.removeEventListener("transitionend", listener);
+			callback();
+		};
+		this.dom.addEventListener("transitionend", listener);
 	}
 
 	update(update: ViewUpdate) {
@@ -655,13 +690,22 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				this.view.dom.style.setProperty("--cmtr-anno-gutter-width", this.width + "px");
 			}
 			if (fold_status !== undefined) {
-				if (fold_status === null) {
-					this.folded = !this.folded;
+				const folded = fold_status === null ? !this.folded : fold_status;
+				// EXPL: Only animate a real change. Every new comment draft sends "unfold"
+				//       (addCommentToView), and re-running foldGutter on an open gutter starts the
+				//       note's margins from their FOLDED value: with readable line length on and a
+				//       window wide enough to have side margins, the note text jumped sideways by half
+				//       the gutter width and slid back over 0.4 s, and the transitionend that releases
+				//       the frozen margins never came (the gutter's width did not change), leaving the
+				//       note pinned to stale margins until something else ended a transition.
+				// EXPL: Saved whatever asked for the change, the draft's unfold included. Saving only the
+				//       toggle left the layout recording "folded" under a gutter the user last saw open: the
+				//       note reopened with its cards hidden, and the first draft slid the text over again.
+				if (folded !== this.folded) {
+					this.folded = folded;
+					this.foldGutter();
 					this.view.state.field(editorInfoField).app.workspace.requestSaveLayout();
-				} else {
-					this.folded = fold_status;
 				}
-				this.foldGutter();
 			}
 			if (hide_empty !== undefined) {
 				this.hide_on_empty = hide_empty;

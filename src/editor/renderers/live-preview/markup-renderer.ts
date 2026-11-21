@@ -239,6 +239,30 @@ export function constructDecorations(
 	return decorations.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
 }
 
+/**
+ * A RangeSet.update filter that drops every decoration overlapping one of `ranges` (sorted, non-overlapping).
+ *
+ * EXPL: The filter walks `ranges` with a cursor, which assumes decorations arrive in document order. They do within
+ *       one layer, but RangeSet.update runs the SAME filter over each layer in turn (`nextLayer.update({ filter })`),
+ *       and a mark that spans a replace decoration lives in a later layer: a legacy range's highlight mark spans the
+ *       replace that hides its `{…}@@` metadata. The second layer starts again from the top of the document while the
+ *       cursor sits past the range, so its mark was never removed and a fresh one was added on top: every selection
+ *       move into or out of a legacy-metadata highlight nested one more `cmtr-highlight` span inside it. Rewind the
+ *       cursor whenever the positions go backwards.
+ */
+function dropOverlapping(ranges: { from: number; to: number }[]) {
+	let idx = 0, last_from = -1;
+	return (from: number, to: number) => {
+		if (from < last_from)
+			idx = 0;
+		last_from = from;
+		while (idx < ranges.length && ranges[idx].to <= from)
+			idx++;
+		const range = ranges[idx];
+		return !(range && from < range.to && range.from < to);
+	};
+}
+
 export const livepreviewRenderer = (settings: PluginSettings) =>
 	StateField.define<DecorationSet>({
 		create(state): DecorationSet {
@@ -304,20 +328,9 @@ export const livepreviewRenderer = (settings: PluginSettings) =>
 			// EXPL: CONTENT CHANGES
 			//          Only update decorations that are in the changed range (typing, deleting, etc.)
 			if (tr.docChanged || (!tr.docChanged && parsed_cm_ranges.inserted_ranges.length)) {
-				let range_filter_idx = 0;
-
 				// FIXME: This _might_ be broken
 				return oldSet.update({
-					filter: (from, to, _) => {
-						while (
-							range_filter_idx < parsed_cm_ranges.deleted_ranges.length &&
-							parsed_cm_ranges.deleted_ranges[range_filter_idx].to <= from
-						) {
-							range_filter_idx++;
-						}
-						const range = parsed_cm_ranges.deleted_ranges[range_filter_idx];
-						return !(range && from < range.to && range.from < to);
-					},
+					filter: dropOverlapping(parsed_cm_ranges.deleted_ranges),
 				}).map(tr.changes).update({
 					add: constructDecorations(
 						editor,
@@ -348,17 +361,8 @@ export const livepreviewRenderer = (settings: PluginSettings) =>
 					}[],
 				);
 
-				let range_filter_idx = 0;
 				return oldSet.map(tr.changes).update({
-					filter: (from, to, _) => {
-						while (
-							range_filter_idx < cm_ranges_in_selections.length && cm_ranges_in_selections[range_filter_idx].to <= from
-						) {
-							range_filter_idx++;
-						}
-						const range = cm_ranges_in_selections[range_filter_idx];
-						return !(range && from < range.to && range.from < to);
-					},
+					filter: dropOverlapping(cm_ranges_in_selections),
 					add: constructDecorations(
 						editor,
 						cm_ranges_in_selections,
