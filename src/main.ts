@@ -430,7 +430,7 @@ export default class CommentatorPlugin extends Plugin {
 					}
 
 					// EXPL: Migrate settings from 0.2.x to 0.2.3, suggestion and comment gutter settings were renamed
-					if (old_version.localeCompare("0.2.3", undefined, { numeric: true }) < 0) {
+					if (!old_version || old_version.localeCompare("0.2.3", undefined, { numeric: true }) < 0) {
 						if ((new_settings as unknown as any).suggestion_gutter_hide_empty) {
 							const settings_migrations = [
 								["suggestion_gutter", "diff_gutter"],
