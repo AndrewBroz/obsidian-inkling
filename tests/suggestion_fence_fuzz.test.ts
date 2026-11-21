@@ -66,6 +66,10 @@ const PARTS: [string, string[]][] = [
 	["x {~~old~>new~~} y", []],
 	["{==hi==}{>>c<<} z", []],
 	["{==hi==}{>>one<<}{>>two<<} z", []],
+	["a {++bc++}{>>note<<} z", []],
+	["{--old--}{>>why<<}{>>re<<} z", []],
+	["x {~~ab~>cd~~}{>>s<<} y", []],
+	["{>>alone<<}{>>reply<<} q", []],
 	["intro{++\n```js\nc\n```\n++}", ["```js\nc\n```"]],
 	["- a\n\t- b\n\t  ```js\n\t  t\n\t  ```", ["\t  ```js\n\t  t\n\t  ```"]],
 	["- a\n  - b\n    ```\n    n\n    ```", ["    ```\n    n\n    ```"]],
@@ -92,6 +96,7 @@ const PASTES = [
 const SEQUENCES = 1000;
 const EDITS_PER_SEQUENCE = 6;
 const NOTICE = "Inkling: this edit would break a code fence in Suggest mode.";
+const MARKUP_NOTICE = "Inkling: nothing to change here in Suggest mode (only markup, or text already deleted).";
 const DELIMITER = /\{(?:\+\+|--|~~|==|>>)|(?:\+\+|--|~~|==|<<)\}|~>/g;
 const HAS_DELIMITER = new RegExp(DELIMITER.source);
 
@@ -112,11 +117,14 @@ const copy = (r: CriticMarkupRange): Range => ({
 	middle: r.type === SuggestionType.SUBSTITUTION ? (r as SubstitutionRange).middle : -1,
 });
 
-/** Each comment and the range its thread annotates (or null), as positions. */
-function threads(ranges: CriticMarkupRange[]): [number, number, number | null][] {
-	return ranges.filter(r => r.type === SuggestionType.COMMENT).map(
-		r => [r.from, r.to, r.base_range === r ? null : r.base_range.from],
-	);
+/** A comment thread: the range it annotates (its first comment, for a thread of comments only) and its comments. */
+type Thread = { base: Range; comments: number[] };
+function threads(ranges: CriticMarkupRange[]): Thread[] {
+	const bases = new Set(ranges.filter(r => r.type === SuggestionType.COMMENT).map(r => r.base_range));
+	return [...bases].map(base => ({
+		base: copy(base),
+		comments: [...(base.type === SuggestionType.COMMENT ? [base] : []), ...base.replies].map(c => c.from),
+	}));
 }
 
 /** Positions of markup: delimiters and metadata. */
@@ -222,7 +230,13 @@ describe.each(CONFIGS)(
 			const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
 			const failures: Record<string, number> = { r: 0, a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, throws: 0 };
 			const examples: string[] = [];
-			let edits_run = 0, multi_cursor = 0, near_fence = 0, structure_changes = 0, refused = 0, plain_in_code = 0;
+			let thread_pending = 0,
+				edits_run = 0,
+				multi_cursor = 0,
+				near_fence = 0,
+				structure_changes = 0,
+				refused = 0,
+				plain_in_code = 0;
 
 			for (let seq = 0; seq < SEQUENCES; seq++) {
 				const parts = Array.from({ length: 3 + Math.floor(rng() * 5) }, () => pick(PARTS));
@@ -276,6 +290,21 @@ describe.each(CONFIGS)(
 						return Math.max(0, Math.min(len, p));
 					};
 
+					const thread_points = before_threads.flatMap(({ base, comments }) => [
+						base.start + 1,
+						base.closer - 3,
+						base.closer - 2,
+						...before_ranges.filter(r => comments.includes(r.from)).flatMap(r => [
+							r.from,
+							r.from + 1,
+							r.start,
+							r.start + 1,
+							r.closer - 4,
+							r.closer - 3,
+							r.closer - 2,
+							r.to,
+						]),
+					]).filter(at => at >= 0 && at <= len);
 					const cursor_count = rng() < 0.25 ? 2 : 1;
 					const kind = Math.floor(rng() * 8);
 					const changes: Change[] = [];
@@ -299,7 +328,10 @@ describe.each(CONFIGS)(
 								break;
 							case 5:
 							case 6: {
-								const a = Math.max(0, p - Math.floor(rng() * 6)), b = Math.min(len, p + Math.floor(rng() * 6));
+								let a = Math.max(0, p - Math.floor(rng() * 6)), b = Math.min(len, p + Math.floor(rng() * 6));
+								// In and around threads: their markup's edges and the comments' text.
+								if (thread_points.length && rng() < 0.3)
+									[a, b] = [pick(thread_points), pick(thread_points)].sort((x, y) => x - y);
 								if (a < b) changes.push({ from: a, to: b, insert: kind === 5 ? "Z" : "" });
 								break;
 							}
@@ -335,7 +367,7 @@ describe.each(CONFIGS)(
 						break;
 					}
 					const shown = notice.mock.calls.slice(notices_before).map(call => call[0] as string);
-					if (shown.length) refused++;
+					if (shown.some(text => text === NOTICE)) refused++;
 					// The decisions, made from the last cursor to the first; `decisions` in cursor order.
 					const calls: (fence_guard.GuardedEdit | null)[] = guard.mock.results.map(r => r.value);
 					const decisions = [...calls].reverse();
@@ -429,20 +461,21 @@ describe.each(CONFIGS)(
 							fail("b", "untouched block changed");
 					}
 
-					// (f) A comment the edit didn't change annotates the same range as before, in the same thread.
-					const overlaps = (from: number, to: number) => {
-						let hit = false;
-						tr.changes.iterChangedRanges((fromA, toA) => (hit ||= fromA < to && from < toA));
-						return hit;
-					};
+					// (f) Every thread keeps its comments, and its comments annotate the same range as before (edited inside,
+					// but no wider or narrower). PENDING the owner's decision (re-review 5 C3 and its wider family): an edit
+					// in the annotated range (its opener or text), or a deletion or replacement running up to an unanchored
+					// thread, may re-anchor the comments. Those are counted, not checked.
 					const after_threads = threads(view.state.field(rangeParser).ranges.ranges);
-					for (const [from, to, base] of before_threads) {
-						if (overlaps(from, to) || (base !== null && overlaps(base, from))) continue;
-						const at = tr.changes.mapPos(from, 1);
-						const now = after_threads.find(([f]) => f === at);
-						const want = base === null ? null : tr.changes.mapPos(base, 1);
-						if (!now || now[2] !== want) {
-							fail("f", `the comment at ${from} now annotates ${now?.[2]}, not ${want}`);
+					for (const { base, comments } of before_threads) {
+						const want = comments.map(c => tr.changes.mapPos(c, 1));
+						const now = after_threads.find(t => JSON.stringify(t.comments) === JSON.stringify(want));
+						let pending = base.type === SuggestionType.COMMENT && now?.base.type !== SuggestionType.COMMENT &&
+							disjoint.some(c => c.from < c.to);
+						tr.changes.iterChangedRanges((fromA, toA) => pending ||= fromA <= base.closer - 3 && base.from < toA);
+						if (pending) thread_pending++;
+						const from = tr.changes.mapPos(base.from, 1), to = tr.changes.mapPos(base.to, -1);
+						if (!now || (!pending && (now.base.from !== from || now.base.to !== to))) {
+							fail("f", `the thread at ${base.from} became ${JSON.stringify(now ?? null)}`);
 							break;
 						}
 					}
@@ -634,8 +667,28 @@ describe.each(CONFIGS)(
 								fail("f", `Accept joins the typed text to a neighbouring line: ${JSON.stringify(left + "Z" + right)}`);
 						}
 					}
-					if (shown.length !== (refused_changes.length ? 1 : 0) || shown.some(text => text !== NOTICE))
+					// A notice shows when a change is refused, and when deleting a selection changes nothing (nothing is dropped
+					// silently).
+					// (Hidden: markup, text already deleted, and comments, which a selection running out of a thread leaves.)
+					const only = (c: Change, skip: Set<number>) => {
+						for (let k = c.from; k < c.to; k++) if (!skip.has(k)) return false;
+						return true;
+					};
+					const markup_noticed = shown.includes(MARKUP_NOTICE);
+					const fence_notices = shown.filter(text => text !== MARKUP_NOTICE);
+					if (
+						fence_notices.length !== (refused_changes.length ? 1 : 0) || fence_notices.some(text => text !== NOTICE)
+					) {
 						fail("f", `notices ${JSON.stringify(shown)}, refused ${refused_changes.length}`);
+					}
+					if (markup_noticed && (kind !== 6 || !accepted.some(c => only(c, hidden_before))))
+						fail("f", "a 'nothing to change' notice for a change of visible text");
+					if (
+						!markup_noticed && kind === 6 && accepted.length === 1 && disjoint.length === 1 && after === before &&
+						only(accepted[0], markup_before)
+					) {
+						fail("f", "a selection of only markup did nothing, with no notice");
+					}
 
 					// Several cursors: the same as each cursor's change alone, from the last to the first.
 					if (disjoint.length > 1) {
@@ -698,7 +751,7 @@ describe.each(CONFIGS)(
 			console.log(
 				`fence fuzz (${name}): ${SEQUENCES} docs, ${edits_run} edits (${multi_cursor} multi-cursor, ${near_fence} at a fence ` +
 					`line, ${plain_in_code} plain in code, ${structure_changes} structure changes, ${refused} refused with a ` +
-					`notice); failures ${JSON.stringify(failures)}`,
+					`notice, ${thread_pending} thread edits pending a decision); failures ${JSON.stringify(failures)}`,
 			);
 			for (const example of examples) console.log("  example: " + example);
 			expect(failures).toEqual({ r: 0, a: 0, b: 0, c: 0, d: 0, e: 0, f: 0, throws: 0 });

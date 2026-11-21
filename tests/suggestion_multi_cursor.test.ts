@@ -269,13 +269,6 @@ describe("round 5", () => {
 		],
 		["a cursor at the end of the annotated text", "a {==hi==}{>>note<<} b", 7, 7, "a {==hi==}{>>note<<}{++Z++} b"],
 		["a cursor between two replies", "a {==hi==}{>>one<<}{>>two<<} b", 19, 19, "a {==hi==}{>>one<<}{>>two<<}{++Z++} b"],
-		[
-			"a selection of the base's closer and a comment",
-			"a {==hi==}{>>one<<}{>>two<<} b",
-			9,
-			18,
-			"a {==hi==}{>>one<<}{>>two<<}{++Z++} b",
-		],
 	])("Q1: text typed over %s goes after the whole thread", (_, doc, from, to, out) => {
 		const result = edit(doc, [{ from, to, insert: "Z" }]);
 		expect(result.out).toBe(out);
@@ -292,5 +285,114 @@ describe("round 5", () => {
 		["a selection of its opener", 2, 4, "a {++Z++}{~~x~>y~~} b"],
 	])("Q2: text typed at %s is an addition", (_, from, to, out) => {
 		expect(edit("a {~~x~>y~~} b", [{ from, to, insert: "Z" }]).out).toBe(out);
+	});
+});
+
+// EXPL: In a thread, the annotated range's closer and each comment's opener and closer are markup that edits stay out
+//       of; a comment's text stays editable. Re-review 5: C1 (a selection trimmed by those rules applied untrimmed,
+//       destroying the comment), C2 (a selection in a comment's text no longer edited it), and rr12's inputs.
+describe("round 6: comment threads", () => {
+	const NOTE = "a {==hi==}{>>note<<} b", ADDED = "a {++bc++}{>>note<<} f", REPLIES = "a {==hi==}{>>one<<}{>>two<<} b";
+	describe.each([["metadata off", OFF], ["default settings", { author: "me" }]] as const)("%s", (_, settings) => {
+		test.each([
+			["from a pending addition into its comment (C1)", ADDED, 6, 11, "a {++b++}{>>note<<} f", "a b f"],
+			[
+				"from a comment's closer across a pending addition (C1)",
+				"a {++bc++}{>>note<<}{++de++} f",
+				18,
+				28,
+				"a {++bc++}{>>note<<} f",
+				"a bc f",
+			],
+			["of a comment's text (C2)", NOTE, 13, 17, "a {==hi==}{>><<} b", "a {==hi==} b"],
+		])("deleting a selection %s", (_, doc, from, to, out, accepted) => {
+			const result = edit(doc, [{ from, to, insert: "" }], "Delete", settings);
+			expect(result.out).toBe(out);
+			expect(result.accept).toBe(accepted);
+			expect(notices).not.toHaveBeenCalled();
+		});
+
+		test.each([
+			["a comment's text (C2)", NOTE, 13, 17, "a {==hi==}{>>X<<} b"],
+			["a reply's text (C2)", REPLIES, 22, 25, "a {==hi==}{>>one<<}{>>X<<} b"],
+			["the base's closer, a comment's opener and its text", REPLIES, 9, 18, "a {==hi==}{>>X<<}{>>two<<} b"],
+		])("typing over %s edits the comment", (_, doc, from, to, out) => {
+			expect(edit(doc, [{ from, to, insert: "X" }], "a", settings).out).toBe(out);
+		});
+	});
+
+	test.each([
+		["at a cursor in a comment's text", NOTE, 15, 15, "a {==hi==}{>>noZte<<} b"],
+		["at a cursor in a standalone comment's text", "a {>>note<<} b", 7, 7, "a {>>noZte<<} b"],
+		["at the end of a pending addition's text", ADDED, 7, 7, "a {++bcZ++}{>>note<<} f"],
+		["in a pending addition's closer", ADDED, 8, 8, "a {++bc++}{>>note<<}{++Z++} f"],
+		["at the end of a deletion's text", "a {--old--}{>>why<<} b", 8, 8, "a {~~old~>Z~~}{>>why<<} b"],
+	])("typing %s (rr12)", (_, doc, from, to, out) => {
+		const result = edit(doc, [{ from, to, insert: "Z" }]);
+		expect(result.out).toBe(out);
+		expect(result.reject).toBe(resolve(view(doc), false));
+	});
+
+	test.each([
+		["at the start of a thread of comments only", "a {>>one<<}{>>two<<} b", 2, 2],
+		["over its first comment's opener", "a {>>one<<}{>>two<<} b", 2, 5],
+		["at the end of a highlight's text", NOTE, 7, 7],
+	])("text typed %s goes after the thread, which keeps its anchor", (_, doc, from, to) => {
+		const out = edit(doc, [{ from, to, insert: "Z" }]).out;
+		const end = doc.lastIndexOf("}") + 1;
+		expect(out).toBe(doc.slice(0, end) + "{++Z++}" + doc.slice(end));
+	});
+
+	test("typing at the end of another author's addition that a comment annotates goes after the thread", () => {
+		const doc = "a {++{\"author\":\"bob\",\"time\":5}@@bc++}{>>note<<} f";
+		const out = edit(doc, [{ from: 34, to: 34, insert: "Z" }], "a", { author: "me" }).out;
+		expect(out.startsWith("a {++{\"author\":\"bob\",\"time\":5}@@bc++}{>>note<<}{++")).toBe(true);
+		expect(out.endsWith("@@Z++} f")).toBe(true);
+	});
+
+	test("a pasted fence line next to an unanchored thread doesn't become what the thread annotates", () => {
+		const doc = "a {--gone--} b\n\n{>>alone<<}{>>reply<<} q";
+		const at = doc.indexOf("{>>") - 1;
+		const { out, reject } = edit(doc, [{ from: at, to: at, insert: "\n```\n" }]);
+		expect(out).not.toMatch(/\}\{>>alone/);
+		expect(reject).toBe(resolve(view(doc), false));
+	});
+
+	test("a selection of a standalone comment's text deletes it (rr12 C5)", () => {
+		expect(edit("a {>>note<<} b", [{ from: 5, to: 9, insert: "" }], "Delete").out).toBe("a {>><<} b");
+	});
+
+	test("typing inside a thread and elsewhere, with two cursors (rr12 T17)", () => {
+		expect(edit(NOTE, [{ from: 10, to: 10, insert: "Z" }, { from: 21, to: 21, insert: "Z" }]).out)
+			.toBe("a {==hi==}{>>note<<}{++Z++} {++Z++}b");
+	});
+
+	test("a code block pasted in a thread goes after it on lines of its own (rr12 T16)", () => {
+		expect(edit(NOTE, [{ from: 10, to: 10, insert: "\n```\nz\n```\n" }]).out)
+			.toBe("a {==hi==}{>>note<<}{++\n```\nz\n```\n++} b");
+		expect(notices).not.toHaveBeenCalled();
+	});
+
+	test.each([
+		["the annotated range's closer", NOTE, 7, 10],
+		["a comment's opener", NOTE, 10, 13],
+		["the closers and opener between two replies", REPLIES, 16, 22],
+		["a range's opener", "a {--gone--} b", 2, 5],
+		["a closer and the next range's opener", "{--a--}{++b++}", 4, 10],
+		["text already deleted", "a {--gone--} b", 5, 9],
+	])("deleting a selection of only %s does nothing, with a notice", (_, doc, from, to) => {
+		expect(edit(doc, [{ from, to, insert: "" }], "Delete").out).toBe(doc);
+		expect(notices).toHaveBeenCalledTimes(1);
+		expect(notices.mock.calls[0][0]).toBe(
+			"Inkling: nothing to change here in Suggest mode (only markup, or text already deleted).",
+		);
+	});
+
+	test.each([
+		["from inside a comment's text out of the thread", NOTE, 15, 22, "a {==hi==}{>>note<<}{-- b--}"],
+		["from before the thread into a comment's text", ADDED, 6, 15, "a {++b++}{>>note<<} f"],
+		["inside a thread, from a comment's text into the next comment", REPLIES, 14, 24, "a {==hi==}{>>o<<}{>>two<<} b"],
+	])("a selection %s keeps to the text it starts in", (_, doc, from, to, out) => {
+		expect(edit(doc, [{ from, to, insert: "" }], "Delete").out).toBe(out);
 	});
 });
