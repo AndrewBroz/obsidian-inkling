@@ -16,3 +16,6 @@ data.json
 
 *.zip
 .vscode/
+
+# Obsidian sandbox (scripts/obsidian-sandbox)
+.obsidian-sandbox/

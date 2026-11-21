@@ -12,6 +12,7 @@
 		"lint": "bun eslint src/",
 		"format": "bun dprint fmt",
 		"test": "jest --verbose",
+		"sandbox": "bash scripts/obsidian-sandbox/obsidian-sandbox.sh",
 		"release-patch": "bun run scripts/release/bump-version.ts --type patch",
 		"release-minor": "bun run scripts/release/bump-version.ts --type minor",
 		"release-major": "bun run scripts/release/bump-version.ts --type major",

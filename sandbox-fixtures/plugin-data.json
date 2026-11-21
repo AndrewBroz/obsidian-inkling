@@ -1,0 +1,10 @@
+{
+	"version": "0.2.3",
+	"author": "Tester",
+	"enable_metadata": true,
+	"enable_author_metadata": true,
+	"enable_timestamp_metadata": true,
+	"add_metadata": true,
+	"add_author_metadata": true,
+	"add_timestamp_metadata": true
+}
