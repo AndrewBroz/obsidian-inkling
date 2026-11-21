@@ -125,6 +125,18 @@ describe("cleanupChanges", () => {
 		expect(clean(input)).toEqual({ text: input, count: 0 });
 	});
 
+	test("debris outside math is still removed", () => {
+		expect(clean("$e^{--x}$ then {++stray")).toEqual({ text: "$e^{--x}$ then stray", count: 1 });
+	});
+
+	test.each([
+		["$e^{--x}$ and $a_{++}$"],
+		["$$\n\\int_{t=0}^{\\infty} e^{--t}\n$$"],
+		["$x {author=A time=1}$"],
+	])("math is left alone: %j", input => {
+		expect(clean(input)).toEqual({ text: input, count: 0 });
+	});
+
 	test("one pass: debris exposed by a removal waits for the next run", () => {
 		// EXPL: Removing the inner `{++` joins `{+` and `+` into a new opener; the next run removes it.
 		const input = "a {+{+++ b";

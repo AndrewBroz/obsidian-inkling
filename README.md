@@ -159,9 +159,9 @@ itself (for the CRI build, `config/critic.py`). Only then should anyone change t
 - **Broken markup is cleaned up automatically.** Sync tools can leave stray CriticMarkup brackets or orphaned Inkling
   metadata behind. When a note becomes active, or the open note changes from outside the editor, these are removed.
   Text is never removed, and an Undo right after a cleanup restores the markup and leaves that note alone until Obsidian
-  restarts. Only the note you are viewing is cleaned, and markup inside fenced or inline code is never touched. Turn it
-  off with **Clean up broken markup automatically** (on by default), or run **Clean up broken markup in this note**
-  yourself.
+  restarts. Only the note you are viewing is cleaned, and markup inside fenced or inline code or math is never touched.
+  Turn it off with **Clean up broken markup automatically** (on by default), or run **Clean up broken markup in this
+  note** yourself.
 
 ## Developing
 

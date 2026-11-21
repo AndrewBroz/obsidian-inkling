@@ -33,6 +33,9 @@ const ANY_CANDIDATE = /\{(?:\+\+|--|~~|==|>>|[A-Za-z_])|(?:\+\+|--|~~|==|<<)\}|\
 
 const CLOSERS = new Set(["++}", "--}", "~~}", "==}", "<<}"]);
 
+// EXPL: Math (`$$…$$` across lines, `$…$` on one line) is left alone like inline code: `$e^{--x}$` is not debris.
+const MATH = /\$\$[\s\S]*?\$\$|\$[^$\n]+\$/g;
+
 /**
  * Whether metadata left outside any range is Inkling's: every key is an Inkling key and its text (`raw`) spells out
  * `author` or `time`, as Inkling writes it. A lone `{style=…}` or `{color=red}` may be another plugin's attribute
@@ -138,6 +141,7 @@ export function findDebris(text: string, settings: PluginSettings): Debris[] {
 	const ranges = getRangesInText(text, { ...settings, enable_metadata: true }, false);
 	const regions = findCodeRegions(text);
 	const inline_code = inlineCodeSpans(text, regions);
+	const math = [...text.matchAll(MATH)].map(m => ({ from: m.index, to: m.index + m[0].length }));
 	const debris: Debris[] = [];
 
 	CANDIDATE.lastIndex = 0;
@@ -148,7 +152,7 @@ export function findDebris(text: string, settings: PluginSettings): Debris[] {
 		// EXPL: Template syntax (`{{-- note --}}`, `{{!-- x --}}`) is not ours.
 		if (text[span.from - 1] === "{" || text[span.to] === "}") continue;
 
-		if (intersects(ranges, span) || intersects(regions, span) || intersects(inline_code, span)) continue;
+		if ([ranges, regions, inline_code, math].some(areas => intersects(areas, span))) continue;
 
 		// EXPL: A legacy blob is only recognised at its `}@@`, after any opener quoted in its JSON was already
 		//       taken; the blob replaces those, so it is removed as one fragment.
