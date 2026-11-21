@@ -123,10 +123,20 @@ function mark_range(
 	//       re-emitting its delimiters inside itself ("{--x--}{++ab++}" with "{++a" deleted, "{++ab++}{--x--}" with
 	//       "b++}" deleted). An operation covering a whole range still sees the range beyond as its neighbour.
 	const starting = ranges.at_cursor(from, true), ending = ranges.at_cursor(to, false);
+	// A range the operation lies wholly before (or after) is not its left (right) neighbour: typing beside a range
+	// merged into it from the far side ("a {~~x~>y~~}" with Z typed before it gave {~~~>Z~~}).
+	const beside = (pos: number, end: "from" | "to") => ranges.ranges_in_interval(pos, pos).find(r => r[end] === pos);
+	const left_candidate = ranges.at_cursor(from, false), right_candidate = ranges.at_cursor(to, true);
 	const left_range = from < to && starting?.from === from && to < starting.to ?
 		starting :
-		ranges.at_cursor(from, false);
-	const right_range = from < to && ending?.to === to && ending.from < from ? ending : ranges.at_cursor(to, true);
+		left_candidate && left_candidate.from === from && to <= from ?
+		beside(from, "to") :
+		left_candidate;
+	const right_range = from < to && ending?.to === to && ending.from < from ?
+		ending :
+		right_candidate && right_candidate.to === to && from >= to ?
+		beside(to, "from") :
+		right_candidate;
 	const affixes: [string, string] = ["", ""];
 	let special_case = false;
 

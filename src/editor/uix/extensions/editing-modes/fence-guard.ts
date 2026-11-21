@@ -34,6 +34,8 @@ const continuation = (line: string) => PREFIX.exec(line)![0].replace(/[-+*]|\d{1
  */
 export function guardChange(doc: Text, regions: CodeRegion[], change: EditorEditChange, tracker: SuggestionTracker) {
 	const { from, to, inserted } = change;
+	// One that does nothing (its text already removed by an earlier cursor, or only markup selected).
+	if (from === to && !inserted) return { changes: [], cursor: from };
 	const plain: GuardedEdit = { changes: [{ from, to, insert: inserted }], cursor: from + inserted.length };
 	const fences = regions.flatMap(region =>
 		(region.close_from < region.to ? [region.from, region.close_from] : [region.from]).map(at => {

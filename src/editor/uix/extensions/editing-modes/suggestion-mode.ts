@@ -1,4 +1,4 @@
-import { ChangeSet, EditorSelection, EditorState, type Extension, Transaction } from "@codemirror/state";
+import { ChangeSet, EditorSelection, EditorState, type Extension, type Text, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { editorEditorField, Notice } from "obsidian";
 import type { VimEditor } from "obsidian-typings";
@@ -126,7 +126,19 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
 
 		/** The change as a tracked suggestion in `state` (whose ranges are `ranges`), and where its cursor ends up. */
-		function track(editor_change: EditorEditChange, state: EditorState, ranges: CriticMarkupRanges): GuardedEdit {
+		/**
+		 * Where a change goes, beside ranges and threads (an empty change: it does nothing). Decided before the fence guard,
+		 * so its adjusted forms start from the same place.
+		 */
+		function relocate(editor_change: EditorEditChange, doc: Text, ranges: CriticMarkupRanges): EditorEditChange {
+			const nothing = (at: number) => ({
+				...editor_change,
+				from: at,
+				to: at,
+				inserted: "",
+				deleted: "",
+				selection: false,
+			});
 			// EXPL: A selection only of a range's markup (its opener and metadata, or its closer) deletes nothing; text
 			//       typed over it goes beside the range where it was typed: before it (opener) or after it (closer).
 			// A selection end inside a substitution's "~>" separator is at its start (or, for the start, its end).
@@ -136,7 +148,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				if (editor_change.to === middle + 1) editor_change = { ...editor_change, to: middle };
 				if (editor_change.from === middle + 1) editor_change = { ...editor_change, from: middle + 2 };
 				if (editor_change.to < editor_change.from) editor_change = { ...editor_change, to: editor_change.from };
-				editor_change.deleted = state.doc.sliceString(editor_change.from, editor_change.to);
+				editor_change.deleted = doc.sliceString(editor_change.from, editor_change.to);
 			}
 			const { from: start, to: end } = editor_change;
 			const zone = editor_change.selection && start < end &&
@@ -144,10 +156,50 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					(r.from <= start && end <= r.range_start) || (r.closer_to - 3 <= start && end <= r.to)
 				);
 			if (zone) {
-				if (!editor_change.inserted) return { changes: [], cursor: start };
-				const at = end <= zone.range_start ? zone.from : zone.to;
+				if (!editor_change.inserted) return nothing(start);
+				// In a comment thread (the range a comment annotates, its comments and replies), text never goes between
+				// its parts: typed over a comment's markup, or after its base range, it goes after the whole thread.
+				const comment = zone.type === SuggestionType.COMMENT;
+				const at = end <= zone.range_start && !comment ? zone.from : zone.full_range_back;
 				editor_change = { ...editor_change, from: at, to: at, deleted: "", selection: false };
 			}
+			// Typed at a cursor between a thread's parts, in its base's closer, or at the end of a highlighted base's
+			// text (where it can't join the highlight), the text goes after the whole thread too; so does text typed
+			// over a selection of only the base's closer and the comments (whose text Suggest mode never deletes).
+			if (editor_change.from === editor_change.to ? !!editor_change.inserted : editor_change.selection) {
+				const { from: p, to: q } = editor_change;
+				for (const r of ranges.ranges_in_interval(p, q)) {
+					const base = r.base_range, parts = [base, ...base.replies];
+					if (!base.replies.length) continue;
+					const end = base.type === SuggestionType.HIGHLIGHT || p < q ? base.closer_to - 3 : base.closer_to - 2;
+					const between = p === q && parts.slice(0, -1).some(part => part.to === p);
+					if ((end <= p && q <= base.full_range_back && (p < q || p <= base.to)) || between) {
+						if (!editor_change.inserted) return nothing(p);
+						const at = base.full_range_back;
+						editor_change = { ...editor_change, from: at, to: at, deleted: "", selection: false };
+						break;
+					}
+					// A selection running into a thread from outside, or out of one, stops at its base's text: the
+					// base's closer and the comments are never deleted, and nothing is typed between them.
+					const text_end = base.closer_to - 3;
+					if (p < q && p < text_end && text_end < q && q <= base.full_range_back) {
+						editor_change = { ...editor_change, to: text_end, deleted: doc.sliceString(p, text_end) };
+						break;
+					}
+					if (p < q && text_end < p && p < base.full_range_back && base.full_range_back < q) {
+						editor_change = {
+							...editor_change,
+							from: base.full_range_back,
+							deleted: doc.sliceString(base.full_range_back, q),
+						};
+						break;
+					}
+				}
+			}
+			return editor_change;
+		}
+
+		function track(editor_change: EditorEditChange, state: EditorState, ranges: CriticMarkupRanges): GuardedEdit {
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
 				SuggestionType.ADDITION;
@@ -254,26 +306,36 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		//       mapped-back position. A refused change keeps its cursor and leaves the others alone.
 		let state = tr.startState, all = ChangeSet.empty(state.doc.length), unchanged = true, refused = false;
 		let { ranges, code_regions } = state.field(rangeParser);
-		const cursors: number[] = [];
+		const cursors: number[] = [], start_ranges = ranges;
 		for (let i = changed_ranges.length - 1; i >= 0; i--) {
-			const original = changed_ranges[i], anchor = original.anchor ?? original.from;
-			const keystroke = !original.selection && !original.inserted, mapped = all.mapPos(anchor, -1);
-			const length = state.doc.length,
-				start = keystroke ? mapped + original.from - anchor : all.mapPos(original.from, -1);
+			const original = changed_ranges[i], keystroke = !original.selection && !original.inserted;
+			let anchor = original.anchor ?? original.from;
+			const offset = original.from - anchor;
+			// A Backspace in an opener (or a Delete in a closer) acts just outside the range: taken from there, so its
+			// cursor maps well when a later cursor rewrote the range.
+			if (keystroke && !all.empty) {
+				for (const r of start_ranges.ranges_in_interval(anchor, anchor)) {
+					if (offset < 0 && r.from < anchor && anchor <= r.range_start) anchor = r.from;
+					else if (offset >= 0 && r.closer_to - 3 <= anchor && anchor < r.to) anchor = r.to;
+				}
+			}
+			const mapped = all.mapPos(anchor, -1);
+			const length = state.doc.length, start = keystroke ? mapped + offset : all.mapPos(original.from, -1);
 			const from = Math.min(Math.max(0, start), length);
 			const to = Math.min(
 				keystroke ? start + original.to - original.from : Math.max(from, all.mapPos(original.to, -1)),
 				length,
 			);
-			const change = { ...original, from, to, anchor: mapped, deleted: state.doc.sliceString(from, to) };
-			// One whose text an earlier edit already removed has nothing left to do.
-			const edit = from === to && !change.inserted ?
-				{ changes: [], cursor: from } :
-				guardChange(state.doc, code_regions, change, trackerFor(state, ranges));
+			const change = relocate(
+				{ ...original, from, to, anchor: mapped, deleted: state.doc.sliceString(from, to) },
+				state.doc,
+				ranges,
+			);
+			const edit = guardChange(state.doc, code_regions, change, trackerFor(state, ranges));
 			if (!edit) {
 				refused = true;
 				unchanged = false;
-				cursors[i] = all.mapPos(tr.startState.selection.ranges[i]?.head ?? change.from);
+				cursors[i] = all.mapPos(tr.startState.selection.ranges[i]?.head ?? from);
 				continue;
 			}
 			const [first] = edit.changes;

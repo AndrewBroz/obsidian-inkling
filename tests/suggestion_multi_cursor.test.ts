@@ -83,6 +83,16 @@ describe("several cursors in Suggest mode", () => {
 		expect(notices).not.toHaveBeenCalled();
 	});
 
+	test("Backspace in a substitution's opener while another cursor rewrites it, with metadata on", () => {
+		const settings = { author: "me" };
+		const doc = "x {~~old~>new~~} y";
+		const strip = (text: string) => text.replace(/"time":\d+/g, "");
+		const result = strip(press(view(doc, settings), "Backspace", [4, 6]));
+		expect(result).toBe(strip(inTurn(doc, "Backspace", [4, 6], settings)));
+		expect(result).toBe(`x{--{"author":"me",}@@ o--}{~~ld~>new~~} y`);
+		expect(notices).not.toHaveBeenCalled();
+	});
+
 	test("Delete at two cursors next to ranges, with metadata on", () => {
 		const settings = { author: "me" };
 		const doc = "{~~old~>new~~} {~~old~>new~~} {--del--} plain words ";
@@ -235,3 +245,52 @@ describe("text typed over a selection of a range's markup (round 4 ruling)", () 
 function resolve_plain(doc: string) {
 	return resolve(view(doc), false);
 }
+
+describe("round 5", () => {
+	test.each([
+		["a comment's {", "a {==hi==}{>>note<<} b", 10, 11, "a {==hi==}{>>note<<}{++Z++} b"],
+		["a comment's opener", "a {==hi==}{>>note<<} b", 10, 13, "a {==hi==}{>>note<<}{++Z++} b"],
+		["a comment's closer", "a {==hi==}{>>note<<} b", 18, 20, "a {==hi==}{>>note<<}{++Z++} b"],
+		["the closer of the range a comment annotates", "a {==hi==}{>>note<<} b", 7, 10, "a {==hi==}{>>note<<}{++Z++} b"],
+		["a reply's {", "a {==hi==}{>>one<<}{>>two<<} b", 19, 20, "a {==hi==}{>>one<<}{>>two<<}{++Z++} b"],
+		[
+			"the first comment's closer in a thread",
+			"a {==hi==}{>>one<<}{>>two<<} b",
+			16,
+			19,
+			"a {==hi==}{>>one<<}{>>two<<}{++Z++} b",
+		],
+		[
+			"a cursor between the annotated range and its comment",
+			"a {==hi==}{>>note<<} b",
+			10,
+			10,
+			"a {==hi==}{>>note<<}{++Z++} b",
+		],
+		["a cursor at the end of the annotated text", "a {==hi==}{>>note<<} b", 7, 7, "a {==hi==}{>>note<<}{++Z++} b"],
+		["a cursor between two replies", "a {==hi==}{>>one<<}{>>two<<} b", 19, 19, "a {==hi==}{>>one<<}{>>two<<}{++Z++} b"],
+		[
+			"a selection of the base's closer and a comment",
+			"a {==hi==}{>>one<<}{>>two<<} b",
+			9,
+			18,
+			"a {==hi==}{>>one<<}{>>two<<}{++Z++} b",
+		],
+	])("Q1: text typed over %s goes after the whole thread", (_, doc, from, to, out) => {
+		const result = edit(doc, [{ from, to, insert: "Z" }]);
+		expect(result.out).toBe(out);
+	});
+
+	test("Q1: a code block pasted between the annotated range and its comment goes after the thread", () => {
+		const { out } = edit("{==hi==}{>>note<<} z\n\ntail", [{ from: 8, to: 8, insert: "```\nz\n```\n" }]);
+		expect(out.startsWith("{==hi==}{>>note<<}")).toBe(true);
+		expect(notices).not.toHaveBeenCalled();
+	});
+
+	test.each([
+		["a cursor before a substitution", 2, 2, "a {++Z++}{~~x~>y~~} b"],
+		["a selection of its opener", 2, 4, "a {++Z++}{~~x~>y~~} b"],
+	])("Q2: text typed at %s is an addition", (_, from, to, out) => {
+		expect(edit("a {~~x~>y~~} b", [{ from, to, insert: "Z" }]).out).toBe(out);
+	});
+});

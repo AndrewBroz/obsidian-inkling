@@ -65,6 +65,7 @@ const PARTS: [string, string[]][] = [
 	["a {++abcdef++} b", []],
 	["x {~~old~>new~~} y", []],
 	["{==hi==}{>>c<<} z", []],
+	["{==hi==}{>>one<<}{>>two<<} z", []],
 	["intro{++\n```js\nc\n```\n++}", ["```js\nc\n```"]],
 	["- a\n\t- b\n\t  ```js\n\t  t\n\t  ```", ["\t  ```js\n\t  t\n\t  ```"]],
 	["- a\n  - b\n    ```\n    n\n    ```", ["    ```\n    n\n    ```"]],
@@ -110,6 +111,13 @@ const copy = (r: CriticMarkupRange): Range => ({
 	closer: r.closer_to,
 	middle: r.type === SuggestionType.SUBSTITUTION ? (r as SubstitutionRange).middle : -1,
 });
+
+/** Each comment and the range its thread annotates (or null), as positions. */
+function threads(ranges: CriticMarkupRange[]): [number, number, number | null][] {
+	return ranges.filter(r => r.type === SuggestionType.COMMENT).map(
+		r => [r.from, r.to, r.base_range === r ? null : r.base_range.from],
+	);
+}
 
 /** Positions of markup: delimiters and metadata. */
 function markup(ranges: Range[]): Set<number> {
@@ -245,6 +253,7 @@ describe.each(CONFIGS)(
 					const before = view.state.doc.toString();
 					const before_regions = view.state.field(rangeParser).code_regions;
 					const before_ranges = view.state.field(rangeParser).ranges.ranges.map(copy);
+					const before_threads = threads(view.state.field(rangeParser).ranges.ranges);
 					const len = before.length;
 
 					// Positions on and around fence lines (line start, after the prefix, line end, the lines around), and
@@ -420,6 +429,24 @@ describe.each(CONFIGS)(
 							fail("b", "untouched block changed");
 					}
 
+					// (f) A comment the edit didn't change annotates the same range as before, in the same thread.
+					const overlaps = (from: number, to: number) => {
+						let hit = false;
+						tr.changes.iterChangedRanges((fromA, toA) => (hit ||= fromA < to && from < toA));
+						return hit;
+					};
+					const after_threads = threads(view.state.field(rangeParser).ranges.ranges);
+					for (const [from, to, base] of before_threads) {
+						if (overlaps(from, to) || (base !== null && overlaps(base, from))) continue;
+						const at = tr.changes.mapPos(from, 1);
+						const now = after_threads.find(([f]) => f === at);
+						const want = base === null ? null : tr.changes.mapPos(base, 1);
+						if (!now || now[2] !== want) {
+							fail("f", `the comment at ${from} now annotates ${now?.[2]}, not ${want}`);
+							break;
+						}
+					}
+
 					// (c)
 					const touched: [number, number][] = disjoint.map(c => [c.from, c.to]);
 					tr.changes.iterChangedRanges((fromA, toA) => touched.push([fromA, toA]));
@@ -475,6 +502,9 @@ describe.each(CONFIGS)(
 					const dropped = (cluster: Change[]) => {
 						// Window ends outside every range and every changed span, so both windows hold the same text.
 						let lo = Math.max(0, cluster[0].from - W), hi = Math.min(len, cluster.at(-1)!.to + W);
+						// (One cluster owns every change: a block widened beyond the window moves its text further.)
+						if (clusters.length === 1)
+							tr.changes.iterChangedRanges((fromA, toA) => (lo = Math.min(lo, fromA), hi = Math.max(hi, toA)));
 						for (let moved = true; moved;) {
 							moved = false;
 							const spans: [number, number][] = before_ranges.map(r => [r.from, r.to]);
@@ -614,7 +644,16 @@ describe.each(CONFIGS)(
 						const alone = suggestView(before);
 						let made = ChangeSet.empty(len);
 						for (const c of [...disjoint].reverse()) {
-							const cursor = made.mapPos(kind === 2 ? c.to : c.from, -1), end = alone.state.doc.length;
+							// (A Backspace in an opener, or a Delete in a closer, acts just outside the range: its place once a
+							// later cursor rewrote the range.)
+							let at = kind === 2 ? c.to : c.from;
+							if (!made.empty) {
+								for (const r of before_ranges) {
+									if (kind === 2 && r.from < at && at <= r.start) at = r.from;
+									else if (kind === 3 && r.closer - 3 <= at && at < r.to) at = r.to;
+								}
+							}
+							const cursor = made.mapPos(at, -1), end = alone.state.doc.length;
 							const start = kind === 2 ? cursor - 1 : kind === 3 ? cursor : made.mapPos(c.from, -1);
 							const from = Math.min(Math.max(0, start), end);
 							const to = Math.min(kind === 2 || kind === 3 ? start + 1 : Math.max(from, made.mapPos(c.to, -1)), end);
