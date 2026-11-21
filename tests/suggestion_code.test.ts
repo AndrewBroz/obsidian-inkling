@@ -5,7 +5,7 @@ import * as obsidian from "obsidian";
 import { editorEditorField } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
-import { rangeParser } from "../src/editor/base";
+import { rangeParser, SuggestionType } from "../src/editor/base";
 import { suggestionMode } from "../src/editor/uix/extensions";
 import { editorKeypressCatcher } from "../src/editor/uix/extensions/keypress-catcher";
 import { createRangeState } from "./helpers";
@@ -106,18 +106,49 @@ describe("changes inserting or deleting a fence line are untracked, and later su
 		expect(ranges(v)).toEqual(["{==note==}", "{>>c<<}"]);
 	});
 
-	// FIXME: Needs the owner's decision. Typed one character at a time, the block's lines go into an addition, so its
-	//        closer lands on the closing fence line (`{++```\nlet a;\n```++}`), which then opens a block running to the
-	//        end of the note. No untracked rule fixes that without moving the closer off the fence line.
-	test.failing("typing a block", () => {
-		const v = view(NOTE);
+	test.each(
+		[
+			["metadata off", { add_metadata: false }],
+			["default settings", { author: "me" }],
+		] as const,
+	)("typing a block key by key, with prose before it (%s)", (_, settings) => {
+		const v = new EditorView({
+			state: createRangeState(NOTE, settings, [
+				editorEditorField,
+				editorKeypressCatcher,
+				suggestionMode({ ...DEFAULT_SETTINGS, ...settings }),
+			]),
+		});
 		v.dispatch({ selection: { anchor: 6 } });
-		for (const ch of "```\nlet a;\n```") {
+		for (const ch of "intro\n```js\ncode\n```") {
 			v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: ch === "\n" ? "Enter" : ch, bubbles: true }));
 			v.dispatch(v.state.replaceSelection(ch), { userEvent: "input.type" });
 		}
+		const text = v.state.doc.toString();
+		expect(text.replace(/\{"[^}]*\}@@/, "")).toBe("intro\n{++intro++}\n```js\ncode\n```\nlater {==note==}{>>c<<}");
 		expect(ranges(v).slice(-2)).toEqual(["{==note==}", "{>>c<<}"]);
-		expect(v.state.field(rangeParser).code_regions).toHaveLength(1);
+		expect(v.state.field(rangeParser).code_regions.map(r => text.slice(r.from, r.to))).toEqual(["```js\ncode\n```"]);
+		const resolve = (accept: boolean) => {
+			let out = text;
+			for (const r of [...v.state.field(rangeParser).ranges.ranges].reverse()) {
+				if (r.type === SuggestionType.ADDITION)
+					out = out.slice(0, r.from) + (accept ? r.accept() : r.reject()) + out.slice(r.to);
+			}
+			return out;
+		};
+		expect(resolve(true)).toBe("intro\nintro\n```js\ncode\n```\nlater {==note==}{>>c<<}");
+		expect(resolve(false)).toBe("intro\n\n```js\ncode\n```\nlater {==note==}{>>c<<}");
+	});
+
+	test("typing a fence on an empty line leaves no empty addition", () => {
+		const v = view("a\n\nb");
+		v.dispatch({ selection: { anchor: 2 } });
+		for (const ch of "```") {
+			v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true }));
+			v.dispatch(v.state.replaceSelection(ch), { userEvent: "input.type" });
+		}
+		expect(v.state.doc.toString()).toBe("a\n```\nb");
+		expect(v.state.selection.main.head).toBe(5);
 	});
 
 	test("deleting a block with prose", () => {

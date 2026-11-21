@@ -19,6 +19,7 @@ import {
 	mark_ranges,
 	MarkAction,
 	type MarkType,
+	range_metadata_compatible,
 	rangeParser,
 	SubstitutionRange,
 	SuggestionType,
@@ -111,6 +112,7 @@ function minimal(old: string, edit: { from: number; insert: string }) {
 }
 
 const FENCE_LINE = new RegExp(FENCE.source, "m");
+const MARKUP = /\{(?:\+\+|--|~~|==|>>)(?:\{[^{}]*\}@@)?|(?:\+\+|--|~~|==|<<)\}(?:\{[^{}]*\})?|~>/g;
 
 // TODO: Functionality: Double click mouse should also floodfill (problem: no specific userevent attached)
 function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction {
@@ -198,6 +200,23 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			let editor_change = { ...original, from, to, anchor, deleted: doc.sliceString(from, to) };
 			if (in_code(original)) {
 				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length);
+				continue;
+			}
+			// EXPL: Typing in one's own addition that would make its closer's line fence-shaped (markup ignored) ends the
+			//       addition before that line; the line's text goes in untracked. A block typed key by key stays a block.
+			const line = doc.lineAt(from),
+				r = from === to &&
+					ranges.ranges_in_interval(from, from).find(r =>
+						r.type === SuggestionType.ADDITION && r.range_start <= from && from <= r.closer_to - 3 &&
+						r.closer_to <= line.to && range_metadata_compatible(r, metadata).compatible
+					);
+			const plain = doc.sliceString(line.from, from) + original.inserted + doc.sliceString(from, line.to);
+			if (r && FENCE.test(plain.replace(MARKUP, ""))) {
+				const keep = r.range_start < line.from - 1, start = keep ? line.from - 1 : r.from;
+				const rest = doc.sliceString(from, r.closer_to - 3);
+				const insert = (keep ? doc.sliceString(r.closer_to - 3, r.to) : "") + (r.range_start < line.from ? "\n" : "") +
+					doc.sliceString(Math.max(line.from, r.range_start), from) + original.inserted + rest;
+				apply(i, [{ from: start, to: r.to, insert }], start + insert.length - rest.length);
 				continue;
 			}
 			// EXPL: A selection end inside a substitution's "~>" is at its start (or, for the selection's start, its end):
