@@ -165,16 +165,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					settings.suggestion_mode_operations.bracket_movement,
 				);
 
-				// EXPL: Only ranges the deletion overlaps, once its ends are out of a neighbour's delimiters
-				//       (mark_ranges snaps them the same way): a range that merely touches it, or whose closer or
-				//       opener it only clips, is beside it.
-				const { from, to } = editor_change;
-				for (const range of ranges.ranges_in_interval(from, to)) {
-					if (range.closer_to - 3 < from && from < range.to && range.to < to) editor_change.from = range.to;
-					if (from < range.from && range.from < to && to < range.range_start) editor_change.to = range.from;
-				}
-				const ranges_in_range = ranges.ranges_in_interval(editor_change.from, editor_change.to)
-					.filter(range => range.from < editor_change.to && editor_change.from < range.to);
+				const ranges_in_range = ranges.ranges_in_interval(editor_change.from, editor_change.to);
 				// EXPL: Pending added text (an addition, or a substitution's new part), whoever wrote it, is
 				//       removed outright; base text inside a deletion or a highlight never is.
 				if (ranges_in_range.length === 1) {
