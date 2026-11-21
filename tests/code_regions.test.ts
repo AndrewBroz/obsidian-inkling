@@ -3,7 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { DEFAULT_SETTINGS } from "../src/constants";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
 
-import { findCodeRegions, inCodeRegion, maskCode, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
+import { findCodeRegions, maskCode, regionsPreserved } from "../src/editor/base/edit-util/code-regions";
 
 const bounds = (t: string) => findCodeRegions(t).map(r => [r.from, r.to]);
 
@@ -95,18 +95,6 @@ describe("findCodeRegions (plain CommonMark)", () => {
 	});
 });
 
-describe("inCodeRegion", () => {
-	const regions = [{ from: 2, to: 11, open_to: 5, close_from: 8 }, { from: 20, to: 30, open_to: 23, close_from: 27 }];
-	test("boundaries", () => {
-		expect(inCodeRegion(regions, 2)).toBe(regions[0]);
-		expect(inCodeRegion(regions, 10)).toBe(regions[0]);
-		expect(inCodeRegion(regions, 11)).toBeUndefined();
-		expect(inCodeRegion(regions, 1)).toBeUndefined();
-		expect(inCodeRegion(regions, 25)).toBe(regions[1]);
-		expect(inCodeRegion([], 0)).toBeUndefined();
-	});
-});
-
 describe("maskCode", () => {
 	test("blanks every character in a region but line breaks", () => {
 		const t = "a {++x++}\n```\n{--y--}\n```\nb";
@@ -165,5 +153,31 @@ describe("regionsPreserved", () => {
 	test("text appended to an unclosed block keeps it", () => {
 		expect(preserved("```\nx", { from: 5, insert: "\nmore" })).toBe(true);
 		expect(preserved("a\n```", { from: 5, insert: "\n" })).toBe(true);
+	});
+});
+
+describe("findCodeRegions follows CommonMark containers (review C1)", () => {
+	const texts = (t: string) => findCodeRegions(t).map(r => t.slice(r.from, r.to));
+	test.each([
+		["a tab-nested list", "- a\n\t- b\n\t  ```js\n\t  {++x++}\n\t  ```\n", ["\t  ```js\n\t  {++x++}\n\t  ```"]],
+		["a 4-space nested list", "- a\n  - b\n    ```js\n    {++x++}\n    ```\n", ["    ```js\n    {++x++}\n    ```"]],
+		["an ordered list item", "10. a\n\n    ```\n    x\n    ```\n", ["    ```\n    x\n    ```"]],
+		["a fence on the list-marker line", "- ```js\n  {++x++}\n  ```\n", ["- ```js\n  {++x++}\n  ```"]],
+		["a block left open in a quote ends with it", "> ```\n> x\n\nafter {++y++}", ["> ```\n> x"]],
+		["a bare fence after a quoted block opens a new block", "> ```\n> x\n```\nafter {++y++}", [
+			"> ```\n> x",
+			"```\nafter {++y++}",
+		]],
+		["a block left open in a list item ends with it", "- ```\n  x\nafter", ["- ```\n  x"]],
+		["a list item's blank line stays in its block", "- ```\n  x\n\n  y\n  ```", ["- ```\n  x\n\n  y\n  ```"]],
+		["an indented fence in a list's paragraph is not indented code", "- a\n\n  ```\n  x\n  ```", ["  ```\n  x\n  ```"]],
+		["four spaces past a list item's content is indented code", "- a\n\n      ```\n      x", []],
+		["a thematic break is not a list item", "* * *\n```\nx\n```", ["```\nx\n```"]],
+	])("%s", (_, t, expected) => {
+		expect(texts(t)).toEqual(expected);
+	});
+
+	test("an unclosed block ending with its container", () => {
+		expect(findCodeRegions("> ```\n> x\n\nafter")).toEqual([{ from: 0, to: 9, open_to: 5, close_from: 9 }]);
 	});
 });

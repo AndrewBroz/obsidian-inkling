@@ -1,76 +1,99 @@
 import type { ChangeDesc } from "@codemirror/state";
 
-/** A fenced code block, exactly as CommonMark reads it. */
+/** A fenced code block: its opening line's start and end, and its closing line's start and end (both `to` if open). */
 export interface CodeRegion {
-	/** Start of the opening fence line. */
 	from: number;
-	/** End of the closing fence line (excluding its line break), or the end of the text if the block is unclosed. */
 	to: number;
-	/** End of the opening fence line. */
 	open_to: number;
-	/** Start of the closing fence line, or `to` if the block is unclosed. */
 	close_from: number;
 }
 
-// Up to 3 spaces of indent, inside any number of `>` quote markers (each with its optional space and indent).
-const FENCE = /^( {0,3}(?:> {0,4})*)(`{3,}|~{3,})(.*)$/;
+const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
 
-/** The fence of a fence-shaped line: its indent and quote markers, and the offsets of its fence characters. */
-export function fenceMarker(line: string): { prefix: string; from: number; to: number } | undefined {
-	const m = FENCE.exec(line);
-	return m ? { prefix: m[1], from: m[1].length, to: m[1].length + m[2].length } : undefined;
+/** The fence of a fence line: everything before its fence characters, and their offsets. */
+export function fenceMarker(line: string): { prefix: string; from: number; to: number } {
+	const m = /^(.*?)(`{3,}|~{3,})/.exec(line)!;
+	return { prefix: m[1], from: m[1].length, to: m[1].length + m[2].length };
 }
 
-/** Each line of `text` that may be a fence line (its first character after spaces and `>` is ` or ~), and its start. */
-function* candidates(text: string): Generator<[number, string]> {
-	for (let pos = 0; pos < text.length;) {
-		let end = text.indexOf("\n", pos);
-		if (end === -1) end = text.length;
-		const line = text.slice(pos, text.charCodeAt(end - 1) === 13 ? end - 1 : end);
-		if (/^[ >]*[`~]/.test(line)) yield [pos, line];
-		pos = end + 1;
-	}
-}
+/** `line` with its tabs expanded to the next multiple of 4 columns. */
+const expand = (line: string) =>
+	line.includes("\t") ?
+		line.replace(/[^\t]*\t/g, part => part.slice(0, -1) + " ".repeat(4 - (part.length - 1) % 4)) :
+		line;
 
 /**
- * The fenced code blocks of `text`, sorted: ``` or ~~~ fences (a backtick fence's info string holds no backtick),
- * closed by a fence of the same character, at least as long, with nothing but spaces after it; an unclosed block runs
- * to the end of the text. A line carrying anything else (CriticMarkup included) is not a fence line.
+ * The fenced code blocks of `text`, as CommonMark reads them, inside `>` quotes and list items (tracked per line; a
+ * block left open ends with its container or the text). A line with anything else on it is not a fence line.
  */
 export function findCodeRegions(text: string): CodeRegion[] {
 	const regions: CodeRegion[] = [];
-	let open: { from: number; open_to: number; fence: string } | null = null;
-	for (const [pos, line] of candidates(text)) {
-		const m = FENCE.exec(line);
-		if (!m) continue;
-		const [, , fence, rest] = m;
-		if (!open) {
-			if (fence[0] !== "`" || !rest.includes("`")) open = { from: pos, open_to: pos + line.length, fence };
-		} else if (fence[0] === open.fence[0] && fence.length >= open.fence.length && !rest.trim()) {
-			regions.push({ from: open.from, to: pos + line.length, open_to: open.open_to, close_from: pos });
+	let stack: number[] = []; // -1: a quote; otherwise a list item's content indent
+	let open: { from: number; open_to: number; fence: string; depth: number } | null = null;
+	let prev_end = 0, paragraph = false;
+	for (let pos = 0; pos <= text.length;) {
+		let end = text.indexOf("\n", pos);
+		if (end === -1) end = text.length;
+		const raw = text.slice(pos, text.charCodeAt(end - 1) === 13 ? end - 1 : end), line = expand(raw);
+		let p = 0, matched = 0;
+		for (const container of stack) {
+			const quote = container < 0 && / {0,3}> ?/y;
+			if (quote) {
+				quote.lastIndex = p;
+				if (!quote.test(line)) break;
+				p = quote.lastIndex;
+			} else if (line.slice(p).trim()) {
+				if (!line.startsWith(" ".repeat(container), p)) break;
+				p += container;
+			}
+			matched++;
+		}
+		const lazy = !open && paragraph && matched < stack.length && !BLOCK_START.test(line.slice(p)) &&
+			!THEMATIC.test(line.slice(p));
+		if (open && matched < open.depth) {
+			regions.push({ from: open.from, to: prev_end, open_to: open.open_to, close_from: prev_end });
 			open = null;
 		}
+		if (open) {
+			const m = FENCE.exec(line.slice(p));
+			if (m && m[2][0] === open.fence[0] && m[2].length >= open.fence.length && !m[3].trim()) {
+				regions.push({ from: open.from, to: pos + raw.length, open_to: open.open_to, close_from: pos });
+				open = null;
+			}
+		} else if (!lazy) {
+			stack = stack.slice(0, matched);
+			for (let m; (m = / {0,3}> ?/y.exec(line.slice(p)) ?? LIST_ITEM.exec(line.slice(p)));) {
+				if (m[0].includes(">")) stack.push(-1);
+				else if (THEMATIC.test(line.slice(p))) break;
+				else {
+					const marker = m[1].length + m[2].length, spaces = m[3].length;
+					const width = spaces > 4 || p + m[0].length === line.length ? 1 : spaces;
+					stack.push(marker + width);
+					p += marker + Math.min(width, spaces);
+					continue;
+				}
+				p += m[0].length;
+			}
+			const rest = line.slice(p), m = FENCE.exec(rest);
+			if (m && (m[2][0] !== "`" || !m[3].includes("`")))
+				open = { from: pos, open_to: pos + raw.length, fence: m[2], depth: stack.length };
+			paragraph = !open && !!rest.trim() && !THEMATIC.test(rest) && !/^ {0,3}#{1,6}( |$)/.test(rest) &&
+				(paragraph || !/^ {4}/.test(rest));
+		}
+		if (open) paragraph = false;
+		prev_end = pos + raw.length;
+		pos = end + 1;
 	}
 	if (open) regions.push({ from: open.from, to: text.length, open_to: open.open_to, close_from: text.length });
 	return regions;
 }
 
-/** Returns the region containing `pos` (from <= pos < to), if any. */
-export function inCodeRegion(regions: CodeRegion[], pos: number): CodeRegion | undefined {
-	let lo = 0;
-	let hi = regions.length - 1;
-	while (lo <= hi) {
-		const mid = (lo + hi) >> 1;
-		const r = regions[mid];
-		if (pos < r.from) hi = mid - 1;
-		else if (pos >= r.to) lo = mid + 1;
-		else return r;
-	}
-	return undefined;
-}
+const LIST_ITEM = /^( {0,3})([-+*]|\d{1,9}[.)])(?= |$)( *)/;
+const THEMATIC = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const BLOCK_START = /^\s*$|^ {0,3}(>|([-+*]|\d{1,9}[.)])( |$)|#{1,6}( |$)|`{3,}|~{3,})/;
 
 /** `text` with every character inside a code region (line breaks excepted) replaced by a space. */
-export function maskCode(text: string, regions: CodeRegion[]): string {
+export function maskCode(text: string, regions: { from: number; to: number }[]): string {
 	let out = "", pos = 0;
 	for (const r of regions) {
 		out += text.slice(pos, r.from) + text.slice(r.from, r.to).replace(/[^\n]/g, " ");
@@ -79,11 +102,7 @@ export function maskCode(text: string, regions: CodeRegion[]): string {
 	return out + text.slice(pos);
 }
 
-/**
- * Whether `next` (the regions after `changes`) has the same block structure as `old`: as many regions, each closed or
- * not as before, and each fence-line boundary where `changes` maps it. A boundary at an insertion point may land on
- * either side of the inserted text; one at the end of the text may follow it (text appended to an unclosed block).
- */
+/** Whether `next` (after `changes`) has the blocks of `old`, each boundary where `changes` maps it. */
 export function regionsPreserved(old: CodeRegion[], changes: ChangeDesc, next: CodeRegion[]): boolean {
 	const maps = (before: number, after: number) =>
 		(changes.mapPos(before, -1) <= after && after <= changes.mapPos(before, 1)) ||

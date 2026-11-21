@@ -1,6 +1,6 @@
 import type { PluginSettings } from "../../../types";
 import { parseAttrBlock, parseLegacyMetadata, SHORTHAND_KEYS } from "../edit-util/attributes";
-import { type CodeRegion, findCodeRegions, inCodeRegion } from "../edit-util/code-regions";
+import { type CodeRegion, findCodeRegions } from "../edit-util/code-regions";
 import { getRangesInText } from "../edit-util/range-parser";
 import type { MetadataFields } from "../ranges";
 
@@ -113,7 +113,7 @@ function inlineCodeSpans(text: string, regions: CodeRegion[]): { from: number; t
 		line = [];
 	};
 	for (let match; (match = RUN.exec(text));) {
-		if (inCodeRegion(regions, match.index)) continue;
+		if (regions.some(r => r.from <= match.index && match.index < r.to)) continue;
 		if (match.index > line_end) {
 			pair();
 			line_end = text.indexOf("\n", match.index);

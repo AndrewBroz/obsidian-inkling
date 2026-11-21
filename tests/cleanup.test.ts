@@ -295,3 +295,19 @@ describe("findDebris (property)", () => {
 		}
 	});
 });
+
+describe("cleanup leaves code in list and quote blocks alone (review C1)", () => {
+	test.each([
+		["a tab-nested list", "- list\n\t- nested\n\t  ```c\n\t  i++}\n\t  ```\n"],
+		["a 4-space nested list", "- list\n  - nested\n    ```c\n    i++}\n    ```\n"],
+		["a fence on the list-marker line", "- ```c\n  i++}\n  ```\n"],
+		["an ordered list item", "10. a\n\n    ```c\n    i++}\n    ```\n"],
+	])("%s", (_, text) => {
+		expect(findDebris(text, DEFAULT_SETTINGS)).toEqual([]);
+		expect(clean(text)).toEqual({ text, count: 0 });
+	});
+
+	test("a closer after a quoted block that ended with its quote is cleaned", () => {
+		expect(clean("> ```\n> x\n\nstray ++} here").text).toBe("> ```\n> x\n\nstray  here");
+	});
+});
