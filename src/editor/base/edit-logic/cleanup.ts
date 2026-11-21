@@ -34,7 +34,8 @@ const ANY_CANDIDATE = /\{(?:\+\+|--|~~|==|>>|[A-Za-z_])|(?:\+\+|--|~~|==|<<)\}|\
 const CLOSERS = new Set(["++}", "--}", "~~}", "==}", "<<}"]);
 
 // EXPL: Math (`$$…$$` across lines, `$…$` on one line) is left alone like inline code: `$e^{--x}$` is not debris.
-const MATH = /\$\$[\s\S]*?\$\$|\$[^$\n]+\$/g;
+//       As in Obsidian, `\$` is not a delimiter, and inline math neither starts nor ends next to a space.
+const MATH = /(?<!\\)\$\$[\s\S]*?(?<!\\)\$\$|(?<!\\)\$(?=[^\s$])[^$\n]*?[^\s\\$]\$/g;
 
 /**
  * Whether metadata left outside any range is Inkling's: every key is an Inkling key and its text (`raw`) spells out

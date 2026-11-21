@@ -125,6 +125,14 @@ describe("cleanupChanges", () => {
 		expect(clean(input)).toEqual({ text: input, count: 0 });
 	});
 
+	test.each([
+		["\\$5 {++and \\$10", "\\$5 and \\$10"],
+		["$5 {++and $10", "$5 and $10"],
+		["$e^{--x}$", "$e^{--x}$"],
+	])("only real math is skipped: %j", (input, expected) => {
+		expect(clean(input).text).toBe(expected);
+	});
+
 	test("debris outside math is still removed", () => {
 		expect(clean("$e^{--x}$ then {++stray")).toEqual({ text: "$e^{--x}$ then stray", count: 1 });
 	});
