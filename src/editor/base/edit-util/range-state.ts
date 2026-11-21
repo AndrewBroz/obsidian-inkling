@@ -79,6 +79,10 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		//       inserted comments at their new one, so position keys from the two documents could collide.
 		const dangling_comments = new Set<CommentRange>();
 		const deleted_ranges: Set<CriticMarkupRange> = new Set();
+		// EXPL: Bases that lost a reply to an edit. Their replies are cleared and rebuilt with the thread: when the lost
+		//       reply was the only one, or its broken text now separates the base from the rest, no rebuilt thread
+		//       has the base as its anchor, and the base kept the destroyed comment as a reply.
+		const orphaned_bases = new Set<CriticMarkupRange>();
 		const to_old = tr.changes.invertedDesc;
 		// EXPL: A trailing attribute block is text after a range's closer, so an edit can turn the text after a
 		//       range into a valid block without touching the range: deleting ` x` from `{++a++}{k=1 x}` grows it.
@@ -140,6 +144,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		function invalidate(range: CriticMarkupRange) {
 			value.ranges.tree.remove([range.from, range.to], range);
 			deleted_ranges.add(range);
+			if (range.base_range !== range) orphaned_bases.add(range.base_range);
 			for (const reply of range.base_range.thread)
 				dangling_comments.add(reply);
 			markDirty(tr.changes.mapPos(range.from, -1), tr.changes.mapPos(range.to, 1));
@@ -187,6 +192,8 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			if (deleted_range.type === SuggestionType.COMMENT)
 				dangling_comments.delete(deleted_range as CommentRange);
 		}
+		for (const base of orphaned_bases)
+			if (!deleted_ranges.has(base)) base.replies.length = 0;
 
 		let cumulative_offset = 0;
 

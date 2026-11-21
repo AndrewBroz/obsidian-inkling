@@ -174,5 +174,5 @@ export function unconvertibleContent(text: string): string | undefined {
  */
 export function author_at_warning(author: string | undefined): string | undefined {
 	if (!author || !/(^|[^\p{L}\p{N}])@/u.test(author)) return undefined;
-	return "An @ at the start of a word is read as a citation by Pandoc and ZotLit when written in attribute blocks.";
+	return "Pandoc and ZotLit read an @ at the start of a word as a citation.";
 }

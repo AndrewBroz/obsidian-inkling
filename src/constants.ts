@@ -92,7 +92,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	add_completed_metadata: false,
 	add_style_metadata: false,
 	add_color_metadata: false,
-	metadata_syntax: "legacy",
+	metadata_syntax_migrated: true,
 	remove_on_resolve: true,
 	remove_on_resolve_migrated: true,
 	cleanup_broken_markup: true,
@@ -183,6 +183,27 @@ export function enableRemoveOnResolveOnce(
 		settings.remove_on_resolve = true;
 		settings.remove_on_resolve_migrated = true;
 	}
+}
+
+// EXPL: Release B (0.14.0): every install writes attribute blocks; legacy metadata is deprecated (read, never written
+//       by choice), and the former `metadata_syntax` setting is gone. Existing installs are told once.
+export const ATTRIBUTES_SWITCH_NOTICE = "Inkling now saves comments and suggestions in a new format. Everyone you " +
+	"share notes with needs Inkling 0.13 or later. Your existing notes update as you edit them.";
+
+/**
+ * Drops the removed `metadata_syntax` setting from `settings` (a saved value has no effect) and marks the 0.14.0
+ * notice as shown.
+ * @returns Whether this is an existing install's first load since 0.14.0, so the caller shows the notice.
+ */
+export function switchToAttributesOnce(
+	settings: PluginSettings,
+	saved: Partial<PluginSettings> | null | undefined,
+): boolean {
+	delete (settings as unknown as Record<string, unknown>).metadata_syntax;
+	if (saved == null || "metadata_syntax_migrated" in saved)
+		return false;
+	settings.metadata_syntax_migrated = true;
+	return true;
 }
 
 // EXPL: EditMode.COMMENT (Phase 3B) added a markup_focus entry; settings saved before it

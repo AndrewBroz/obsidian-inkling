@@ -23,30 +23,45 @@ const SETTINGS: Partial<PluginSettings> = {
 	enable_metadata: true,
 };
 
-function view(doc: string): EditorView {
-	const settings = { ...DEFAULT_SETTINGS, ...SETTINGS };
-	return new EditorView({ state: createRangeState(doc, SETTINGS, [editorEditorField, suggestionMode(settings)]) });
+function view(doc: string, extra: Partial<PluginSettings> = {}): EditorView {
+	const settings = { ...DEFAULT_SETTINGS, ...SETTINGS, ...extra };
+	return new EditorView({ state: createRangeState(doc, settings, [editorEditorField, suggestionMode(settings)]) });
 }
 
-function backspace(doc: string, at: number): string {
-	const v = view(doc);
+function backspace(doc: string, at: number, extra: Partial<PluginSettings> = {}): string {
+	const v = view(doc, extra);
 	v.dispatch({ selection: { anchor: at } });
 	v.dispatch({ changes: { from: at - 1, to: at }, selection: { anchor: at - 1 }, userEvent: "delete.backward" });
 	return v.state.doc.toString();
 }
 
 describe("Backspace inside an existing range in Suggest mode", () => {
-	test("inside one's own deletion does nothing: the text is already suggested for deletion", () => {
-		const doc = `p {--{"author":"alice"}@@abc--} q`;
-		expect(backspace(doc, doc.indexOf("abc") + 2)).toBe(doc);
+	// EXPL: A keystroke that changes no text leaves the document alone. Rewriting the range converted a legacy
+	//       range's metadata to an attribute block; with times on, it refreshed its time.
+	test.each(
+		[
+			["legacy", `p {--{"author":"alice"}@@abc--} q`, {}],
+			["legacy, with times", `p {--{"author":"alice","time":1000}@@abc--} q`, { add_timestamp_metadata: true }],
+			["attribute-block", `p {--abc--}{author=alice} q`, {}],
+			["attribute-block, with times", `p {--abc--}{author=alice time=1000} q`, { add_timestamp_metadata: true }],
+		] as const,
+	)("inside one's own deletion (%s) does nothing: the text is already suggested for deletion", (_, doc, extra) => {
+		expect(backspace(doc, doc.indexOf("abc") + 2, extra)).toBe(doc);
 	});
 
-	test("inside another author's deletion keeps the text, re-attributed to the new author", () => {
-		expect(backspace("p {--abc--} q", 7)).toBe(`p {--a--}{--{"author":"alice"}@@b--}{--c--} q`);
+	test.each([
+		["no metadata", "p {--abc--} q", `p {--a--}{--b--}{author=alice}{--c--} q`],
+		[
+			"legacy metadata",
+			`p {--{"author":"bob"}@@abc--} q`,
+			`p {--{"author":"bob"}@@a--}{--b--}{author=alice}{--{"author":"bob"}@@c--} q`,
+		],
+	])("inside another author's deletion (%s) keeps the text, re-attributed to the new author", (_, doc, out) => {
+		expect(backspace(doc, doc.indexOf("abc") + 2)).toBe(out);
 	});
 
 	test("inside a highlight is a tracked deletion", () => {
-		expect(backspace("p {==abc==} q", 7)).toBe(`p {==a==}{--{"author":"alice"}@@b--}{==c==} q`);
+		expect(backspace("p {==abc==} q", 7)).toBe(`p {==a==}{--b--}{author=alice}{==c==} q`);
 	});
 
 	test.each([
@@ -90,25 +105,113 @@ test("a selection from own text into the next range's opener removes the own tex
 	expect(v.state.doc.toString()).toBe(`{++{"author":"alice"}@@a++}{--x--} q`);
 });
 
-// EXPL: Tracked against the same start state, each cursor rewrote the whole addition, duplicating its text.
-test("two cursors in one own addition with timestamps both type (review I2)", () => {
-	const settings = { ...DEFAULT_SETTINGS, ...SETTINGS, author: "me", add_timestamp_metadata: true };
-	const doc = `x {++{"author":"me","time":1000}@@abcdef++} y`;
-	const v = new EditorView({
-		state: createRangeState(doc, settings, [
-			editorEditorField,
-			EditorState.allowMultipleSelections.of(true),
-			suggestionMode(settings),
-		]),
+// EXPL: Tracked against the same start state, each cursor rewrote the whole addition, duplicating its text. Each
+//       cursor is now tracked in the document the later ones left, and the later cursors are mapped through each
+//       rewrite. That mapping diffed the rewritten range character by character, so when the rewrite also changed the
+//       range's metadata (its format, author or time) it aligned the range's text with metadata, and put a cursor's
+//       character in the wrong place (`abcdXefX` for `abXcdXef`); in a run of one character (`aaaa`) it put cursors
+//       in the wrong place. Docs mark each cursor with "|"; times are pinned to 2000.
+describe("two cursors in one range whose metadata is rewritten (review I2)", () => {
+	const ME = { ...DEFAULT_SETTINGS, ...SETTINGS, author: "me", add_timestamp_metadata: true };
+	beforeEach(() => jest.spyOn(Date, "now").mockReturnValue(2000_000));
+	afterEach(() => jest.restoreAllMocks());
+
+	/** `marked` (cursors at "|") after pressing `key` at every cursor at once, with its cursors marked. */
+	function press(marked: string, key: string, extra: Partial<PluginSettings> = {}) {
+		const settings = { ...ME, ...extra };
+		const cursors = [...marked.matchAll(/\|/g)].map((m, i) => m.index - i), doc = marked.replaceAll("|", "");
+		const v = new EditorView({
+			state: createRangeState(doc, settings, [
+				editorEditorField,
+				editorKeypressCatcher,
+				EditorState.allowMultipleSelections.of(true),
+				suggestionMode(settings),
+			]),
+		});
+		v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+		v.dispatch({ selection: EditorSelection.create(cursors.map(c => EditorSelection.cursor(c))) });
+		const changes = cursors.map(c =>
+			key === "Backspace" ?
+				{ from: c - 1, to: c } :
+				key === "Delete" ?
+				{ from: c, to: c + 1 } :
+				{ from: c, insert: key }
+		);
+		v.dispatch(v.state.update({
+			changes,
+			userEvent: key === "Backspace" ? "delete.backward" : key === "Delete" ? "delete.forward" : "input.type",
+		}));
+		let out = v.state.doc.toString();
+		for (const head of v.state.selection.ranges.map(r => r.head).reverse())
+			out = out.slice(0, head) + "|" + out.slice(head);
+		return out;
+	}
+
+	test.each(
+		[
+			// The report: a legacy addition, rewritten as an attribute block.
+			[`x {++{"author":"me","time":1000}@@ab|cd|ef++} y`, "X", {}, `x {++abX|cdX|ef++}{author=me time=2000} y`],
+			// An attribute block, its time refreshed, and an addition without metadata, which is split around one's own
+			// text.
+			[`x {++ab|cd|ef++}{author=me time=1000} y`, "X", {}, `x {++abX|cdX|ef++}{author=me time=2000} y`],
+			[
+				`x {++ab|cd|ef++} y`,
+				"X",
+				{ add_metadata: true, author: "me" },
+				`x {++ab++}{++X|++}{author=me time=2000}{++cd++}{++X|++}{author=me time=2000}{++ef++} y`,
+			],
+			// A run of one character: each cursor's character is where it typed.
+			[`x {++{"author":"me","time":1000}@@aa|aa|aa++} y`, "a", {}, `x {++aaa|aaa|aa++}{author=me time=2000} y`],
+			[
+				`x {++{"author":"me","time":1000}@@aa|aa|aa++} y`,
+				"Backspace",
+				{},
+				`x {++{"author":"me","time":1000}@@a|a|aa++} y`,
+			],
+			// A substitution's new text, typed into and Backspaced.
+			[
+				`x {~~{"author":"me","time":1000}@@old~>ab|cd|ef~~} y`,
+				"X",
+				{},
+				`x {~~old~>abX|cdX|ef~~}{author=me time=2000} y`,
+			],
+			[
+				`x {~~{"author":"me","time":1000}@@old~>ab|cd|ef~~} y`,
+				"Backspace",
+				{},
+				`x {~~old~>a|c|ef~~}{author=me time=1000} y`,
+			],
+			// Delete in one's own addition removes the text outright.
+			[
+				`x {++{"author":"me","time":1000}@@a|bc|def++} y`,
+				"Delete",
+				{},
+				`x {++{"author":"me","time":1000}@@a|c|ef++} y`,
+			],
+			// Backspace inside one's own deletion does nothing; beside it, a new deletion.
+			[
+				`x {--{"author":"me","time":1000}@@ab|cd|ef--} y`,
+				"Backspace",
+				{},
+				`x {--{"author":"me","time":1000}@@a|bc|def--} y`,
+			],
+			[
+				`x {--{"author":"me","time":1000}@@cd--}ef| gh|`,
+				"Backspace",
+				{},
+				`x {--{"author":"me","time":1000}@@cd--}e{--|f--}{author=me time=2000} g{--|h--}{author=me time=2000}`,
+			],
+			// A cursor before the range, and one in it.
+			[
+				`a|b {++{"author":"me","time":1000}@@c|d++} ef`,
+				"X",
+				{},
+				`a{++X|++}{author=me time=2000}b {++cX|d++}{author=me time=2000} ef`,
+			],
+		] as const,
+	)("%j: %s", (marked, key, extra, out) => {
+		expect(press(marked, key, extra)).toBe(out);
 	});
-	const at = doc.indexOf("abcdef");
-	v.dispatch({ selection: EditorSelection.create([EditorSelection.cursor(at + 2), EditorSelection.cursor(at + 4)]) });
-	v.dispatch(v.state.update({
-		changes: [{ from: at + 2, insert: "X" }, { from: at + 4, insert: "X" }],
-		selection: EditorSelection.create([EditorSelection.cursor(at + 3), EditorSelection.cursor(at + 6)]),
-		userEvent: "input.type",
-	}));
-	expect(v.state.doc.toString()).toMatch(/^x \{\+\+\{"author":"me","time":\d+\}@@abXcdXef\+\+\} y$/);
 });
 
 test("two cursors in one own addition both type, metadata off", () => {
@@ -152,7 +255,7 @@ describe("deleting next to markup (found by the fence fuzz's stricter checks)", 
 		const from = doc.indexOf("author"), to = from + 3;
 		v.dispatch({ selection: { anchor: from, head: to } });
 		v.dispatch({ changes: { from, to, insert: "Z" }, selection: { anchor: from + 1 }, userEvent: "input.type" });
-		expect(v.state.doc.toString()).toBe(`p {++{"author":"alice"}@@Z++}{--{"author":"me"}@@gone--} q`);
+		expect(v.state.doc.toString()).toBe(`p {++Z++}{author=alice}{--{"author":"me"}@@gone--} q`);
 	});
 });
 
@@ -285,18 +388,18 @@ describe("Backspace after typing", () => {
 		}
 	}
 	const DEFAULTS = { author: "me" };
-	const strip = (text: string) => text.replace(/"time":\d+/g, "T");
+	const strip = (text: string) => text.replace(/time=\d+/g, "T");
 
 	test("typing a replacement over a word, then Backspace keeps deleting the new text", () => {
 		const v = view("a foo b", DEFAULTS);
 		v.dispatch({ selection: { anchor: 2, head: 5 } });
 		for (const ch of ["q", "u", "x"]) key(v, ch);
 		key(v, "Backspace");
-		expect(strip(v.state.doc.toString())).toBe(`a {~~{"author":"me",T}@@foo~>qu~~} b`);
+		expect(strip(v.state.doc.toString())).toBe(`a {~~foo~>qu~~}{author=me T} b`);
 		expect(v.state.selection.main.head).toBe(v.state.doc.toString().indexOf("qu") + 2);
 		key(v, "Backspace");
 		key(v, "Backspace");
-		expect(strip(v.state.doc.toString())).toBe(`a {--{"author":"me",T}@@foo--} b`);
+		expect(strip(v.state.doc.toString())).toBe(`a {--foo--}{author=me T} b`);
 	});
 
 	test("Backspacing away all of one's typed text leaves no empty addition", () => {

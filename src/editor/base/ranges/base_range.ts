@@ -133,7 +133,7 @@ export abstract class CriticMarkupRange {
 		return [{ from: this.meta.from, to: this.meta.to, insert: "" }];
 	}
 
-	delete_metadata(key: string, syntax?: MetadataSyntax): EditorChange[] {
+	delete_metadata(key: string): EditorChange[] {
 		if (Object.hasOwn(SHORTHAND_KEYS, key)) key = SHORTHAND_KEYS[key];
 
 		if (!Object.hasOwn(this.own_fields, key))
@@ -141,23 +141,25 @@ export abstract class CriticMarkupRange {
 
 		const fields = { ...this.own_fields };
 		delete fields[key as keyof typeof fields];
-		return this.set_metadata(fields, syntax);
+		return this.set_metadata(fields);
 	}
 
-	add_metadata(key: string, value: unknown, syntax?: MetadataSyntax): EditorChange[] {
-		return this.set_metadata({ ...this.own_fields, [key]: value }, syntax);
+	add_metadata(key: string, value: unknown): EditorChange[] {
+		return this.set_metadata({ ...this.own_fields, [key]: value });
 	}
 
 	/**
-	 * Rewrite this range's metadata as `fields` in `syntax` (default: its current syntax, else legacy). Moving between
-	 * syntaxes removes the old form. Empty `fields` writes no metadata at all. The changes never overlap: the legacy
-	 * blob lies inside the opener and the block after the closer.
+	 * Rewrite this range's metadata as `fields`, in an attribute block (legacy is deprecated and only read). A legacy
+	 * blob is removed. Empty `fields` writes no metadata at all. The changes never overlap: the legacy blob lies inside
+	 * the opener and the block after the closer.
 	 */
-	set_metadata(fields: MetadataFields, syntax: MetadataSyntax = this.meta?.syntax ?? "legacy"): EditorChange[] {
+	set_metadata(fields: MetadataFields): EditorChange[] {
 		// TODO: Possibly redundant assignment, ranges will automatically get re-constructed with the EditorChange
 		this.own_fields = fields;
 		// EXPL: Lossless or untouched: fields that would not read back from an attribute block stay legacy.
-		if (syntax === "attributes" && (unconvertibleReason(fields) || unconvertibleContent(this.text))) syntax = "legacy";
+		const syntax: MetadataSyntax = unconvertibleReason(fields) || unconvertibleContent(this.text) ?
+			"legacy" :
+			"attributes";
 		const has_fields = Object.values(fields).some(value => value !== undefined);
 		const legacy = this.meta?.syntax === "legacy" ? this.meta : undefined;
 		const attributes = this.meta?.syntax === "attributes" ? this.meta : undefined;

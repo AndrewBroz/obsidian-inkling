@@ -28,7 +28,7 @@ export function createRangeState(
 /** The same document with every legacy range rewritten in `syntax`, so a legacy fixture can run over both forms. */
 export function withSyntax(doc: string, syntax: MetadataSyntax): string {
 	if (syntax === "legacy") return doc;
-	const { changes } = convert_metadata(getRangesInText(doc, { ...DEFAULT_SETTINGS, enable_metadata: true }), syntax);
+	const { changes } = convert_metadata(getRangesInText(doc, { ...DEFAULT_SETTINGS, enable_metadata: true }));
 	return [...changes].sort((a, b) => b.from - a.from)
 		.reduce((out, c) => out.slice(0, c.from) + c.insert + out.slice(c.to), doc);
 }

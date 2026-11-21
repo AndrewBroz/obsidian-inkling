@@ -1,4 +1,3 @@
-import type { MetadataSyntax } from "../../../types";
 import type { EditorChange } from "../edit-handler";
 import { unconvertibleContent, unconvertibleReason } from "../edit-util/attributes";
 import { type CriticMarkupRange, INHERITED_KEYS, type MetadataFields, SuggestionType } from "../ranges";
@@ -34,44 +33,31 @@ function attribute_fields(range: CriticMarkupRange): MetadataFields {
 
 // EXPL: `set_metadata` also assigns `own_fields`; the ranges belong to the editor state and the user may still cancel,
 //       so put them back once the changes are computed.
-function preview(range: CriticMarkupRange, fields: MetadataFields, syntax: MetadataSyntax): EditorChange[] {
+function preview(range: CriticMarkupRange, fields: MetadataFields): EditorChange[] {
 	const original = range.own_fields;
 	try {
-		return range.set_metadata(fields, syntax);
+		return range.set_metadata(fields);
 	} finally {
 		range.own_fields = original;
 	}
 }
 
 /**
- * The changes that rewrite every range's metadata in `target` syntax, per the spec's lossless-conversion rules.
- * Ranges already in `target`, or that cannot round-trip, are left as they are. Each range only edits its own span,
- * so the changes never overlap.
+ * The changes that rewrite every legacy range's metadata as an attribute block, per the spec's lossless-conversion
+ * rules. Ranges already in attribute blocks, or that cannot round-trip, are left as they are. Each range only edits
+ * its own span, so the changes never overlap. (Legacy is deprecated: there is no conversion back.)
  */
-export function convert_metadata(ranges: CriticMarkupRange[], target: MetadataSyntax): MetadataConversion {
+export function convert_metadata(ranges: CriticMarkupRange[]): MetadataConversion {
 	const result: MetadataConversion = { changes: [], converted: 0, skipped: [] };
 	for (const range of ranges) {
-		if (target === "attributes") {
-			if (range.meta?.syntax !== "legacy") continue;
-			const reason = unconvertibleReason(range.own_fields) ?? unconvertibleContent(range.text);
-			if (reason) {
-				result.skipped.push({ range, reason });
-				continue;
-			}
-			result.changes.push(...preview(range, attribute_fields(range), "attributes"));
-			result.converted++;
-		} else {
-			// EXPL: An anchor whose first comment is in attributes syntax may be relying on inheritance; legacy has no
-			//       inheritance (older versions read the anchor alone), so its inherited fields are written out in full.
-			const relies_on_inheritance = is_anchor(range) &&
-				(range.meta?.syntax === "attributes" || range.replies[0].meta?.syntax === "attributes");
-			if (range.meta?.syntax !== "attributes" && !relies_on_inheritance) continue;
-			const fields = relies_on_inheritance ? { ...range.fields } : { ...range.own_fields };
-			if (range.meta?.syntax !== "attributes" && Object.keys(fields).length === Object.keys(range.own_fields).length)
-				continue;
-			result.changes.push(...preview(range, fields, "legacy"));
-			result.converted++;
+		if (range.meta?.syntax !== "legacy") continue;
+		const reason = unconvertibleReason(range.own_fields) ?? unconvertibleContent(range.text);
+		if (reason) {
+			result.skipped.push({ range, reason });
+			continue;
 		}
+		result.changes.push(...preview(range, attribute_fields(range)));
+		result.converted++;
 	}
 	return result;
 }

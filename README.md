@@ -97,32 +97,27 @@ so existing notes from before the rename don't need to be updated.
 
 ## Metadata format
 
-Inkling stores author, time and resolution state with each range. Two formats exist, and both are always read.
-
-Legacy (the default) puts JSON ahead of the content, ended by `@@`:
-
-```
-{=={"author":"Andrew","time":1791819807}@@some==}{>>{"author":"Andrew","time":1791819807}@@note<<}
-```
-
-Attribute blocks put a Pandoc-style block after the range's closer:
+Inkling stores author, time and resolution state with each range, in a Pandoc-style attribute block after the range's
+closer:
 
 ```
 {==some==}{>>note<<}{author="Andrew" time=1791819807}
 ```
 
+Older notes may use the legacy format, which puts JSON ahead of the content, ended by `@@`:
+
+```
+{=={"author":"Andrew","time":1791819807}@@some==}{>>{"author":"Andrew","time":1791819807}@@note<<}
+```
+
+Legacy is deprecated: Inkling reads it everywhere but no longer writes it. Opening a note never changes it. A range that
+Inkling rewrites anyway (an edit, a reply, a resolve) is written as an attribute block, and **Update Inkling comments
+and suggestions to the new format** converts a whole note at once. The one exception: a range whose fields or text an
+attribute block cannot hold losslessly (a value with a line break, a nested object, or text that itself starts with a
+JSON object and `@@`) stays legacy.
+
 Pandoc-grammar tools such as ZotLit read `@@some` as a citation; attribute blocks avoid that. Other CriticMarkup
 readers also show a trailing block as stray text after a correct range, rather than inside the highlighted content.
-
-Choose the format you write in **Settings, Metadata, Metadata format**. The default is **Legacy**. Opening a note never
-converts its metadata format. Ranges that Inkling rewrites anyway (an edit, a reply, a resolve) switch to the chosen
-format, and a range already in attribute blocks is never silently written back as legacy. Two commands convert a whole
-note on request:
-
-- **Convert metadata in this note to attribute blocks**
-- **Convert metadata in this note back to legacy**
-
-A range whose fields cannot be converted losslessly stays as it is.
 
 To clear finished discussions, run **Remove resolved comments in this note**. It asks for confirmation, then deletes
 every resolved comment thread in the note in one step (a single undo restores them). Highlighted text is kept, and
@@ -137,13 +132,22 @@ If an author name has an `@` at the start of a word (such as `@andrew`), Pandoc-
 in attribute blocks, and the Name setting shows a warning.
 
 > [!WARNING]
-> Every collaborator must be on Inkling 0.13 or later (the release that reads attribute blocks) before anyone
-> switches to attribute blocks. Older versions and Commentator do not read them.
+> Every collaborator must be on Inkling 0.13 or later (the release that reads attribute blocks), since 0.14 writes
+> only attribute blocks. Older versions and Commentator do not read them.
 
 ### Upgrade note
 
 Update in this order: first every collaborator's Inkling to 0.13 or later, then any tooling that parses the metadata
-itself (for the CRI build, `config/critic.py`). Only then should anyone change the Metadata format setting.
+itself (for the CRI build, `config/critic.py`), and only then Inkling 0.14, which writes nothing but attribute blocks.
+
+### What's new in 0.14
+
+- **A new format for comments and suggestions.** Inkling now saves comment and suggestion metadata in a new format.
+  Everyone you share notes with needs Inkling 0.13 or later. Commentator can't read it.
+- **Older notes keep working.** Inkling still reads the old format and updates each comment or suggestion as you edit
+  it. To update a whole note at once, run **Update Inkling comments and suggestions to the new format**.
+- **The old format is retired.** Inkling no longer saves anything in it, and the Metadata format setting is gone.
+  Existing installs see a one-time notice.
 
 ### What's new in 0.13
 

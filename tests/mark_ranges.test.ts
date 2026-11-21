@@ -2,7 +2,6 @@ import { applyToText, rangeParser, SuggestionType } from "../src/editor/base";
 import type { EditorSuggestion } from "../src/editor/base/edit-handler";
 import { mark_ranges, MarkAction, type MarkType } from "../src/editor/base/edit-logic/mark";
 import type { MetadataFields } from "../src/editor/base/ranges";
-import type { MetadataSyntax } from "../src/types";
 import { createRangeState } from "./helpers";
 
 // EXPL: Bare `extensions: [rangeParser]` crashes ("Field is not present in this state") per
@@ -18,9 +17,8 @@ function mark(
 	inserted: string,
 	type: MarkType,
 	metadata_fields?: MetadataFields,
-	syntax: MetadataSyntax = "legacy",
 ): string {
-	return apply_edits(doc, mark_edits(doc, from, to, inserted, type, metadata_fields, syntax));
+	return apply_edits(doc, mark_edits(doc, from, to, inserted, type, metadata_fields));
 }
 
 function mark_edits(
@@ -30,11 +28,10 @@ function mark_edits(
 	inserted: string,
 	type: MarkType,
 	metadata_fields?: MetadataFields,
-	syntax: MetadataSyntax = "legacy",
 ): EditorSuggestion[] {
 	const state = createRangeState(doc, { enable_metadata: true, enable_author_metadata: true });
 	const ranges = state.field(rangeParser).ranges;
-	return mark_ranges(ranges, state.doc, from, to, inserted, type, metadata_fields, false, syntax);
+	return mark_ranges(ranges, state.doc, from, to, inserted, type, metadata_fields, false);
 }
 
 function apply_edits(doc: string, edits: EditorSuggestion[]): string {
@@ -105,13 +102,13 @@ describe("mark_ranges in plain text", () => {
 
 	test("insertion with metadata prepends the metadata block", () => {
 		expect(mark("hello world", 5, 5, " big", SuggestionType.ADDITION, { author: "A" }))
-			.toBe(`hello{++{"author":"A"}@@ big++} world`);
+			.toBe(`hello{++ big++}{author=A} world`);
 	});
 });
 
-describe("attributes syntax", () => {
+describe("attribute blocks (always written; legacy is deprecated)", () => {
 	test("typing creates an addition with a trailing block and the caret after the typed text", () => {
-		const edits = mark_edits("ab", 1, 1, "X", SuggestionType.ADDITION, { author: "A" }, "attributes");
+		const edits = mark_edits("ab", 1, 1, "X", SuggestionType.ADDITION, { author: "A" });
 		expect(apply_edits("ab", edits)).toBe("a{++X++}{author=A}b");
 		expect(edits.at(-1)!.end).toBe(1 + 3 + 1);
 	});
@@ -119,21 +116,21 @@ describe("attributes syntax", () => {
 	test("typing at the end of an attributes addition extends it, keeping one block", () => {
 		const doc = "a{++X++}{author=A}b";
 		const closer_to = doc.indexOf("++}") + 3;
-		expect(mark(doc, closer_to - 3, closer_to - 3, "Y", SuggestionType.ADDITION, { author: "A" }, "attributes"))
+		expect(mark(doc, closer_to - 3, closer_to - 3, "Y", SuggestionType.ADDITION, { author: "A" }))
 			.toBe("a{++XY++}{author=A}b");
 	});
 
 	test("typing after an attributes addition's block by the same author extends it", () => {
 		const doc = "a{++X++}{author=A}b";
 		const range_to = doc.indexOf("}b") + 1;
-		expect(mark(doc, range_to, range_to, "Y", SuggestionType.ADDITION, { author: "A" }, "attributes"))
+		expect(mark(doc, range_to, range_to, "Y", SuggestionType.ADDITION, { author: "A" }))
 			.toBe("a{++XY++}{author=A}b");
 	});
 
-	test("a legacy-setting edit merging into an attributes range keeps attributes", () => {
-		const doc = "a{++X++}{author=A}b";
-		const range_to = doc.indexOf("}b") + 1;
-		expect(mark(doc, range_to, range_to, "Y", SuggestionType.ADDITION, { author: "A" }, "legacy"))
+	test("an edit merging into a legacy range converts it to an attribute block", () => {
+		const doc = `a{++{"author":"A"}@@X++}b`;
+		const closer_to = doc.indexOf("++}") + 3;
+		expect(mark(doc, closer_to - 3, closer_to - 3, "Y", SuggestionType.ADDITION, { author: "A" }))
 			.toBe("a{++XY++}{author=A}b");
 	});
 });
@@ -312,12 +309,16 @@ describe("Task 6b: editing a substitution's pending 'new' half never resurrects 
 		expect(accept_all(output)).toBe("abxys");
 	});
 
-	test("a substitution's metadata block survives editing the 'new' half (offset math)", () => {
-		//   x { ~ ~ {"author":"A"} @@ o l d ~ > n e w ~ ~ } y
-		// "old" is 20..23, separator 23..25, "new" is 25..28. Delete "ne" [25,27).
-		const doc = `x{~~{"author":"A"}@@old~>new~~}y`;
-		const output = mark(doc, 25, 27, "", SuggestionType.DELETION);
-		expect(output).toBe(`x{~~{"author":"A"}@@old~>w~~}y`);
+	// EXPL: The rewritten substitution is written with an attribute block; one whose metadata an attribute block cannot
+	//       hold (a line break in a value) stays legacy, the case where the opener's offset math matters.
+	test.each([
+		["converted to an attribute block", `x{~~{"author":"A"}@@old~>new~~}y`, `x{~~old~>w~~}{author=A}y`],
+		["kept legacy (unconvertible)", `x{~~{"author":"A\\nB"}@@old~>new~~}y`, `x{~~{"author":"A\\nB"}@@old~>w~~}y`],
+	])("a substitution's metadata survives editing the 'new' half (%s)", (_, doc, out) => {
+		// Delete "ne" of "new".
+		const from = doc.indexOf("new");
+		const output = mark(doc, from, from + 2, "", SuggestionType.DELETION);
+		expect(output).toBe(out);
 		expect(reject_all(output)).toBe("xoldy"); // metadata + old intact
 		expect(accept_all(output)).toBe("xwy");
 	});
@@ -614,6 +615,39 @@ describe("a deletion reaching into a substitution's old half", () => {
 	});
 });
 
+// EXPL: The fuzz's "substitution class" (Task 6b report): a mark reaching into a substitution's old half from a
+//       neighbouring range repeated part of the old text ("removedold" -> "removedoldld"). Fixed by 28f35d3 and
+//       bcdf4c6; these are the report's reproductions, with no metadata, an attribute block, and metadata only
+//       legacy can hold (a line break), so each write path keeps the old text once.
+describe("a mark reaching into a substitution's old half from a neighbouring range keeps the old text once", () => {
+	test.each(
+		[
+			["a deletion from a deletion's closer", "{--removed--}{~~old~>new~~}", 14, 17, "", SuggestionType.DELETION],
+			[
+				"a deletion from a comment's closer",
+				"{>>comment<<}{~~old~>new~~}{>>comment<<}",
+				14,
+				18,
+				"",
+				SuggestionType.DELETION,
+			],
+			[
+				"a substitution from an empty-old substitution",
+				"{~~~>ins~~}{~~old~>new~~}{==highlight==}",
+				13,
+				16,
+				"q",
+				SuggestionType.SUBSTITUTION,
+			],
+		] as const,
+	)("%s", (_, doc, from, to, inserted, type) => {
+		for (const metadata of [undefined, { author: "B", time: 1 }, { author: "B\nC" }]) {
+			const output = mark(doc, from, to, inserted, type, metadata);
+			expect([metadata, base_text(output)]).toEqual([metadata, base_text(doc)]);
+		}
+	});
+});
+
 describe("an operation starting where one range ends and another begins", () => {
 	test("a deletion from an addition's opener into it, right after a deletion, does not re-emit the opener", () => {
 		const doc = `{--x--}{++{"author":"a"}@@ab++} q`;
@@ -643,8 +677,8 @@ describe("a deletion from inside a substitution past its end", () => {
 describe("editing another author's substitution keeps only its old text as base text", () => {
 	test.each([
 		["deleting the start of its new text", 12, 13, "", "x {~~old~>ne~~} y"],
-		["replacing from its old text into its new text", 5, 12, "Z", `x {~~{"author":"me"}@@old~>Z~~}{++w++} y`],
-		["deleting from its old text into its new text", 6, 13, "", `x {--o--}{--{"author":"me"}@@ld--} y`],
+		["replacing from its old text into its new text", 5, 12, "Z", `x {~~old~>Z~~}{author=me}{++w++} y`],
+		["deleting from its old text into its new text", 6, 13, "", `x {--o--}{--ld--}{author=me} y`],
 	])("%s", (_, from, to, inserted, expected) => {
 		const doc = "x {~~old~>new~~} y";
 		const type = inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION;
@@ -664,7 +698,7 @@ describe("a deletion reaching into a substitution it does not merge with keeps t
 			"",
 			{ author: "me" },
 			"x old y",
-			`{--{"author":"me"}@@x ol--}{~~d~>new~~} y`,
+			`{--x ol--}{author=me}{~~d~>new~~} y`,
 		],
 		["a replacement", "and {~~old~>new~~} y", 3, 8, "Z", undefined, "and old y", "and{~~ o~>Z~~}{~~ld~>new~~} y"],
 	])("%s", (_, doc, from, to, inserted, metadata, base, expected) => {

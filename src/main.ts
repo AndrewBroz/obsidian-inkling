@@ -68,6 +68,7 @@ import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/v
 import { createApi, type InklingApi } from "./api";
 
 import {
+	ATTRIBUTES_SWITCH_NOTICE,
 	backfillLegacyMetadataFlags,
 	backfillMarkupFocus,
 	clampEditMode,
@@ -78,6 +79,7 @@ import {
 	REQUIRES_DATABASE_REINDEX,
 	REQUIRES_EDITOR_RELOAD,
 	REQUIRES_FULL_RELOAD,
+	switchToAttributesOnce,
 } from "./constants";
 import {
 	annotationGutterIncludedTypes,
@@ -93,13 +95,6 @@ import {
 } from "./editor/settings";
 
 import {
-	debugRangeset,
-	iterateAllCMInstances,
-	sendAnnotationToAllCMInstances,
-	updateCompartment,
-} from "./util/cm-util";
-import { objectDifference } from "./util/util";
-import {
 	disableLegacyPlugin,
 	LEGACY_PLUGIN_ID,
 	migrateLegacyHotkeys,
@@ -107,6 +102,13 @@ import {
 	PLUGIN_ID,
 	readLegacySettings,
 } from "./plugin-id";
+import {
+	debugRangeset,
+	iterateAllCMInstances,
+	sendAnnotationToAllCMInstances,
+	updateCompartment,
+} from "./util/cm-util";
+import { objectDifference } from "./util/util";
 
 export default class CommentatorPlugin extends Plugin {
 	editorExtensions: Extension[] = [];
@@ -484,6 +486,11 @@ export default class CommentatorPlugin extends Plugin {
 			enableRemoveOnResolveOnce(this.settings, new_settings);
 			if (!("remove_on_resolve_migrated" in new_settings))
 				save = true;
+
+			if (switchToAttributesOnce(this.settings, new_settings)) {
+				save = true;
+				this.app.workspace.onLayoutReady(() => new Notice(ATTRIBUTES_SWITCH_NOTICE, 0));
+			}
 		}
 
 		// EXPL: Settings imported from a pre-rename plugin id exist only in memory until saved here;

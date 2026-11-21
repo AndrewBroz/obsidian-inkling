@@ -43,7 +43,7 @@ describe("resolve_thread / reopen_thread / thread_resolved", () => {
 		expect(base.replies).toHaveLength(1);
 
 		const resolved_doc = apply(doc, resolve_thread(base));
-		expect(resolved_doc).toBe(`x{>>{"done":true}@@a<<}{>>b<<}y`);
+		expect(resolved_doc).toBe(`x{>>a<<}{done=true}{>>b<<}y`);
 
 		const resolved_base = topRanges(resolved_doc)[0];
 		expect(thread_resolved(resolved_base)).toBe(true);
@@ -61,18 +61,20 @@ describe("resolve_thread / reopen_thread / thread_resolved", () => {
 		const reply = highlight.replies[0];
 
 		const resolved_doc = apply(doc, resolve_thread(reply));
-		expect(resolved_doc).toBe(`x{=={"done":true}@@sel==}{>>c<<}y`);
+		expect(resolved_doc).toBe(`x{==sel==}{done=true}{>>c<<}y`);
 
 		const resolved_reply = topRanges(resolved_doc)[0].replies[0];
 		expect(thread_resolved(resolved_reply)).toBe(true);
 	});
 
+	// EXPL: The legacy base is rewritten as an attribute block (legacy is deprecated: read, never written); the reply,
+	//       untouched, stays legacy, and the two still read as one thread.
 	test("ranges with existing metadata: resolve merges done, reopen removes only done", () => {
 		const doc = `x{=={"author":"A"}@@sel==}{>>{"author":"A"}@@c<<}y`;
 		const highlight = topRanges(doc)[0];
 
 		const resolved_doc = apply(doc, resolve_thread(highlight));
-		expect(resolved_doc).toBe(`x{=={"author":"A","done":true}@@sel==}{>>{"author":"A"}@@c<<}y`);
+		expect(resolved_doc).toBe(`x{==sel==}{author=A done=true}{>>{"author":"A"}@@c<<}y`);
 
 		const resolved_highlight = topRanges(resolved_doc)[0];
 		expect(thread_resolved(resolved_highlight)).toBe(true);
@@ -80,7 +82,7 @@ describe("resolve_thread / reopen_thread / thread_resolved", () => {
 		expect(resolved_highlight.replies[0].fields.author).toBe("A");
 
 		const reopened_doc = apply(resolved_doc, reopen_thread(resolved_highlight));
-		expect(reopened_doc).toBe(doc);
+		expect(reopened_doc).toBe(`x{==sel==}{author=A}{>>{"author":"A"}@@c<<}y`);
 
 		const reopened_highlight = topRanges(reopened_doc)[0];
 		expect(thread_resolved(reopened_highlight)).toBe(false);
@@ -90,10 +92,9 @@ describe("resolve_thread / reopen_thread / thread_resolved", () => {
 });
 
 describe("range_source_with_fields", () => {
-	test("highlight with fields rebuilds the metadata blob", () => {
+	test("highlight with fields gets an attribute block", () => {
 		const highlight = topRanges("x{==sel==}y")[0];
-		expect(range_source_with_fields(highlight, { author: "A", done: true }))
-			.toBe(`{=={"author":"A","done":true}@@sel==}`);
+		expect(range_source_with_fields(highlight, { author: "A", done: true })).toBe(`{==sel==}{author=A done=true}`);
 	});
 
 	test("empty fields produce no metadata blob", () => {
@@ -103,18 +104,17 @@ describe("range_source_with_fields", () => {
 
 	test("substitution keeps its ~> separator", () => {
 		const substitution = topRanges("x{~~a~>b~~}y")[0];
-		expect(range_source_with_fields(substitution, { author: "A" }))
-			.toBe(`{~~{"author":"A"}@@a~>b~~}`);
+		expect(range_source_with_fields(substitution, { author: "A" })).toBe(`{~~a~>b~~}{author=A}`);
 	});
 
 	test("attributes keep content with an @@", () => {
 		const addition = topRanges("x{++a@@b++}y")[0];
-		expect(range_source_with_fields(addition, { author: "A" }, "attributes")).toBe("{++a@@b++}{author=A}");
+		expect(range_source_with_fields(addition, { author: "A" })).toBe("{++a@@b++}{author=A}");
 	});
 
 	test("attributes fall back to legacy when the content starts with a JSON object then @@", () => {
 		const addition = topRanges(`x{++{"author":"A"}@@{"x":1}@@b++}y`)[0];
-		expect(range_source_with_fields(addition, { author: "B" }, "attributes"))
+		expect(range_source_with_fields(addition, { author: "B" }))
 			.toBe(`{++{"author":"B"}@@{"x":1}@@b++}`);
 	});
 });
@@ -141,21 +141,21 @@ describe("cancel_empty_comment", () => {
 	});
 });
 
-describe("range_source_with_fields by syntax", () => {
-	test("keeps an attributes range's syntax", () => {
+describe("range_source_with_fields writes attribute blocks", () => {
+	test("rewrites an attribute block", () => {
 		const [range] = topRanges(`{==x==}{author=A}`);
 		expect(range_source_with_fields(range, { author: "A", done: true })).toBe(`{==x==}{author=A done=true}`);
 	});
 
-	test("writes the requested syntax", () => {
+	test("converts a legacy range", () => {
 		const [range] = topRanges(`{=={"author":"A"}@@x==}`);
-		expect(range_source_with_fields(range, { author: "A" }, "attributes")).toBe(`{==x==}{author=A}`);
-		expect(range_source_with_fields(range, {}, "attributes")).toBe(`{==x==}`);
+		expect(range_source_with_fields(range, { author: "A" })).toBe(`{==x==}{author=A}`);
+		expect(range_source_with_fields(range, {})).toBe(`{==x==}`);
 	});
 
 	test("fields that cannot round-trip stay legacy", () => {
 		const [range] = topRanges(`{==x==}`);
-		expect(range_source_with_fields(range, { note: { x: 1 } }, "attributes")).toBe(`{=={"note":{"x":1}}@@x==}`);
+		expect(range_source_with_fields(range, { note: { x: 1 } })).toBe(`{=={"note":{"x":1}}@@x==}`);
 	});
 });
 
@@ -166,22 +166,16 @@ describe("thread rule 1: done is written on the base only", () => {
 		expect(out).toBe(`{==x==}{done=true}{>>c<<}{author=A}{>>r<<}{author=B}`);
 	});
 
-	test("legacy resolve also touches only the base", () => {
+	test("resolving a legacy thread touches only the base, which it migrates", () => {
 		const doc = `{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`;
 		const out = apply(doc, resolve_thread(topRanges(doc)[0]));
-		expect(out).toBe(`{=={"author":"A","done":true}@@x==}{>>{"author":"A"}@@c<<}`);
+		expect(out).toBe(`{==x==}{author=A done=true}{>>{"author":"A"}@@c<<}`);
 	});
 
 	test("reopen removes done from the base and cleans legacy copies on replies", () => {
 		const doc = `{=={"done":true}@@x==}{>>{"author":"A","done":true}@@c<<}`;
 		const out = apply(doc, reopen_thread(topRanges(doc)[0]));
-		expect(out).toBe(`{==x==}{>>{"author":"A"}@@c<<}`);
-	});
-
-	test("resolve with the attributes setting migrates the base it touches", () => {
-		const doc = `{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`;
-		const out = apply(doc, resolve_thread(topRanges(doc)[0], "attributes"));
-		expect(out).toBe(`{==x==}{author=A done=true}{>>{"author":"A"}@@c<<}`);
+		expect(out).toBe(`{==x==}{>>c<<}{author=A}`);
 	});
 
 	test("the annotations-view resolve function leaves replies untouched when run over the whole thread", () => {
@@ -190,23 +184,22 @@ describe("thread rule 1: done is written on the base only", () => {
 		expect(
 			applyToText(
 				doc,
-				(range, text) =>
-					resolve_source(range, text, { ...DEFAULT_SETTINGS, metadata_syntax: "legacy", remove_on_resolve: false }),
+				(range, text) => resolve_source(range, text, { ...DEFAULT_SETTINGS, remove_on_resolve: false }),
 				[
 					base,
 					...base.replies,
 				],
 			),
 		)
-			.toBe(`{=={"author":"A","done":true}@@x==}{>>{"author":"A"}@@c<<}`);
+			.toBe(`{==x==}{author=A done=true}{>>{"author":"A"}@@c<<}`);
 	});
 });
 
 describe("vault-wide reopen", () => {
-	test("a reply without its own done stays byte-identical, even under the attributes setting", () => {
+	test("a reply without its own done stays byte-identical", () => {
 		const doc = `{=={"done":true}@@x==}{>>{"a":"A"}@@c<<}{>>{bad json}@@r<<}`;
 		const [base] = topRanges(doc);
-		expect(applyToText(doc, (range, text) => reopen_source(range, text, "attributes"), [base, ...base.replies]))
+		expect(applyToText(doc, (range, text) => reopen_source(range, text), [base, ...base.replies]))
 			.toBe(`{==x==}{>>{"a":"A"}@@c<<}{>>{bad json}@@r<<}`);
 	});
 });
@@ -215,39 +208,39 @@ describe("thread rule 2 edits: inheritance is made explicit before it would chan
 	test("removing the first comment writes the anchor's inherited fields", () => {
 		const doc = `{==x==}{>>c<<}{author=A time=1}{>>r<<}{author=B time=2}`;
 		const [anchor] = topRanges(doc);
-		const out = apply(doc, remove_comment(anchor.replies[0], "legacy"));
+		const out = apply(doc, remove_comment(anchor.replies[0]));
 		expect(out).toBe(`{==x==}{author=A time=1}{>>r<<}{author=B time=2}`);
 	});
 
 	test("no write when the new first comment has the same values", () => {
 		const doc = `{==x==}{>>c<<}{author=A time=1}{>>r<<}{author=A time=1}`;
 		const [anchor] = topRanges(doc);
-		expect(apply(doc, remove_comment(anchor.replies[0], "legacy"))).toBe(`{==x==}{>>r<<}{author=A time=1}`);
+		expect(apply(doc, remove_comment(anchor.replies[0]))).toBe(`{==x==}{>>r<<}{author=A time=1}`);
 	});
 
 	test("removing the only comment keeps the anchor's authorship", () => {
 		const doc = `{==x==}{>>c<<}{author=A}`;
 		const [anchor] = topRanges(doc);
-		expect(apply(doc, remove_comment(anchor.replies[0], "legacy"))).toBe(`{==x==}{author=A}`);
+		expect(apply(doc, remove_comment(anchor.replies[0]))).toBe(`{==x==}{author=A}`);
 	});
 
 	test("removing a later reply never touches the anchor", () => {
 		const doc = `{==x==}{>>c<<}{author=A}{>>r<<}{author=B}`;
 		const [anchor] = topRanges(doc);
-		expect(apply(doc, remove_comment(anchor.replies[1], "legacy"))).toBe(`{==x==}{>>c<<}{author=A}`);
+		expect(apply(doc, remove_comment(anchor.replies[1]))).toBe(`{==x==}{>>c<<}{author=A}`);
 	});
 
 	test("an anchor that states its own fields is left alone", () => {
 		const doc = `{==x==}{author=Z}{>>c<<}{author=A}{>>r<<}{author=B}`;
 		const [anchor] = topRanges(doc);
-		expect(apply(doc, anchor_inheritance_changes(anchor.replies[0], anchor.replies[1].own_fields, "legacy")))
+		expect(apply(doc, anchor_inheritance_changes(anchor.replies[0], anchor.replies[1].own_fields)))
 			.toBe(doc);
 	});
 
 	test("rewriting the first comment (next_first unknown) writes the inherited fields", () => {
 		const doc = `{==x==}{>>c<<}{author=A time=1}`;
 		const [anchor] = topRanges(doc);
-		expect(apply(doc, anchor_inheritance_changes(anchor.replies[0], undefined, "legacy")))
+		expect(apply(doc, anchor_inheritance_changes(anchor.replies[0], undefined)))
 			.toBe(`{==x==}{author=A time=1}{>>c<<}{author=A time=1}`);
 	});
 });

@@ -26,6 +26,7 @@ function ranges(doc: string): CriticMarkupRange[] {
 const KEEP = { ...DEFAULT_SETTINGS, remove_on_resolve: false };
 const REMOVE = { ...DEFAULT_SETTINGS, remove_on_resolve: true };
 
+// EXPL: Each case runs on a note written in legacy (read; deprecated) and in attribute blocks.
 describe.each(["legacy", "attributes"] as const)("%s metadata", (syntax) => {
 	const doc = (legacy: string) => withSyntax(legacy, syntax);
 
@@ -64,8 +65,7 @@ describe.each(["legacy", "attributes"] as const)("%s metadata", (syntax) => {
 		test("marks the thread done when remove_on_resolve is off", () => {
 			const source = doc(THREAD);
 			const [base] = ranges(source);
-			expect(resolve_action(base, { ...KEEP, metadata_syntax: syntax }))
-				.toEqual(resolve_thread(base, syntax));
+			expect(resolve_action(base, KEEP)).toEqual(resolve_thread(base));
 		});
 
 		test("removes the thread when remove_on_resolve is on", () => {
@@ -111,9 +111,26 @@ describe.each(["legacy", "attributes"] as const)("%s metadata", (syntax) => {
 			expect(unresolved_entries(entries).map(e => e.range.text)).toEqual([entries[1].range.text]);
 		});
 
-		test("keep mode writes done on the base and leaves replies untouched", () => {
-			expect(run(`{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`, KEEP))
-				.toBe(`{=={"author":"A","done":true}@@x==}{>>{"author":"A"}@@c<<}`);
+		test("keep mode writes done on the base (as an attribute block) and leaves replies untouched", () => {
+			expect(run(doc(`{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`), KEEP)).toBe(
+				syntax === "legacy" ?
+					`{==x==}{author=A done=true}{>>{"author":"A"}@@c<<}` :
+					`{==x==}{done=true}{>>c<<}{author=A}`,
+			);
 		});
 	});
+});
+
+// EXPL: Resolving a legacy thread rewrites only its base, as an attribute block (legacy is deprecated: read, never
+//       written); the reply keeps its legacy metadata, and the two still read as one resolved thread by the same author.
+test("resolving a legacy thread converts only the base, and it stays one thread", () => {
+	const source = `{=={"author":"A"}@@x==}{>>{"author":"A"}@@c<<}`;
+	const [base] = ranges(source);
+	const out = applyToText(source, (range, text) => resolve_source(range, text, KEEP), [base, ...base.replies]);
+	expect(out).toBe(`{==x==}{author=A done=true}{>>{"author":"A"}@@c<<}`);
+	const [anchor, reply] = ranges(out);
+	expect(anchor.replies).toEqual([reply]);
+	expect(reply.base_range).toBe(anchor);
+	expect(anchor.fields).toEqual({ author: "A", done: true });
+	expect(reply.fields.author).toBe("A");
 });

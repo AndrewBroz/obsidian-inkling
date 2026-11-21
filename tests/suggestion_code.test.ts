@@ -108,10 +108,10 @@ describe("changes inserting or deleting a fence line are untracked, and later su
 
 	test.each(
 		[
-			["metadata off", { add_metadata: false }],
-			["default settings", { author: "me" }],
+			["metadata off", { add_metadata: false }, "{++intro++}"],
+			["default settings", { author: "me" }, "{++intro++}{author=me time=T}"],
 		] as const,
-	)("typing a block key by key, with prose before it (%s)", (_, settings) => {
+	)("typing a block key by key, with prose before it (%s)", (_, settings, addition) => {
 		const v = new EditorView({
 			state: createRangeState(NOTE, settings, [
 				editorEditorField,
@@ -125,7 +125,9 @@ describe("changes inserting or deleting a fence line are untracked, and later su
 			v.dispatch(v.state.replaceSelection(ch), { userEvent: "input.type" });
 		}
 		const text = v.state.doc.toString();
-		expect(text.replace(/\{"[^}]*\}@@/, "")).toBe("intro\n{++intro++}\n```js\ncode\n```\nlater {==note==}{>>c<<}");
+		expect(text.replace(/(?<=time[=":]+)\d+/, "T")).toBe(
+			`intro\n${addition}\n\`\`\`js\ncode\n\`\`\`\nlater {==note==}{>>c<<}`,
+		);
 		expect(ranges(v).slice(-2)).toEqual(["{==note==}", "{>>c<<}"]);
 		expect(v.state.field(rangeParser).code_regions.map(r => text.slice(r.from, r.to))).toEqual(["```js\ncode\n```"]);
 		const resolve = (accept: boolean) => {

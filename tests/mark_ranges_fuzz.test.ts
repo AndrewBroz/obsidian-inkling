@@ -1,7 +1,6 @@
 import { applyToText, rangeParser, SuggestionType } from "../src/editor/base";
 import type { EditorSuggestion } from "../src/editor/base/edit-handler";
 import { mark_ranges, type MarkType } from "../src/editor/base/edit-logic/mark";
-import type { MetadataSyntax } from "../src/types";
 import { createRangeState } from "./helpers";
 
 // EXPL: Fuzz guard for the DATA-INTEGRITY invariant this phase protects: a DELETION or SUBSTITUTION
@@ -90,23 +89,13 @@ function apply(doc: string, edits: EditorSuggestion[]): { output: string; overla
 	return { output, overlap };
 }
 
-type FuzzCounts = {
-	addition_class: number;
-	substitution_class: number;
-	highlight_bracket_loss: number;
-	overlaps: number;
-	throws: number;
-	stray_metadata: number;
-};
-
-// EXPL: Run once per write syntax with metadata on every mark, the way the app calls `mark_ranges`. Same seed, so
-//       both runs see the same documents, spans and ops; only the form the new ranges' metadata is written in differs.
+// EXPL: Metadata on every mark, the way the app calls `mark_ranges` (it writes attribute blocks; legacy is deprecated
+//       and only read, as in some of the documents).
 const METADATA_FIELDS = { author: "B", time: 1 };
-const counts: Partial<Record<MetadataSyntax, FuzzCounts>> = {};
 
-describe.each(["legacy", "attributes"] as MetadataSyntax[])(
-	"fuzz (%s): a deletion/substitution mark never resurrects a pending addition on reject-all",
-	(syntax) => {
+describe(
+	"fuzz: a deletion/substitution mark never resurrects a pending addition on reject-all",
+	() => {
 		test(`${ITERATIONS} random documents x random spans x {DELETION, SUBSTITUTION, ADDITION}`, () => {
 			const rng = mulberry32(0xBADF00D);
 			const pick = <T>(arr: T[]) => arr[Math.floor(rng() * arr.length)];
@@ -116,15 +105,17 @@ describe.each(["legacy", "attributes"] as MetadataSyntax[])(
 			//         addition_class  -- the op does NOT partially cover a SUBSTITUTION range. This is the
 			//                            pending-ADDITION resurrection this task fixes (grouped_range.ts's
 			//                            unwrap_in_range). MUST be 0 after the fix.
-			//         substitution_class -- the op partially covers a SUBSTITUTION range (its inserted "new"
-			//                            half is cut through). Handled by a DIFFERENT code path
-			//                            (mark.ts's SubstitutionRange CASE branches / the substitution merge
-			//                            branches), which Task 6b took 78 -> 9 for marks without metadata;
-			//                            the residual 9 are a separate PRE-EXISTING old-half offset-math bug
-			//                            ("old" -> "oldld"), not a regression. With metadata on the mark, as
-			//                            here, it is 32 under both syntaxes (the parity test below), so the
-			//                            extra cases do not come from attribute blocks. Characterised, not
-			//                            asserted (see .superpowers/sdd/task-6b-report.md).
+			//         substitution_class -- the op partially covers a SUBSTITUTION range. Handled by a DIFFERENT
+			//                            code path (mark.ts's SubstitutionRange CASE branches / the
+			//                            substitution merge branches). Task 6b took it 78 -> 9; the residual
+			//                            old-half bug ("old" -> "oldld", .superpowers/sdd/task-6b-report.md)
+			//                            was fixed by 28f35d3 and bcdf4c6 (unit test: "a mark reaching into a
+			//                            substitution's old half from a neighbouring range keeps the old text
+			//                            once"). MUST be 0.
+			//       Overlapping edits and throws MUST be 0 too. highlight_bracket_loss is not a failure: a
+			//       deletion or substitution covering a whole highlight turns it into the suggestion (ranges
+			//       cannot nest), so rejecting restores the text without the highlight around it. No character
+			//       changes (base_text is equal, checked above); only the annotation goes.
 			let addition_class = 0;
 			let substitution_class = 0;
 			let highlight_bracket_loss = 0; // reject differs but base_text does not (Task 3b unrepresentable)
@@ -160,7 +151,6 @@ describe.each(["legacy", "attributes"] as MetadataSyntax[])(
 						type,
 						METADATA_FIELDS,
 						false,
-						syntax,
 					);
 					const { output, overlap } = apply(doc, edits);
 					if (overlap) {
@@ -174,13 +164,18 @@ describe.each(["legacy", "attributes"] as MetadataSyntax[])(
 					if (type === SuggestionType.ADDITION) continue;
 
 					if (base_text(output) !== base_text(doc)) {
-						// A SUBSTITUTION range the op OVERLAPS but does not FULLY cover -- its inserted half is
-						// being cut through by the op, the out-of-scope substitution code path.
+						// A SUBSTITUTION range the op OVERLAPS but does not FULLY cover: the substitution code path.
 						const partial_sub = ranges.ranges_overlapping_interval(from, to)
 							.some((r) => r.type === SuggestionType.SUBSTITUTION && !(from <= r.from && r.to <= to));
-						if (partial_sub)
+						if (partial_sub) {
 							substitution_class++;
-						else {
+							if (corruption_examples.length < 12) {
+								corruption_examples.push(
+									`SUBSTITUTION-CLASS type=${type} doc=${JSON.stringify(doc)} [${from},${to})` +
+										` ins=${JSON.stringify(inserted)} -> ${JSON.stringify(output)}`,
+								);
+							}
+						} else {
 							// NOTE: 0 after Task 6 — asserted below.
 							addition_class++;
 							if (corruption_examples.length < 12) {
@@ -199,25 +194,19 @@ describe.each(["legacy", "attributes"] as MetadataSyntax[])(
 				}
 			}
 
-			counts[syntax] = { addition_class, substitution_class, highlight_bracket_loss, overlaps, throws, stray_metadata };
 			console.log(
-				`[mark fuzz ${syntax}] stray_metadata=${stray_metadata} addition_class=${addition_class} substitution_class=${substitution_class}` +
+				`[mark fuzz] stray_metadata=${stray_metadata} addition_class=${addition_class} substitution_class=${substitution_class}` +
 					` highlight_bracket_loss=${highlight_bracket_loss} overlaps=${overlaps} throws=${throws} / ${ITERATIONS}`,
 			);
 			for (const example of corruption_examples) console.log("  " + example);
 
-			// THE CONTRACT: partial coverage of a pending ADDITION never resurrects a character on reject-all.
-			// (The substitution-inserted-half class lives in a separate code path and is out of scope here;
-			//  it is logged above and characterised in the task report, not asserted.)
+			// THE CONTRACT: a mark never resurrects or loses a character on reject-all, never orphans metadata,
+			// and never produces overlapping edits or throws.
 			expect(addition_class).toBe(0);
+			expect(substitution_class).toBe(0);
 			expect(stray_metadata).toBe(0);
+			expect(overlaps).toBe(0);
+			expect(throws).toBe(0);
 		});
 	},
 );
-
-// EXPL: The substitution class above is a known residual, so its count is not asserted. What attribute blocks must
-//       not do is change it: every class has to come out the same whichever syntax the marks are written in.
-test("fuzz: every outcome class has the same count under both write syntaxes", () => {
-	expect(counts.legacy).toBeDefined();
-	expect(counts.attributes).toEqual(counts.legacy);
-});

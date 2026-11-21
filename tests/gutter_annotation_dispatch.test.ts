@@ -113,12 +113,12 @@ describe("annotation gutter blur-path dispatches are synchronous", () => {
 		// EXPL: The click then dispatches resolve_thread synchronously against the CURRENT state.
 		const fresh = view.state.field(rangeParser).ranges.ranges[0];
 		view.dispatch({ changes: resolve_thread(fresh) });
-		expect(view.state.doc.toString()).toBe(`x{>>{"done":true}@@edited comment<<}y`);
+		expect(view.state.doc.toString()).toBe(`x{>>edited comment<<}{done=true}y`);
 
 		// EXPL: Nothing deferred may fire afterwards — the old setTimeout applied pre-resolve
 		//       offsets to the post-resolve document, splicing through the metadata blob.
 		jest.advanceTimersByTime(1000);
-		expect(view.state.doc.toString()).toBe(`x{>>{"done":true}@@edited comment<<}y`);
+		expect(view.state.doc.toString()).toBe(`x{>>edited comment<<}{done=true}y`);
 	});
 
 	test("re-entered write path (FIXME scenario: mod+enter on a new comment) writes exactly once", () => {
@@ -189,15 +189,17 @@ describe("annotation gutter blur-path dispatches are synchronous", () => {
 		expect(view.state.doc.toString()).toBe("x{>>see a b<<}y");
 	});
 
-	// EXPL: Touch-to-migrate: an edit writes legacy only when nothing it touches is already attribute form. The
-	//       comment's own metadata is regenerated on save, so its syntax must come from the comment, not the setting.
-	test("editing an attributes comment under the legacy setting keeps attribute form", () => {
-		const state = createRangeState("x{>>old<<}{author=A}y", {
+	// EXPL: Legacy metadata is deprecated: read, never written. Editing a legacy comment regenerates its metadata as an
+	//       attribute block (touch-to-migrate); an attribute-form comment stays one.
+	test.each([
+		["a legacy comment", `x{>>{"author":"A"}@@old<<}y`],
+		["an attribute-block comment", "x{>>old<<}{author=A}y"],
+	])("editing %s writes an attribute block", (_, doc) => {
+		const state = createRangeState(doc, {
 			add_metadata: true,
 			add_author_metadata: true,
 			add_timestamp_metadata: false,
 			author: "Z",
-			metadata_syntax: "legacy",
 		}, [editorInfoField]);
 		const view = new EditorView({ state });
 		const { node } = mountThread(view, view.state.field(rangeParser).ranges.ranges[0]);

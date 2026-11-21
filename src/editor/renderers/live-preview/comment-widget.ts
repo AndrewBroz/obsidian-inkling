@@ -12,7 +12,6 @@ import {
 	create_range,
 	CriticMarkupRange,
 	remove_comment,
-	write_syntax,
 } from "../../base";
 import { pluginSettingsField } from "../../uix";
 import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
@@ -114,11 +113,11 @@ export class CommentIconWidget extends WidgetType {
 			const settings = this.view.state.field(pluginSettingsField);
 			this.view.dispatch(this.view.state.update({
 				changes: [
-					...anchor_inheritance_changes(range, undefined, settings.metadata_syntax),
+					...anchor_inheritance_changes(range, undefined),
 					{
 						from: range.from,
 						to: range.to,
-						insert: create_range(settings, range.type, content, "", write_syntax(settings.metadata_syntax, range)),
+						insert: create_range(settings, range.type, content),
 					},
 				],
 				annotations: [pluginEditAnnotation.of(true)],
@@ -294,7 +293,7 @@ export class CommentIconWidget extends WidgetType {
 					.onClick((e) => {
 						this.tooltip!.removeChild(rangeContainer);
 						this.view.dispatch({
-							changes: remove_comment(range, this.view.state.field(pluginSettingsField).metadata_syntax),
+							changes: remove_comment(range),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 						editorComponent.unload();

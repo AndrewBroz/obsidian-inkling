@@ -1,11 +1,11 @@
 import { EditorSelection, Text } from "@codemirror/state";
 import type { Editor } from "obsidian";
-import { type MetadataSyntax, type PluginSettings } from "../../../types";
+import { type PluginSettings } from "../../../types";
 import { pluginSettingsField } from "../../uix";
 import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 import { type EditorSuggestion } from "../edit-handler";
 import { type MetadataCompatibility, MetadataMergeAction, range_metadata_compatible, rangeParser } from "../edit-util";
-import { generate_metadata, write_syntax } from "../edit-util/metadata";
+import { generate_metadata } from "../edit-util/metadata";
 import { construct_range, construct_suggestion } from "../edit-util/range-create";
 import {
 	CriticMarkupRange,
@@ -114,7 +114,6 @@ function mark_range(
 	inserted: string,
 	type: MarkType,
 	metadata_fields?: MetadataFields,
-	syntax: MetadataSyntax = "legacy",
 ): EditorSuggestion | undefined {
 	const in_range = ranges.ranges_in_interval(from, to);
 
@@ -159,7 +158,6 @@ function mark_range(
 						left_range.own_fields,
 						0,
 						0,
-						write_syntax(syntax, left_range),
 					).insert;
 					from = left_range.from;
 				} else {
@@ -189,7 +187,6 @@ function mark_range(
 						right_range.own_fields,
 						0,
 						0,
-						write_syntax(syntax, right_range),
 					).insert;
 					to = right_range.to;
 					special_case = true;
@@ -249,7 +246,6 @@ function mark_range(
 						left_range.own_fields,
 						start_offset,
 						end_offset,
-						write_syntax(syntax, left_range),
 					));
 				} else if (
 					!inserted && left_range.type === SuggestionType.ADDITION && !left_range.replies.length &&
@@ -319,7 +315,6 @@ function mark_range(
 						start_offset,
 						// The inserted text is added to the end below.
 						end_offset + deleted.length,
-						syntax,
 					));
 				} else {
 					insert = "";
@@ -343,7 +338,6 @@ function mark_range(
 						merge_result.merged_metadata,
 						start_offset,
 						end_offset,
-						write_syntax(syntax, left_range),
 					));
 					from = left_range.from;
 					to = left_range.to;
@@ -367,7 +361,6 @@ function mark_range(
 							merge_result.merged_metadata,
 							start_offset,
 							end_offset,
-							write_syntax(syntax, left_range),
 						));
 						from = left_range.from;
 					} else {
@@ -404,7 +397,6 @@ function mark_range(
 							merge_result.merged_metadata,
 							start_offset,
 							end_offset,
-							write_syntax(syntax, left_range),
 						));
 						from = left_range.from;
 						to = left_range.to;
@@ -450,7 +442,7 @@ function mark_range(
 					split_left_range();
 					split_right_range();
 					const added = inserted ?
-						construct_range(inserted, "", SuggestionType.ADDITION, metadata_fields, 0, 0, syntax) :
+						construct_range(inserted, "", SuggestionType.ADDITION, metadata_fields, 0, 0) :
 						{ insert: "", start_offset: 0 };
 					const start = from + affixes[0].length + added.start_offset;
 					return { from, to, insert: affixes[0] + added.insert + affixes[1], start, end: start + inserted.length };
@@ -472,7 +464,6 @@ function mark_range(
 							metadata_fields,
 							0,
 							0,
-							syntax,
 						);
 						insert = constructed.insert;
 						start = removal_from + constructed.start_offset;
@@ -550,7 +541,6 @@ function mark_range(
 			if (left_merge.type === SuggestionType.SUBSTITUTION || right_merge.type === SuggestionType.SUBSTITUTION)
 				type = SuggestionType.SUBSTITUTION;
 
-			// EXPL: Only a neighbour that was actually merged decides the syntax; a split one keeps its own.
 			({ insert, start_offset, end_offset } = construct_range(
 				insert,
 				deleted,
@@ -558,11 +548,6 @@ function mark_range(
 				metadata_fields,
 				start_offset,
 				end_offset,
-				write_syntax(
-					syntax,
-					left_merge.type ? left_range : undefined,
-					right_merge.type ? right_range : undefined,
-				),
 			));
 		}
 	}
@@ -580,7 +565,6 @@ export function mark_ranges(
 	type: MarkType,
 	metadata_fields?: MetadataFields,
 	force = false,
-	syntax: MetadataSyntax = "legacy",
 ): EditorSuggestion[] {
 	// EXPL: STRICT. A range that merely ABUTS this operation is beside it, not in it. The closed
 	//       query returned a highlight starting exactly at `from`, which the ignore-loop below then
@@ -616,7 +600,7 @@ export function mark_ranges(
 		const range = in_range[0];
 		if (range.type === SuggestionType.HIGHLIGHT || range.type === SuggestionType.COMMENT) {
 			const inner_type = range.type === SuggestionType.COMMENT ? MarkAction.REGULAR : type;
-			const edit = mark_range(ranges, text, from, to, inserted, inner_type, metadata_fields, syntax);
+			const edit = mark_range(ranges, text, from, to, inserted, inner_type, metadata_fields);
 			return edit ? [edit] : [];
 		}
 	}
@@ -693,7 +677,6 @@ export function mark_ranges(
 						"",
 						adj_type,
 						metadata_fields,
-						syntax,
 					);
 					if (edit) range_operations.push(edit!);
 				}
@@ -704,7 +687,7 @@ export function mark_ranges(
 	if (last_range_start > to)
 		to = last_range_start;
 
-	const edit = mark_range(ranges, text, last_range_start, to, inserted, type, metadata_fields, syntax);
+	const edit = mark_range(ranges, text, last_range_start, to, inserted, type, metadata_fields);
 	if (edit) range_operations.push(edit);
 
 	return range_operations;
@@ -726,7 +709,6 @@ export function mark_editor_ranges(editor: Editor, type: MarkType, settings: Plu
 			type,
 			generate_metadata(settings),
 			false,
-			settings.metadata_syntax,
 		);
 		changes.push(...edits);
 		resulting_selections.push(EditorSelection.range(edits[0].start, edits[edits.length - 1].end));

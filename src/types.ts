@@ -288,10 +288,10 @@ export interface PluginSettings {
 	 */
 	add_color_metadata: boolean;
 	/**
-	 * How Inkling writes metadata: legacy `{json}@@` inside the opener, or a trailing attribute block.
-	 * Governs new ranges and ranges Inkling rewrites anyway (touch-to-migrate). Both are always read.
+	 * One-time flag: an existing install has been told that 0.14.0 writes attribute blocks (legacy `{json}@@` is
+	 * deprecated: read, never written by choice). Named for the setting it replaced.
 	 */
-	metadata_syntax: MetadataSyntax;
+	metadata_syntax_migrated: boolean;
 	/**
 	 * Whether resolving a comment thread removes it instead of marking it done
 	 */

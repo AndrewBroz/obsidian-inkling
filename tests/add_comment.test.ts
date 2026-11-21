@@ -54,10 +54,10 @@ describe("addCommentToView with a selection", () => {
 		expect(view.state.field(commentDraftField)).toBeNull();
 	});
 
-	// EXPL: Same immediate-write path, with metadata ON and the attributes syntax, so the comment ends in a
-	//       trailing block (`{time=…}`; the default author is empty). Only the comment carries it (rule 2).
-	test("an immediate write in attributes syntax puts the caret inside the comment, not its block", () => {
-		const state = createRangeState("hello world", { metadata_syntax: "attributes" }, [commentDraftField]);
+	// EXPL: Same immediate-write path, with metadata ON, so the comment ends in a trailing attribute block
+	//       (`{time=…}`; the default author is empty). Only the comment carries it (rule 2).
+	test("an immediate write puts the caret inside the comment, not its attribute block", () => {
+		const state = createRangeState("hello world", {}, [commentDraftField]);
 		const view = new EditorView({ state });
 		view.dispatch({ selection: { anchor: 0, head: 5 } });
 		addCommentToView(view, undefined);

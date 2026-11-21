@@ -1,7 +1,6 @@
-import type { MetadataSyntax, PluginSettings } from "../../../types";
+import type { PluginSettings } from "../../../types";
 import type { EditorChange } from "../edit-handler";
 import { serializeAttrBlock, unconvertibleContent, unconvertibleReason } from "../edit-util/attributes";
-import { write_syntax } from "../edit-util/metadata";
 import {
 	type CommentRange,
 	CriticMarkupRange,
@@ -33,11 +32,8 @@ export function thread_resolvable(range: CriticMarkupRange): boolean {
  * Marks the thread resolved. Thread rule 1: `done` is written on the base only, which is the only place
  * `thread_resolved` (and every older version) reads it. Reversible: only metadata changes.
  */
-export function resolve_thread(range: CriticMarkupRange, setting: MetadataSyntax = "legacy"): EditorChange[] {
-	const base = range.base_range;
-	// EXPL: An attributes-era anchor usually has no block of its own (it inherits), so its first comment's syntax
-	//       says which form the thread is in.
-	return base.add_metadata("done", true, write_syntax(setting, base, base.replies[0]));
+export function resolve_thread(range: CriticMarkupRange): EditorChange[] {
+	return range.base_range.add_metadata("done", true);
 }
 
 /**
@@ -45,9 +41,9 @@ export function resolve_thread(range: CriticMarkupRange, setting: MetadataSyntax
  * version, so legacy threads are cleaned up when reopened. Each member edits its own metadata, so the changes never
  * overlap.
  */
-export function reopen_thread(range: CriticMarkupRange, setting: MetadataSyntax = "legacy"): EditorChange[] {
+export function reopen_thread(range: CriticMarkupRange): EditorChange[] {
 	return range.base_range.full_thread.flatMap(member =>
-		Object.hasOwn(member.own_fields, "done") ? member.delete_metadata("done", write_syntax(setting, member)) : []
+		Object.hasOwn(member.own_fields, "done") ? member.delete_metadata("done") : []
 	);
 }
 
@@ -90,11 +86,11 @@ export function unresolved_entries<T extends { range: CriticMarkupRange }>(entri
 	return entries.filter(entry => thread_resolvable(entry.range) && !thread_resolved(entry.range));
 }
 
-export type ResolveSettings = Pick<PluginSettings, "metadata_syntax" | "remove_on_resolve">;
+export type ResolveSettings = Pick<PluginSettings, "remove_on_resolve">;
 
 /** What an editor Resolve action does: mark the thread done or, with `remove_on_resolve`, remove it. */
 export function resolve_action(range: CriticMarkupRange, settings: ResolveSettings): EditorChange[] {
-	return settings.remove_on_resolve ? remove_thread(range) : resolve_thread(range, settings.metadata_syntax);
+	return settings.remove_on_resolve ? remove_thread(range) : resolve_thread(range);
 }
 
 /**
@@ -108,11 +104,7 @@ export function resolve_source(range: CriticMarkupRange, text: string, settings:
 	if (settings.remove_on_resolve)
 		return range === base && base.type === SuggestionType.HIGHLIGHT ? base.unwrap() : "";
 	if (range !== base) return text.slice(range.from, range.to);
-	return range_source_with_fields(
-		range,
-		{ ...range.own_fields, done: true },
-		write_syntax(settings.metadata_syntax, range, range.replies[0]),
-	);
+	return range_source_with_fields(range, { ...range.own_fields, done: true });
 }
 
 /**
@@ -120,11 +112,11 @@ export function resolve_source(range: CriticMarkupRange, text: string, settings:
  * copies). A range without its own `done` comes back byte-identical, so reopening never migrates or normalises
  * members it has no reason to touch.
  */
-export function reopen_source(range: CriticMarkupRange, text: string, setting: MetadataSyntax): string {
+export function reopen_source(range: CriticMarkupRange, text: string): string {
 	if (!Object.hasOwn(range.own_fields, "done")) return text.slice(range.from, range.to);
 	const fields = { ...range.own_fields };
 	delete fields.done;
-	return range_source_with_fields(range, fields, write_syntax(setting, range));
+	return range_source_with_fields(range, fields);
 }
 
 /**
@@ -136,7 +128,6 @@ export function reopen_source(range: CriticMarkupRange, text: string, setting: M
 export function anchor_inheritance_changes(
 	comment: CriticMarkupRange,
 	next_first: MetadataFields | undefined,
-	setting: MetadataSyntax,
 ): EditorChange[] {
 	const base = comment.base_range;
 	if (base.type !== SuggestionType.HIGHLIGHT || base.replies[0] !== comment) return [];
@@ -148,14 +139,14 @@ export function anchor_inheritance_changes(
 		(missing as Record<string, unknown>)[key] = inherited;
 	}
 	if (!Object.keys(missing).length) return [];
-	return base.set_metadata({ ...missing, ...base.own_fields }, write_syntax(setting, base, comment));
+	return base.set_metadata({ ...missing, ...base.own_fields });
 }
 
 /** Removes one comment, keeping its anchor's authorship if the comment was the one it inherited from. */
-export function remove_comment(comment: CriticMarkupRange, setting: MetadataSyntax): EditorChange[] {
+export function remove_comment(comment: CriticMarkupRange): EditorChange[] {
 	const next = comment.base_range.replies[1];
 	return [
-		...anchor_inheritance_changes(comment, next?.own_fields, setting),
+		...anchor_inheritance_changes(comment, next?.own_fields),
 		{ from: comment.from, to: comment.to, insert: "" },
 	];
 }
@@ -167,15 +158,11 @@ export function remove_comment(comment: CriticMarkupRange, setting: MetadataSynt
  * (for substitutions, that includes the `~>` separator). Empty fields produce no metadata. The source covers the
  * full range, an attribute block included, which matches the `from..to` it replaces.
  */
-export function range_source_with_fields(
-	range: CriticMarkupRange,
-	fields: MetadataFields,
-	syntax: MetadataSyntax = range.meta?.syntax ?? "legacy",
-): string {
+export function range_source_with_fields(range: CriticMarkupRange, fields: MetadataFields): string {
 	if (!Object.values(fields).some(value => value !== undefined))
 		return range.text;
 	// EXPL: Lossless or untouched: fields or content that would not read back from an attribute block stay legacy.
-	if (syntax === "attributes" && !unconvertibleReason(fields) && !unconvertibleContent(range.text))
+	if (!unconvertibleReason(fields) && !unconvertibleContent(range.text))
 		return range.text + serializeAttrBlock(fields);
 	return range.text.slice(0, 3) + JSON.stringify(fields) + "@@" + range.text.slice(3);
 }
@@ -195,5 +182,5 @@ export function cancel_empty_comment(range: CommentRange): EditorChange[] {
 	if (is_only_reply)
 		return [{ from: base.from, to: range.to, insert: base.unwrap() }];
 
-	return remove_comment(range, "legacy");
+	return remove_comment(range);
 }

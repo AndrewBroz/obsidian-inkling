@@ -3,7 +3,6 @@ import { EditorView } from "@codemirror/view";
 
 import { cmenuGlobalCommands } from "../src/editor/uix/context-menu";
 import type CommentatorPlugin from "../src/main";
-import type { MetadataSyntax } from "../src/types";
 import { createRangeState } from "./helpers";
 
 // EXPL: A stand-in for Obsidian's Menu/MenuItem: every setter chains, `setSubmenu` returns a nested menu, and
@@ -33,8 +32,8 @@ function fakeMenu(): FakeMenu {
 }
 
 /** Open the editor menu with the cursor at `cursor` and click "Set metadata" > `title`. */
-function clickSetMetadata(doc: string, cursor: number, title: string, syntax: MetadataSyntax): string {
-	const state = createRangeState(doc, { metadata_syntax: syntax, author: "Z" });
+function clickSetMetadata(doc: string, cursor: number, title: string): string {
+	const state = createRangeState(doc, { author: "Z" });
 	const view = new EditorView({ state });
 	view.dispatch({ selection: EditorSelection.cursor(cursor) });
 	let handler: ((menu: FakeMenu, editor: { cm: EditorView }) => void) | undefined;
@@ -51,16 +50,13 @@ function clickSetMetadata(doc: string, cursor: number, title: string, syntax: Me
 	return view.state.doc.toString();
 }
 
+// EXPL: Legacy metadata is deprecated: read, never written. Every range gets an attribute block.
 describe("context menu Set author", () => {
-	test("a range with no metadata follows the attributes setting", () => {
-		expect(clickSetMetadata("x{++a++}y", 4, "Set author", "attributes")).toBe("x{++a++}{author=Z}y");
-	});
-
-	test("a range with no metadata follows the legacy setting", () => {
-		expect(clickSetMetadata("x{++a++}y", 4, "Set author", "legacy")).toBe(`x{++{"author":"Z"}@@a++}y`);
-	});
-
-	test("an attributes range stays attribute form under the legacy setting", () => {
-		expect(clickSetMetadata("x{++a++}{time=1}y", 4, "Set author", "legacy")).toBe("x{++a++}{time=1 author=Z}y");
+	test.each([
+		["no metadata", "x{++a++}y", "x{++a++}{author=Z}y"],
+		["legacy metadata, which is converted", `x{++{"time":1}@@a++}y`, "x{++a++}{time=1 author=Z}y"],
+		["an attribute block", "x{++a++}{time=1}y", "x{++a++}{time=1 author=Z}y"],
+	])("a range with %s writes an attribute block", (_, doc, out) => {
+		expect(clickSetMetadata(doc, 4, "Set author")).toBe(out);
 	});
 });

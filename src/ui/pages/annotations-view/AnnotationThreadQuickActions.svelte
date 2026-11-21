@@ -109,7 +109,7 @@ const refresh_resolve_label = () => (resolve_label = resolve_label_for());
 					applyRangeEditsToVault(
 						plugin,
 						[entry],
-						applyToFile.bind(null, (range, text) => reopen_source(range, text, plugin.settings.metadata_syntax)),
+						applyToFile.bind(null, (range, text) => reopen_source(range, text)),
 						true,
 					))}
 				/>

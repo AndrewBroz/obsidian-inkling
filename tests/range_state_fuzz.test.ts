@@ -2,7 +2,7 @@ import { DEFAULT_SETTINGS } from "../src/constants";
 import { rangeParser } from "../src/editor/base";
 import { findCodeRegions } from "../src/editor/base/edit-util/code-regions";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
-import { type CriticMarkupRange, SubstitutionRange } from "../src/editor/base/ranges";
+import type { CriticMarkupRange } from "../src/editor/base/ranges";
 import { createRangeState } from "./helpers";
 
 // EXPL: Fuzz guard for the interval tree's `max` augmentation (see range_state_tree.test.ts and
@@ -167,27 +167,9 @@ describe("fuzz: interval tree never leaves two range objects at one position", (
 
 // EXPL: Review focus 1. The incremental parser must agree with a fresh parse after every edit, including edits
 //       inside, at the edge of, and right after an attribute block, which lies past the grammar node.
-//       Edits never touch a CriticMarkup bracket token (opener, closer, `~>`): breaking one produces malformed
-//       markup, where the incremental parse diverges from a full one for a pre-existing reason unrelated to
-//       attribute blocks (a malformed node stretched to the next closer keeps stale ranges nested inside it;
-//       see .superpowers/sdd/2026-10-16-inklingmarkup-metadata-attributes/task-3-report.md). Edits inside and
-//       around blocks are unrestricted, which is what this oracle is for.
+//       Edits may land anywhere, brackets included: breaking a bracket used to be exempt, as the incremental parse
+//       then diverged (a highlight kept a comment the edit destroyed as its reply; fixed in range-state.ts).
 const MAX_REROLLS = 50;
-
-/** The bracket tokens of every range in `doc`, as [from, to) spans. */
-function bracketTokens(doc: string): [number, number][] {
-	const tokens: [number, number][] = [];
-	for (const range of getRangesInText(doc, { ...DEFAULT_SETTINGS })) {
-		tokens.push([range.from, range.from + 3], [range.closer_to - 3, range.closer_to]);
-		if (range instanceof SubstitutionRange) tokens.push([range.middle, range.middle + 2]);
-	}
-	return tokens;
-}
-
-/** True if the edit inserts strictly inside a bracket token, or deletes any part of one. */
-function touchesBracket(tokens: [number, number][], from: number, to: number): boolean {
-	return tokens.some(([start, end]) => from === to ? start < from && from < end : from < end && start < to);
-}
 
 type Edit = { from: number; to: number; insert: string };
 
@@ -220,7 +202,7 @@ function diverges(state: ReturnType<typeof createRangeState>): { incremental: st
 
 /**
  * Random edit sequences over documents with attribute blocks; after each transaction the incremental ranges must
- * equal a full parse, threads and fields included. Each transaction makes 1 to `max_edits` non-overlapping edits, none touching a bracket token.
+ * equal a full parse, threads and fields included. Each transaction makes 1 to `max_edits` non-overlapping edits.
  * @returns the first failures found (at most 3), with their reproduction.
  */
 function incrementalVsFull(seed: number, max_edits: number): string[] {
@@ -232,7 +214,6 @@ function incrementalVsFull(seed: number, max_edits: number): string[] {
 		let state = createRangeState(initial);
 		const transactions: Edit[][] = [];
 		for (let i = 0; i < EDITS_PER_SEQUENCE; i++) {
-			const tokens = bracketTokens(state.doc.toString());
 			const count = max_edits === 1 ? 1 : 1 + Math.floor(rng() * max_edits);
 			const edits: Edit[] = [];
 			for (let roll = 0; roll < MAX_REROLLS && edits.length < count; roll++) {
@@ -240,7 +221,6 @@ function incrementalVsFull(seed: number, max_edits: number): string[] {
 				const is_insert = rng() < 0.7;
 				const to = is_insert ? from : Math.min(state.doc.length, from + 1 + Math.floor(rng() * 4));
 				const insert = is_insert ? pick(INSERTS) : "";
-				if (touchesBracket(tokens, from, to)) continue;
 				if (edits.some(edit => from <= edit.to && edit.from <= to)) continue;
 				edits.push({ from, to, insert });
 			}
@@ -311,5 +291,20 @@ describe("a block edit that makes a range adjacent to the next comment", () => {
 		const [highlight, comment] = state.field(rangeParser).ranges.ranges;
 		expect(comment.base_range).toBe(comment);
 		expect(highlight.fields.author).toBeUndefined();
+	});
+});
+
+// EXPL: Breaking a reply's bracket destroys the comment. Its base (here a highlight) kept it in `replies`, since no
+//       rebuilt thread had the base as anchor: the gutter could still show a reply the note no longer has.
+describe("an edit that destroys a reply", () => {
+	test.each([
+		["breaking its opener", "x{==h==}{>>c<<}y", { from: 9, to: 10, insert: "" }],
+		["breaking its closer", "x{==h==}{>>c<<}y", { from: 12, to: 13, insert: "" }],
+		["breaking the first of two replies", "x{==h==}{>>c<<}{>>d<<}y", { from: 9, to: 10, insert: "" }],
+	])("%s detaches it from its base", (_name, doc, change) => {
+		const state = createRangeState(doc).update({ changes: change }).state;
+		expect(diverges(state)).toBeUndefined();
+		const [highlight] = state.field(rangeParser).ranges.ranges;
+		expect(highlight.replies).toEqual([]);
 	});
 });

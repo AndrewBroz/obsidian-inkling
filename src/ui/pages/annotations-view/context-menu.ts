@@ -118,7 +118,7 @@ export function onContextMenu(
 						applyRangeEditsToVault(
 							plugin,
 							resolvable_entries,
-							applyToFile.bind(null, (range, text) => reopen_source(range, text, plugin.settings.metadata_syntax)),
+							applyToFile.bind(null, (range, text) => reopen_source(range, text)),
 						)
 					);
 			}

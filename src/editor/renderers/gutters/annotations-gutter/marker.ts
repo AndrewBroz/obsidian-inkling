@@ -24,7 +24,6 @@ import {
 	SuggestionType,
 	thread_resolvable,
 	thread_resolved,
-	write_syntax,
 } from "../../../base";
 
 import { AnnotationInclusionType } from "../../../../constants";
@@ -232,17 +231,11 @@ class AnnotationNode extends Component {
 			//       resolve/delete dispatches (mousedown blurs the open editor before click fires),
 			//       applying pre-resolve offsets to the post-resolve document and corrupting text.
 			const changes = [
-				...anchor_inheritance_changes(this.range, undefined, settings.metadata_syntax),
+				...anchor_inheritance_changes(this.range, undefined),
 				{
 					from: this.range.from,
 					to: this.range.to,
-					insert: create_range(
-						settings,
-						SuggestionType.COMMENT,
-						this.new_text,
-						"",
-						write_syntax(settings.metadata_syntax, this.range),
-					),
+					insert: create_range(settings, SuggestionType.COMMENT, this.new_text),
 				},
 			];
 			this.text = this.new_text;
@@ -322,7 +315,7 @@ class AnnotationNode extends Component {
 					.setSection("comment-handling")
 					.onClick(() => {
 						this.marker.view.dispatch({
-							changes: remove_comment(this.range, this.marker.view.state.field(pluginSettingsField).metadata_syntax),
+							changes: remove_comment(this.range),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});

@@ -12,4 +12,4 @@ exports[`mark_ranges characterization (snapshot-pinned) insert between two addit
 
 exports[`mark_ranges characterization (snapshot-pinned) insert inside existing addition 1`] = `"he{++llyo++}"`;
 
-exports[`mark_ranges characterization (snapshot-pinned) insert into range with different author is kept outside that range 1`] = `"a{++{"author":"B"}@@b++}{++{"author":"A"}@@x++}{++{"author":"B"}@@c++}d"`;
+exports[`mark_ranges characterization (snapshot-pinned) insert into range with different author is kept outside that range 1`] = `"a{++{"author":"B"}@@b++}{++x++}{author=A}{++{"author":"B"}@@c++}d"`;

@@ -20,7 +20,6 @@ import {
 } from "../base";
 import { addCommentToView, generateCriticMarkupPatchFromDiff } from "../base";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
-import { cleanupNotice, cleanupUndos, cleanupView } from "./cleanup-trigger";
 import {
 	editMode,
 	editModeEnforcedState,
@@ -29,6 +28,7 @@ import {
 	previewMode,
 	previewModeState,
 } from "../settings";
+import { cleanupNotice, cleanupUndos, cleanupView } from "./cleanup-trigger";
 import { getEditMode, pluginEditAnnotation } from "./extensions/editing-modes";
 
 export const debug_application_commands = (plugin: CommentatorPlugin) => [
@@ -71,34 +71,39 @@ export const suggestion_commands: (plugin: CommentatorPlugin) => ECommand[] = (p
 	}));
 
 export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugin) => [
-	...([
-		["attributes", "convert-metadata-to-attributes", "Convert metadata in this note to attribute blocks"],
-		["legacy", "convert-metadata-to-legacy", "Convert metadata in this note back to legacy"],
-	] as const).map(([target, id, name]) => ({
-		id,
-		name,
+	{
+		// (The id predates the name; kept so hotkeys bound to it still work.)
+		id: "convert-metadata-to-attributes",
+		name: "Update Inkling comments and suggestions to the new format",
 		icon: "replace-all",
 		editor_context: true,
 		regular_callback: (editor: Editor, _: MarkdownView) => {
 			const ranges = editor.cm.state.field(rangeParser).ranges.ranges;
-			const { changes, converted, skipped } = convert_metadata(ranges, target);
-			const left = skipped.length ? ` ${skipped.length} will stay legacy: ${skipped[0].reason}.` : "";
+			const { changes, converted, skipped } = convert_metadata(ranges);
+			const count = (n: number) => n === 1 ? "1 comment or suggestion" : `${n} comments and suggestions`;
+			const left = !skipped.length ?
+				"" :
+				skipped.length === 1 ?
+				" One can't be updated and stays as it is." :
+				` ${skipped.length} can't be updated and stay as they are.`;
 			if (!converted) {
-				new Notice(`Inkling: nothing to convert.${left}`);
+				new Notice(
+					skipped.length ?
+						`Inkling: nothing in this note can be updated.${left}` :
+						"Inkling: everything in this note is already in the new format.",
+				);
 				return;
 			}
 			new ConfirmModal(plugin.app, {
-				title: name,
-				body: `${converted} range${converted === 1 ? "" : "s"} will be rewritten.${left}` +
-					(target === "attributes" ?
-						" Collaborators on Inkling older than 0.13 or on Commentator will see stray metadata." :
-						""),
-				confirm: "Convert",
+				title: "Update to the new format",
+				body: `${count(converted)} will be updated.${left}` +
+					" Anyone you share this note with needs Inkling 0.13 or later.",
+				confirm: "Update",
 				onConfirm: () =>
 					editor.cm.dispatch(editor.cm.state.update({ changes, annotations: [pluginEditAnnotation.of(true)] })),
 			}).open();
 		},
-	})),
+	},
 	{
 		id: "remove-resolved-comments",
 		name: "Remove resolved comments in this note",

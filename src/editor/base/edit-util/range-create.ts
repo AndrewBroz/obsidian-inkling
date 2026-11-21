@@ -9,7 +9,6 @@ export function construct_suggestion(
 	metadata_fields?: MetadataFields,
 	start_offset = 0,
 	end_offset = 0,
-	syntax: MetadataSyntax = "legacy",
 ) {
 	return construct_range(
 		inserted,
@@ -20,7 +19,6 @@ export function construct_suggestion(
 		metadata_fields,
 		start_offset,
 		end_offset,
-		syntax,
 	);
 }
 
@@ -31,7 +29,6 @@ export function construct_range(
 	metadata_fields?: MetadataFields,
 	start_offset = 0,
 	end_offset = 0,
-	syntax: MetadataSyntax = "legacy",
 ) {
 	if (!type)
 		return { insert: deleted + inserted, start_offset, end_offset };
@@ -41,14 +38,13 @@ export function construct_range(
 	const body = type === SuggestionType.SUBSTITUTION ?
 		deleted + brackets[1] + inserted + brackets[2] :
 		deleted + inserted + brackets[1];
-	// EXPL: Lossless or untouched. Merging into a legacy range can carry fields a block cannot hold, and content that
+	// EXPL: Legacy metadata is deprecated and never written by choice: always attribute blocks, except where they
+	//       would lose something. Merging into a legacy range can carry fields a block cannot hold, and content that
 	//       starts with a JSON object and `@@` would read back as legacy metadata; keep both legacy.
-	if (
-		has_fields && syntax === "attributes" &&
-		(unconvertibleReason(metadata_fields!) || unconvertibleContent(brackets[0] + body))
-	) {
-		syntax = "legacy";
-	}
+	const syntax: MetadataSyntax =
+		has_fields && (unconvertibleReason(metadata_fields!) || unconvertibleContent(brackets[0] + body)) ?
+			"legacy" :
+			"attributes";
 	// EXPL: Legacy metadata sits between the opener and the content, so it shifts every offset into the range.
 	//       An attribute block sits after the closer and shifts nothing the caller measures.
 	const prefix = has_fields && syntax === "legacy" ? JSON.stringify(metadata_fields) + "@@" : "";
@@ -62,32 +58,20 @@ export function construct_range(
 }
 
 export function create_suggestion(settings: PluginSettings, inserted: string, deleted: string = "") {
-	return construct_suggestion(inserted, deleted, generate_metadata(settings), 0, 0, settings.metadata_syntax).insert;
+	return construct_suggestion(inserted, deleted, generate_metadata(settings)).insert;
 }
 
-/**
- * A new range with freshly generated metadata. `syntax` defaults to the setting; a caller rewriting an existing range
- * passes `write_syntax(setting, range)` so an attribute-form range is never written back as legacy.
- */
-export function create_range(
-	settings: PluginSettings,
-	type: SuggestionType,
-	inserted: string,
-	deleted: string = "",
-	syntax: MetadataSyntax = settings.metadata_syntax,
-) {
-	return construct_range(inserted, deleted, type, generate_metadata(settings), 0, 0, syntax).insert;
+/** A new range with freshly generated metadata. */
+export function create_range(settings: PluginSettings, type: SuggestionType, inserted: string, deleted: string = "") {
+	return construct_range(inserted, deleted, type, generate_metadata(settings)).insert;
 }
 
 /**
  * A highlight with its first comment, written in one action. Metadata is generated once, so the pair can never
- * straddle a second boundary. Attributes syntax applies thread rule 2: the anchor states nothing and inherits from
- * the comment. Legacy writes both, so older versions and Commentator still see the anchor's author.
+ * straddle a second boundary. Thread rule 2: the anchor states nothing and inherits from the comment.
  */
 export function create_anchored_comment(settings: PluginSettings, anchor_text: string, comment_text: string) {
 	const fields = generate_metadata(settings);
-	const syntax = settings.metadata_syntax;
-	const anchor_fields = syntax === "attributes" ? undefined : fields;
-	return construct_range(anchor_text, "", SuggestionType.HIGHLIGHT, anchor_fields, 0, 0, syntax).insert +
-		construct_range(comment_text, "", SuggestionType.COMMENT, fields, 0, 0, syntax).insert;
+	return construct_range(anchor_text, "", SuggestionType.HIGHLIGHT, undefined).insert +
+		construct_range(comment_text, "", SuggestionType.COMMENT, fields).insert;
 }

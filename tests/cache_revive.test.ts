@@ -30,7 +30,7 @@ describe("vault cache entries from before attribute blocks", () => {
 			RANGE_PROTOTYPE_MAPPER[SuggestionType.HIGHLIGHT].prototype,
 		) as CriticMarkupRange;
 		const source = resolve_source(stale, DOC, { ...DEFAULT_SETTINGS, remove_on_resolve: false });
-		expect(source).toBe(`{=={"done":true}@@some==}`);
+		expect(source).toBe(`{==some==}{done=true}`);
 	});
 
 	test("the database version is past the last pre-attributes cache, so old caches are cleared and rebuilt", () => {

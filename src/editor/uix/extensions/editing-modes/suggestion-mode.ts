@@ -98,21 +98,116 @@ export const suggestionMode = (settings: PluginSettings): Extension =>
 
 const dmp = new DiffMatchPatch();
 
-/** `edit` (replacing `old`) as the changes a character diff finds, so positions in text it keeps map through it. */
-function minimal(old: string, edit: { from: number; insert: string }) {
+const FENCES = /`{3}|~{3}/;
+const MARKUP = /\{(?:\+\+|--|~~|==|>>)(?:\{[^{}]*\}@@)?|(?:\+\+|--|~~|==|<<)\}(?:\{[^{}]*\})?|~>/g;
+
+type Piece = { text: string; markup: boolean };
+
+/** `text` split into its characters, except that each delimiter, with any metadata it carries, is one piece. */
+function pieces(text: string) {
+	const out: Piece[] = [];
+	const chars = (slice: string) => [...slice].map(char => ({ text: char, markup: false }));
+	let last = 0;
+	for (const m of text.matchAll(MARKUP)) {
+		out.push(...chars(text.slice(last, m.index)), { text: m[0], markup: true });
+		last = m.index + m[0].length;
+	}
+	out.push(...chars(text.slice(last)));
+	return out;
+}
+
+/** Moves each lone insertion or deletion in `diffs` that could as well sit elsewhere in a run of the same text toward `at`. */
+function slide(diffs: [number, string][], at: number) {
+	let p = 0;
+	for (let k = 0; k < diffs.length; k++) {
+		if (diffs[k][0] !== 0 && (diffs[k - 1]?.[0] ?? 0) === 0 && (diffs[k + 1]?.[0] ?? 0) === 0) {
+			if (k === 0) {
+				diffs.unshift([0, ""]);
+				k++;
+			}
+			if (k === diffs.length - 1) diffs.push([0, ""]);
+			const left = diffs[k - 1], right = diffs[k + 1], change = diffs[k];
+			for (let c; p > at && (c = left[1].at(-1)) !== undefined && c === change[1].at(-1); p--)
+				[left[1], change[1], right[1]] = [left[1].slice(0, -1), c + change[1].slice(0, -1), c + right[1]];
+			for (let c; p < at && (c = right[1][0]) !== undefined && c === change[1][0]; p++)
+				[left[1], change[1], right[1]] = [left[1] + c, change[1].slice(1) + c, right[1].slice(1)];
+		}
+		if (diffs[k][0] !== 1) p += diffs[k][1].length;
+	}
+}
+
+/**
+ * `edit` (replacing `old`) as the changes a diff finds, so positions in text it keeps map through it. `at` is where
+ * the change that made `edit` was: of equal diffs (text typed into a run of the same character), the one nearest it.
+ * EXPL: The diff is of pieces (see `pieces`). Text is aligned first, on its own; the markup between two characters it
+ *       keeps is diffed after. A diff of characters, when an edit also rewrote a range's metadata (its format, author
+ *       or time), aligned the range's text with characters of the metadata, and mapped other cursors in that range to
+ *       the wrong place.
+ */
+function minimal(old: string, edit: { from: number; insert: string }, at: number) {
+	const codes = new Map<string, string>();
+	// (A piece is one character to the diff. Only alignment rides on the code: one equal to some character aligns worse.)
+	const code = ({ text }: Piece) => {
+		if (text.length === 1) return text;
+		if (!codes.has(text)) codes.set(text, String.fromCharCode(0xE000 + codes.size));
+		return codes.get(text)!;
+	};
+	const before = pieces(old), after = pieces(edit.insert);
+	const text_of = (list: Piece[]) => list.flatMap((piece, i) => piece.markup ? [] : [i]);
+	const text_before = text_of(before), text_after = text_of(after);
+	let target = 0;
+	for (
+		let i = 0, raw = edit.from;
+		i < before.length && raw + before[i].text.length <= at;
+		raw += before[i++].text.length
+	) {
+		if (!before[i].markup) target++;
+	}
+	const diffs = dmp.diff_main(
+		text_before.map(i => code(before[i])).join(""),
+		text_after.map(i => code(after[i])).join(""),
+	);
+	slide(diffs, target);
+	// The pieces of text kept, as [index in `before`, in `after`], between the two ends.
+	const kept: [number, number][] = [[-1, -1]];
+	let x = 0, y = 0;
+	for (const [op, text] of diffs) {
+		if (op === 0) { for (let n = 0; n < text.length; n++) kept.push([text_before[x++], text_after[y++]]); }
+		else if (op === -1) x += text.length;
+		else y += text.length;
+	}
+	kept.push([before.length, after.length]);
+
 	const out: { from: number; to: number; insert: string }[] = [];
 	let pos = edit.from;
-	for (const [op, text] of dmp.diff_main(old, edit.insert)) {
-		if (op !== 0 && out.at(-1)?.to !== pos) out.push({ from: pos, to: pos, insert: "" });
-		if (op === 1) out.at(-1)!.insert += text;
-		else pos += text.length;
-		if (op === -1) out.at(-1)!.to = pos;
+	for (let k = 1; k < kept.length; k++) {
+		const gap_before = before.slice(kept[k - 1][0] + 1, kept[k][0]),
+			gap_after = after.slice(kept[k - 1][1] + 1, kept[k][1]);
+		let a = 0, b = 0;
+		for (const [op, text] of dmp.diff_main(gap_before.map(code).join(""), gap_after.map(code).join(""))) {
+			if (op !== 0 && out.at(-1)?.to !== pos) out.push({ from: pos, to: pos, insert: "" });
+			if (op === 1) {
+				out.at(-1)!.insert += gap_after.slice(b, b += text.length).map(piece => piece.text).join("");
+				continue;
+			}
+			pos += gap_before.slice(a, a += text.length).reduce((n, piece) => n + piece.text.length, 0);
+			if (op === -1) out.at(-1)!.to = pos;
+			else b += text.length;
+		}
+		pos += before[kept[k][0]]?.text.length ?? 0;
 	}
 	return out;
 }
 
-const FENCES = /`{3}|~{3}/;
-const MARKUP = /\{(?:\+\+|--|~~|==|>>)(?:\{[^{}]*\}@@)?|(?:\+\+|--|~~|==|<<)\}(?:\{[^{}]*\})?|~>/g;
+/** What `text` says: its text and each range's type, parts and fields, but not how its metadata is written, nor times. */
+function reading(text: string, settings: PluginSettings) {
+	for (const r of getRangesInText(text, settings).reverse()) {
+		const fields = Object.entries(r.fields).filter(([key, value]) => key !== "time" && value !== undefined).sort();
+		const said = JSON.stringify([r.type, r.unwrap_parts(), fields]);
+		text = text.slice(0, r.from) + "\0" + said + "\0" + text.slice(r.to);
+	}
+	return text;
+}
 
 // TODO: Functionality: Double click mouse should also floodfill (problem: no specific userevent attached)
 function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction {
@@ -166,12 +261,12 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		let state = tr.startState, doc = state.doc, all = ChangeSet.empty(doc.length), low = Infinity;
 		let fresh: CriticMarkupRanges | undefined;
 		const cursors: number[] = [];
-		/** Applies change `i`'s `edits` (in `doc`), with its cursor at `cursor`, for the changes before it. */
-		const apply = (i: number, edits: { from: number; to: number; insert: string }[], cursor: number) => {
-			const changes = ChangeSet.of(
-				changed_ranges.length > 1 ? edits.flatMap(edit => minimal(doc.sliceString(edit.from, edit.to), edit)) : edits,
-				doc.length,
-			);
+		/** Change `i`'s `edits` (in `doc`), made at `at`, as the changes they make there (see `minimal`). */
+		const reduce = (edits: { from: number; to: number; insert: string }[], at: number) =>
+			ChangeSet.of(edits.flatMap(edit => minimal(doc.sliceString(edit.from, edit.to), edit, at)), doc.length);
+		/** Applies change `i`'s `edits` (in `doc`, made at `at`), with its cursor at `cursor`, for the changes before it. */
+		const apply = (i: number, edits: { from: number; to: number; insert: string }[], cursor: number, at: number) => {
+			const changes = changed_ranges.length > 1 ? reduce(edits, at) : ChangeSet.of(edits, doc.length);
 			for (let k = i + 1; k < cursors.length; k++) cursors[k] = changes.mapPos(cursors[k]);
 			cursors[i] = cursor;
 			all = all.compose(changes);
@@ -203,7 +298,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				(fresh ??= new CriticMarkupRanges(getRangesInText(doc.toString(), settings)));
 			let editor_change = { ...original, from, to, anchor, deleted: doc.sliceString(from, to) };
 			if (in_code(original)) {
-				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length);
+				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length, from);
 				continue;
 			}
 			// EXPL: Typing in one's own addition that would make one of its lines a fence line (markup ignored, as the
@@ -230,7 +325,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				const tail = end < r.closer_to - 3 ?
 					"\n" + (after && doc.sliceString(r.from, r.range_start) + after + closer) :
 					"";
-				apply(i, [{ from: start, to: r.to, insert: typed + rest + tail }], start + typed.length);
+				apply(i, [{ from: start, to: r.to, insert: typed + rest + tail }], start + typed.length, from);
 				continue;
 			}
 			// EXPL: A selection end inside a substitution's "~>" is at its start (or, for the selection's start, its end):
@@ -285,10 +380,27 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				type,
 				metadata,
 				false,
-				settings.metadata_syntax,
 			);
 			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
-			apply(i, edits, backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset);
+			const cursor = backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset;
+			// EXPL: A keystroke that changes what the document says (see `reading`) is tracked; one that does not
+			//       (Backspace inside one's own deletion) leaves it alone, where rewriting the range would only have
+			//       converted its metadata's format or refreshed its time. The cursor moves as it would have.
+			if (!original.inserted && edits.length) {
+				const reduced = reduce(edits, editor_change.from);
+				const touched = ranges.ranges_in_interval(
+					Math.min(...edits.map(edit => edit.from)),
+					Math.max(...edits.map(edit => edit.to)),
+				);
+				const lo = Math.min(...edits.map(edit => edit.from), ...touched.map(r => r.from));
+				const hi = Math.max(...edits.map(edit => edit.to), ...touched.map(r => r.to));
+				const now = reduced.apply(doc).sliceString(reduced.mapPos(lo, -1), reduced.mapPos(hi, 1));
+				if (reading(doc.sliceString(lo, hi), settings) === reading(now, settings)) {
+					apply(i, [], reduced.invert(doc).mapPos(cursor), editor_change.from);
+					continue;
+				}
+			}
+			apply(i, edits, cursor, editor_change.from);
 		}
 
 		if (!changed_ranges.length)
