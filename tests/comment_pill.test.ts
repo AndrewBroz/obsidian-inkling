@@ -73,10 +73,6 @@ describe("pill_eligible", () => {
 		expect(pill_eligible(stateWithSelection(doc, anchor, head))).toBe(false);
 	});
 
-	test("a whole line selected above a fence is eligible", () => {
-		expect(pill_eligible(stateWithSelection("intro\n```\nx\n```", 0, 6))).toBe(true);
-	});
-
 	test("a non-empty selection in a read-only state is not eligible", () => {
 		const state = stateWithSelection("hello world", 0, 5, [EditorState.readOnly.of(true)]);
 		expect(pill_eligible(state)).toBe(false);

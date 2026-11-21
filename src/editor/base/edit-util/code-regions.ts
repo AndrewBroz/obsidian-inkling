@@ -10,12 +10,6 @@ export interface CodeRegion {
 
 const FENCE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
 
-/** The fence of a fence line: everything before its fence characters, and their offsets. */
-export function fenceMarker(line: string): { prefix: string; from: number; to: number } {
-	const m = /^(.*?)(`{3,}|~{3,})/.exec(line)!;
-	return { prefix: m[1], from: m[1].length, to: m[1].length + m[2].length };
-}
-
 /** `line` with its tabs expanded to the next multiple of 4 columns. */
 const expand = (line: string) =>
 	line.includes("\t") ?

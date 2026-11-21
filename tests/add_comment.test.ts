@@ -191,22 +191,6 @@ describe("addCommentToView inside fenced code", () => {
 		}
 	});
 
-	test("a whole line selected above a fence (triple-click) is commented without its newline", () => {
-		const doc = "intro\n```\nx\n```";
-		const view = viewWith(doc, 0, 6, []);
-		addCommentToView(view, undefined);
-
-		const text = view.state.doc.toString();
-		expect(text).toBe("{==intro==}{>><<}\n```\nx\n```");
-		const parsed = view.state.field(rangeParser);
-		expect(parsed.code_regions.map(r => text.slice(r.from, r.to))).toEqual(["```\nx\n```"]);
-		expect(parsed.ranges.ranges.map(r => text.slice(r.from, r.to))).toEqual(["{==intro==}", "{>><<}"]);
-
-		const drafting = viewWith(doc, 0, 6);
-		addCommentToView(drafting, undefined);
-		expect(drafting.state.field(commentDraftField)).toMatchObject({ from: 0, to: 5 });
-	});
-
 	test.each([
 		["at the end of a closing fence", "```\nx\n```\nafter", 9, 9],
 		["at the start of an opening fence", "intro\n```\nx\n```", 6, 6],

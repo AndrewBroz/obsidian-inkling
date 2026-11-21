@@ -1,16 +1,13 @@
-import { ChangeSet, EditorSelection, EditorState, type Extension, type Text, Transaction } from "@codemirror/state";
+import { EditorSelection, EditorState, type Extension, SelectionRange, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { editorEditorField, Notice } from "obsidian";
+import { editorEditorField } from "obsidian";
 import type { VimEditor } from "obsidian-typings";
 import { type PluginSettings } from "../../../../types";
 
 import {
-	type CriticMarkupRange,
-	CriticMarkupRanges,
 	cursor_move_range,
 	cursorMoved,
 	deriveUserEvent,
-	type EditorEditChange,
 	generate_metadata,
 	getEditorRanges,
 	getUserEvents,
@@ -18,17 +15,13 @@ import {
 	mark_ranges,
 	MarkAction,
 	type MarkType,
-	range_metadata_compatible,
 	rangeParser,
 	SubstitutionRange,
 	SuggestionType,
 } from "../../../base";
 
-import { findCodeRegions } from "../../../base/edit-util/code-regions";
-import { getRangesInText } from "../../../base/edit-util/range-parser";
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
-import { guardChange, type GuardedEdit, minimalChanges, type SuggestionTracker } from "./fence-guard";
 import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
 
 const vim_action_resolver = {
@@ -123,79 +116,41 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		if (is_exempt_from_tracking(tr))
 			return tr;
 
+		const { ranges, code_regions } = tr.startState.field(rangeParser);
+		// EXPL: A change touching a code block (its content or a fence line, start-document positions) is applied as
+		//       typed, untracked: markup there would be inert text in the code. A user who breaks a fence breaks it.
+		const in_code = ({ from, to }: { from: number; to: number }) =>
+			code_regions.some(region => region.from <= to && from <= region.to);
+		if (changed_ranges.length > 0 && changed_ranges.every(in_code))
+			return tr;
+
+		const changes = [];
+		const selections: SelectionRange[] = [];
+
 		const metadata = generate_metadata(settings);
+
 		const backwards_delete = (latest_event as KeyboardEvent)?.key === "Backspace";
-		// Set when a selection is deleted and nothing changes (only markup, or text already deleted), for a notice.
-		let dropped = false;
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
-
-		/**
-		 * Where a change goes, beside ranges and threads (an empty change: it does nothing). Decided before the fence guard,
-		 * so its adjusted forms start from the same place.
-		 */
-		function relocate(editor_change: EditorEditChange, doc: Text, ranges: CriticMarkupRanges): EditorEditChange {
-			const place = (from: number, to: number): EditorEditChange => ({
-				...editor_change,
-				from,
-				to,
-				deleted: doc.sliceString(from, to),
-				selection: from < to,
-			});
-			// EXPL: A selection only of markup deletes nothing; text typed over it goes to `at`.
-			const markup_only = (at: number) => {
-				const pos = editor_change.inserted ? at : editor_change.from;
-				return place(pos, pos);
-			};
-			// A selection end inside a substitution's "~>" separator is at its start (or, for the start, its end).
-			for (const r of ranges.ranges_in_interval(editor_change.from, editor_change.to)) {
-				if (r.type !== SuggestionType.SUBSTITUTION || !editor_change.selection) continue;
+		let offset = 0;
+		// TODO: Consider each editor_change separately to avoid issues where you try to re-insert into a now updated range
+		//        (Or: update ranges with editor_change to reflect the new state)
+		for (let editor_change of changed_ranges) {
+			if (in_code(editor_change)) {
+				const { from, to, inserted } = editor_change;
+				changes.push({ from, to, insert: inserted });
+				selections.push(EditorSelection.cursor(from + inserted.length + offset));
+				offset += inserted.length - (to - from);
+				continue;
+			}
+			// EXPL: A selection end inside a substitution's "~>" is at its start (or, for the selection's start, its end):
+			//       splitting the separator left a stray ">".
+			for (const r of editor_change.selection ? ranges.ranges_in_interval(editor_change.from, editor_change.to) : []) {
+				if (r.type !== SuggestionType.SUBSTITUTION) continue;
 				const middle = (r as SubstitutionRange).middle;
-				if (editor_change.to === middle + 1) editor_change = { ...editor_change, to: middle };
-				if (editor_change.from === middle + 1) editor_change = { ...editor_change, from: middle + 2 };
-				if (editor_change.to < editor_change.from) editor_change = { ...editor_change, to: editor_change.from };
-				editor_change.deleted = doc.sliceString(editor_change.from, editor_change.to);
+				const from = editor_change.from === middle + 1 ? middle + 2 : editor_change.from;
+				const to = Math.max(from, editor_change.to === middle + 1 ? middle : editor_change.to);
+				editor_change = { ...editor_change, from, to, deleted: tr.startState.doc.sliceString(from, to) };
 			}
-			// EXPL: In a comment thread, the annotated range's closer and each comment's opener and closer are markup that
-			//       edits stay out of; a comment's text stays editable. (A thread of comments only starts at its first
-			//       comment's opener.) Text typed in that markup, or where it would start a range of its own before the
-			//       comments (after the annotated text, if it can't join it), goes after the whole thread. A selection
-			//       running into the thread stops before that markup, one running out of it starts after the thread, and
-			//       one inside it keeps to the comment text it starts in. One of only that markup does nothing.
-			let { from: p, to: q } = editor_change;
-			if (p < q ? editor_change.selection : !!editor_change.inserted) {
-				const bases = new Set(ranges.ranges_in_interval(p, q).map(r => r.base_range));
-				const threads = [...bases].filter(b => b.replies.length || b.type === SuggestionType.COMMENT);
-				for (const base of threads.sort((a, b) => a.from - b.from)) {
-					const comment = base.type === SuggestionType.COMMENT, back = base.full_range_back;
-					const close = comment ? base.from : base.closer_to - 3;
-					const texts = (comment ? base.full_thread : base.replies).map(c => [c.range_start, c.closer_to - 3])
-						.filter(([s, e]) => s < e);
-					const text = texts.find(([, e]) => p < e || (p === q && p === e)), in_text = !!text && text[0] <= p;
-					const apart = comment || base.type === SuggestionType.HIGHLIGHT ||
-						!range_metadata_compatible(base, metadata).compatible;
-					if (p === q && ((close < p && p < back && !in_text) || (p === close && apart)))
-						return place(back, back);
-					if (p < q && p < close && close < q && q <= back) q = close;
-					else if (p < q && close <= p && p < back && back < q) p = back;
-					else if (p < q && close <= p && p < back) {
-						if (in_text) q = Math.min(q, text[1]);
-						else if (!text || q <= text[0]) return markup_only(back);
-						else [p, q] = [text[0], Math.min(q, text[1])];
-					}
-				}
-				if (p !== editor_change.from || q !== editor_change.to) editor_change = place(p, q);
-			}
-			// EXPL: Elsewhere, a selection only of a range's opener (and metadata) or its closer deletes nothing; text typed
-			//       over it goes beside the range where it was typed: before it (opener) or after it (closer).
-			const zone = editor_change.selection && p < q &&
-				ranges.ranges_in_interval(p, q).find(r =>
-					(r.from <= p && q <= r.range_start) || (r.closer_to - 3 <= p && q <= r.to)
-				);
-			return zone ? markup_only(q <= zone.range_start ? zone.from : zone.to) : editor_change;
-		}
-
-		/** The change as a tracked suggestion in `state` (whose ranges are `ranges`), and where its cursor ends up. */
-		function track(editor_change: EditorEditChange, state: EditorState, ranges: CriticMarkupRanges): GuardedEdit {
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
 				SuggestionType.ADDITION;
@@ -205,7 +160,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					ranges,
 					backwards_delete,
 					group_delete,
-					state,
+					tr.startState,
 					settings.suggestion_mode_operations.cursor_movement,
 					settings.suggestion_mode_operations.bracket_movement,
 				);
@@ -215,8 +170,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				//       opener it only clips, is beside it.
 				const { from, to } = editor_change;
 				for (const range of ranges.ranges_in_interval(from, to)) {
-					if (range.closer_to - 3 <= from && from < range.to && range.to < to) editor_change.from = range.to;
-					if (from < range.from && range.from < to && to <= range.range_start) editor_change.to = range.from;
+					if (range.closer_to - 3 < from && from < range.to && range.to < to) editor_change.from = range.to;
+					if (from < range.from && range.from < to && to < range.range_start) editor_change.to = range.from;
 				}
 				const ranges_in_range = ranges.ranges_in_interval(editor_change.from, editor_change.to)
 					.filter(range => range.from < editor_change.to && editor_change.from < range.to);
@@ -241,7 +196,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 
 			const edits = mark_ranges(
 				ranges,
-				state.doc,
+				tr.startState.doc,
 				editor_change.from,
 				editor_change.to,
 				editor_change.inserted,
@@ -250,128 +205,26 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				false,
 				settings.metadata_syntax,
 			);
-			// EXPL: Nothing to do (deleting text already suggested for deletion): the cursor moves over it.
-			if (!edits.length) return { changes: [], cursor: backwards_delete ? editor_change.from : editor_change.to };
 			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
-			return {
-				changes: edits,
-				cursor: backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset,
-			};
-		}
-
-		/** How changes are tracked in `state`, whose ranges are `ranges`. */
-		const trackerFor = (state: EditorState, ranges: CriticMarkupRanges): SuggestionTracker => ({
-			track: change => track(change, state, ranges),
-			addition(at, text) {
-				// (Nor right before a comment, which would then annotate it.)
-				const inside = (r: CriticMarkupRange) =>
-					(r.from < at && at < r.to) || (r.from === at && r.type === SuggestionType.COMMENT);
-				if (ranges.ranges_in_interval(at, at).some(inside)) return undefined;
-				const [edit] = mark_ranges(
-					new CriticMarkupRanges([]),
-					state.doc,
-					at,
-					at,
-					text,
-					SuggestionType.ADDITION,
-					metadata,
-					false,
-					settings.metadata_syntax,
+			if (edits) {
+				changes.push(edits);
+				selections.push(
+					EditorSelection.cursor(
+						(backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset) + offset,
+					),
 				);
-				return { changes: [edit], cursor: edit.end };
-			},
-			ownText(from, to) {
-				const inside = ranges.ranges_in_interval(from, to);
-				return inside.length === 1 && inside[0].type === SuggestionType.ADDITION && inside[0].encloses_range(from, to);
-			},
-			rangeEnd: pos => ranges.ranges_in_interval(pos, pos).find(r => r.closer_to - 3 === pos)?.full_range_back,
-			inRange: pos => ranges.ranges_in_interval(pos, pos).some(r => r.from <= pos && pos < r.to),
-			pending: (from, to) =>
-				from < to && ranges.ranges_in_interval(from, to).some(r => {
-					const start = r.type === SuggestionType.ADDITION ?
-						r.range_start :
-						r.type === SuggestionType.SUBSTITUTION ?
-						(r as SubstitutionRange).middle + 2 :
-						Infinity;
-					return start < to && from < r.closer_to - 3 && start < r.closer_to - 3;
-				}),
-		});
-
-		// EXPL: The changes are decided by the fence guard one by one, from the last cursor to the first, each in the
-		//       document the cursors after it left, its positions (and cursor) mapped there: the same as applying each
-		//       cursor in turn. A Backspace or Delete is taken from its mapped cursor. The ranges and blocks are parsed
-		//       afresh (range-state updates its ranges in place, so the start state is not advanced); the cursor code
-		//       reads only the document and the editor's character categories, taken from the start state at the
-		//       mapped-back position. A refused change keeps its cursor and leaves the others alone.
-		let state = tr.startState, all = ChangeSet.empty(state.doc.length), unchanged = true, refused = false;
-		let { ranges, code_regions } = state.field(rangeParser);
-		const cursors: number[] = [], start_ranges = ranges;
-		for (let i = changed_ranges.length - 1; i >= 0; i--) {
-			const original = changed_ranges[i], keystroke = !original.selection && !original.inserted;
-			let anchor = original.anchor ?? original.from;
-			const offset = original.from - anchor;
-			// A Backspace in an opener (or a Delete in a closer) acts just outside the range: taken from there, so its
-			// cursor maps well when a later cursor rewrote the range.
-			if (keystroke && !all.empty) {
-				for (const r of start_ranges.ranges_in_interval(anchor, anchor)) {
-					if (offset < 0 && r.from < anchor && anchor <= r.range_start) anchor = r.from;
-					else if (offset >= 0 && r.closer_to - 3 <= anchor && anchor < r.to) anchor = r.to;
-				}
-			}
-			const mapped = all.mapPos(anchor, -1);
-			const length = state.doc.length, start = keystroke ? mapped + offset : all.mapPos(original.from, -1);
-			const from = Math.min(Math.max(0, start), length);
-			const to = Math.min(
-				keystroke ? start + original.to - original.from : Math.max(from, all.mapPos(original.to, -1)),
-				length,
-			);
-			const change = relocate(
-				{ ...original, from, to, anchor: mapped, deleted: state.doc.sliceString(from, to) },
-				state.doc,
-				ranges,
-			);
-			const edit = guardChange(state.doc, code_regions, change, trackerFor(state, ranges));
-			if (!edit) {
-				refused = true;
-				unchanged = false;
-				cursors[i] = all.mapPos(tr.startState.selection.ranges[i]?.head ?? from);
-				continue;
-			}
-			const [first] = edit.changes;
-			if (
-				edit.changes.length !== 1 || first.from !== from || first.to !== to ||
-				first.insert !== original.inserted
-			) {
-				unchanged = false;
-			}
-			const changes = ChangeSet.of(minimalChanges(state.doc, edit.changes), state.doc.length);
-			// (Not one after another cursor's edit, which may have taken its text.)
-			if (original.selection && !original.inserted && all.empty && changes.empty) dropped = true;
-			for (let k = i + 1; k < changed_ranges.length; k++) cursors[k] = changes.mapPos(cursors[k]);
-			cursors[i] = edit.cursor;
-			all = all.compose(changes);
-			if (i > 0 && !changes.empty) {
-				const doc = changes.apply(state.doc), back = all.invertedDesc;
-				state = {
-					doc,
-					charCategorizer: (pos: number) => tr.startState.charCategorizer(back.mapPos(pos)),
-				} as EditorState;
-				ranges = new CriticMarkupRanges(getRangesInText(doc.toString(), settings));
-				code_regions = findCodeRegions(doc.toString());
+				offset += added_offset - (edits[edits.length - 1].to - edits[edits.length - 1].from) +
+					edits[edits.length - 1].insert.length;
 			}
 		}
-		if (refused) new Notice("Inkling: this edit would break a code fence in Suggest mode.");
-		if (dropped) new Notice("Inkling: nothing to change here in Suggest mode (only markup, or text already deleted).");
 
-		if (unchanged)
+		if (!changes.length)
 			return tr;
-		if (all.empty)
-			return tr.startState.update({ filter: false });
 
 		const forwardedEvent = deriveUserEvent(tr);
 		return tr.startState.update({
-			changes: all,
-			selection: EditorSelection.create(cursors.map(cursor => EditorSelection.cursor(cursor))),
+			changes,
+			selection: EditorSelection.create(selections),
 			annotations: forwardedEvent ?
 				[Transaction.userEvent.of(forwardedEvent), pluginEditAnnotation.of(true)] :
 				[pluginEditAnnotation.of(true)],

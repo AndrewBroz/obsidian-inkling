@@ -1,4 +1,4 @@
-import { EditorSelection, type EditorState, type SelectionRange } from "@codemirror/state";
+import { EditorSelection, type EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { Notice } from "obsidian";
@@ -29,7 +29,7 @@ export function addCommentToView(
 ): void {
 	const settings = editor.state.field(pluginSettingsField);
 
-	const selection = comment_selection(editor.state);
+	const selection = editor.state.selection.main;
 
 	// EXPL: A reply (`range` given) targets an existing thread, which by construction is outside any fence.
 	if (!range && comment_refused_in_code(editor.state)) {
@@ -149,26 +149,12 @@ export function addCommentToView(
 }
 
 /**
- * The main selection a new comment acts on: a trailing newline is dropped, so a whole line selected by triple-click
- * is anchored up to the end of its text and the comment's closer stays on that line.
- */
-export function comment_selection(state: EditorState): SelectionRange {
-	const selection = state.selection.main;
-	if (selection.empty || state.doc.sliceString(selection.to - 1, selection.to) !== "\n") return selection;
-	return selection.head === selection.to ?
-		EditorSelection.range(selection.from, selection.to - 1) :
-		EditorSelection.range(selection.to - 1, selection.from);
-}
-
-/**
- * Whether a new comment must be refused: one of its delimiters (at the selection's ends, or where an at-cursor comment
- * is written) would land on a fence line or in code. Shared with the comment pill, which hides where it is refused.
+ * Whether a new comment must be refused: an end of the selection is in a code block (its content or a fence line),
+ * where the comment's markup would be inert text. Shared with the comment pill, which hides there.
  */
 export function comment_refused_in_code(state: EditorState): boolean {
-	const selection = comment_selection(state);
-	const regions = state.field(rangeParser).code_regions;
-	return [selection.from, selection.to, safe_insert_position(state, selection.head)]
-		.some(pos => regions.some(r => r.from <= pos && pos <= r.to));
+	const { from, to } = state.selection.main;
+	return [from, to].some(pos => state.field(rangeParser).code_regions.some(r => r.from <= pos && pos <= r.to));
 }
 
 // EXPL: CriticMarkup has no escape syntax: `create_range` concatenates brackets around raw text, so
