@@ -216,3 +216,22 @@ describe("re-review 3", () => {
 		expect(notices).not.toHaveBeenCalled();
 	});
 });
+
+// (Typed text next to a range joins it where it can: before one's own addition, after a deletion.)
+describe("text typed over a selection of a range's markup (round 4 ruling)", () => {
+	test.each([
+		["the opener's {", "x\n{++\n> h++}\ny", 2, 3, "x\n{++Z\n> h++}\ny", "x\nZ\n> h\ny"],
+		["part of an opener", "a {--gone--} b", 3, 5, "a {++Z++}{--gone--} b", "a Z b"],
+		["a closer", "a {--gone--} b", 9, 12, "a {~~gone~>Z~~} b", "a Z b"],
+	])("over %s goes beside the range where it was typed", (_, doc, from, to, out, accepted) => {
+		const result = edit(doc, [{ from, to, insert: "Z" }]);
+		expect(result.out).toBe(out);
+		expect(result.accept).toBe(accepted);
+		expect(result.reject).toBe(resolve_plain(doc));
+	});
+});
+
+/** `doc` with every suggestion rejected (no markup). */
+function resolve_plain(doc: string) {
+	return resolve(view(doc), false);
+}

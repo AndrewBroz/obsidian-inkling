@@ -559,12 +559,11 @@ describe.each(CONFIGS)(
 					}
 					// At blocks, text typed over a selection is, in Accept, beside only what was beside the selection on its
 					// lines, or on a line of its own (with a container prefix): never joined to a neighbouring line's text.
-					// (Selection ends inside a range move the text to that range's ends: what is beside it there is checked
-					// by the fragmentation and loss checks.)
-					const outside = (pos: number) => !before_ranges.some(r => r.from < pos && pos < r.to);
+					// At blocks, or where the selection starts or ends inside a range, the typed text is placed sensibly.
+					const inside_range = (pos: number) => before_ranges.some(r => r.from < pos && pos < r.to);
 					if (
-						kind === 5 && disjoint.length === 1 && accepted.length === 1 && !off_blocks(accepted[0]) &&
-						outside(accepted[0].from) && outside(accepted[0].to)
+						kind === 5 && disjoint.length === 1 && accepted.length === 1 &&
+						(!off_blocks(accepted[0]) || inside_range(accepted[0].from) || inside_range(accepted[0].to))
 					) {
 						const c = accepted[0];
 						let typed_at = -1;
@@ -581,7 +580,20 @@ describe.each(CONFIGS)(
 							}
 							return out;
 						};
-						if (typed_at >= 0) {
+						const in_range_end = typed_at >= 0 && (inside_range(c.from) || inside_range(c.to));
+						if (in_range_end) {
+							// Next to the selection's start (an opener) or end (a closer): nothing of Accept's text between.
+							const lo = tr.changes.mapPos(c.from, -1), hi = tr.changes.mapPos(c.to, 1);
+							// (A run of "Z"s is one: a character diff may match the typed one to a neighbour. Line breaks and
+							// container prefixes may separate them: a line break kept next to a fence, or an own-line form.)
+							const between = (x: number, y: number) =>
+								visible(after, Math.min(x, y), Math.max(x, y), hidden_after).replace(/Z|\s|>/g, "");
+							const at_start = between(lo, typed_at) === "",
+								at_end = between(typed_at + 1, hi) === "" ||
+									between(hi, typed_at) === "";
+							if (!at_start && !at_end)
+								fail("f", `the typed text is not next to the selection: ${typed_at} for ${lo}-${hi}`);
+						} else if (typed_at >= 0) {
 							// (A run of "Z"s is one: a character diff may match the typed one to a neighbour.)
 							const left = line_text(after, typed_at - 1, hidden_after, -1).replace(/Z+$/, "");
 							const right = line_text(after, typed_at + 1, hidden_after, 1).replace(/^Z+/, "");

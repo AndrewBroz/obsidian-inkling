@@ -129,12 +129,12 @@ describe("deleting next to markup (found by the fence fuzz's stricter checks)", 
 		expect(v.state.doc.toString()).toBe("a {++a++}{++d++} b");
 	});
 
-	test("text typed over a selection of a range's metadata goes after the range", () => {
+	test("text typed over a selection of a range's metadata (part of its opening) goes before the range", () => {
 		const doc = `p {--{"author":"me"}@@gone--} q`;
 		const v = view(doc);
 		const from = doc.indexOf("author"), to = from + 3;
 		v.dispatch({ selection: { anchor: from, head: to } });
 		v.dispatch({ changes: { from, to, insert: "Z" }, selection: { anchor: from + 1 }, userEvent: "input.type" });
-		expect(v.state.doc.toString()).toBe(`p {--{"author":"me"}@@gone--}{++{"author":"alice"}@@Z++} q`);
+		expect(v.state.doc.toString()).toBe(`p {++{"author":"alice"}@@Z++}{--{"author":"me"}@@gone--} q`);
 	});
 });

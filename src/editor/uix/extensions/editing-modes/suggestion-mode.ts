@@ -128,7 +128,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		/** The change as a tracked suggestion in `state` (whose ranges are `ranges`), and where its cursor ends up. */
 		function track(editor_change: EditorEditChange, state: EditorState, ranges: CriticMarkupRanges): GuardedEdit {
 			// EXPL: A selection only of a range's markup (its opener and metadata, or its closer) deletes nothing; text
-			//       typed over it goes after the range.
+			//       typed over it goes beside the range where it was typed: before it (opener) or after it (closer).
 			// A selection end inside a substitution's "~>" separator is at its start (or, for the start, its end).
 			for (const r of ranges.ranges_in_interval(editor_change.from, editor_change.to)) {
 				if (r.type !== SuggestionType.SUBSTITUTION || !editor_change.selection) continue;
@@ -145,7 +145,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				);
 			if (zone) {
 				if (!editor_change.inserted) return { changes: [], cursor: start };
-				editor_change = { ...editor_change, from: zone.to, to: zone.to, deleted: "", selection: false };
+				const at = end <= zone.range_start ? zone.from : zone.to;
+				editor_change = { ...editor_change, from: at, to: at, deleted: "", selection: false };
 			}
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
