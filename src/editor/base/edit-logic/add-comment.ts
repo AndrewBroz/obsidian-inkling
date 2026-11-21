@@ -1,4 +1,4 @@
-import { EditorSelection, type EditorState } from "@codemirror/state";
+import { EditorSelection, type EditorState, type SelectionRange } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 import { Notice } from "obsidian";
@@ -29,7 +29,7 @@ export function addCommentToView(
 ): void {
 	const settings = editor.state.field(pluginSettingsField);
 
-	const selection = editor.state.selection.main;
+	const selection = comment_selection(editor.state);
 
 	// EXPL: A reply (`range` given) targets an existing thread, which by construction is outside any fence.
 	if (!range && comment_refused_in_code(editor.state)) {
@@ -148,12 +148,18 @@ export function addCommentToView(
 	});
 }
 
+/** The main selection, ending before the line break when it ends at a line's start (a line selected by triple-click). */
+function comment_selection(state: EditorState): SelectionRange {
+	const { from, to } = state.selection.main;
+	return from < to && state.doc.lineAt(to).from === to ? EditorSelection.range(from, to - 1) : state.selection.main;
+}
+
 /**
  * Whether a new comment must be refused: an end of the selection is in a code block (its content or a fence line),
  * where the comment's markup would be inert text. Shared with the comment pill, which hides there.
  */
 export function comment_refused_in_code(state: EditorState): boolean {
-	const { from, to } = state.selection.main;
+	const { from, to } = comment_selection(state);
 	return [from, to].some(pos => state.field(rangeParser).code_regions.some(r => r.from <= pos && pos <= r.to));
 }
 
