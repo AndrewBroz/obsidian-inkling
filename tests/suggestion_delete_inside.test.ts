@@ -111,3 +111,30 @@ test("two cursors in an older own addition with timestamps both type, with no no
 	expect(notice).not.toHaveBeenCalled();
 	notice.mockRestore();
 });
+
+describe("deleting next to markup (found by the fence fuzz's stricter checks)", () => {
+	test("Delete before a closer with another range right after deletes that range's first character", () => {
+		const doc = "a {++xy++}{++zh++} b";
+		const v = view(doc);
+		v.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+		v.dispatch({ selection: { anchor: 7 } });
+		v.dispatch({ changes: { from: 7, to: 8 }, selection: { anchor: 7 }, userEvent: "delete.forward" });
+		expect(v.state.doc.toString()).toBe("a {++xy++}{++h++} b");
+	});
+
+	test("a selection from inside one addition into the next retracts the selected text of both", () => {
+		const v = view("a {++ab++}{++cd++} b");
+		v.dispatch({ selection: { anchor: 6, head: 14 } });
+		v.dispatch({ changes: { from: 6, to: 14 }, selection: { anchor: 6 }, userEvent: "delete.selection" });
+		expect(v.state.doc.toString()).toBe("a {++a++}{++d++} b");
+	});
+
+	test("text typed over a selection of a range's metadata goes after the range", () => {
+		const doc = `p {--{"author":"me"}@@gone--} q`;
+		const v = view(doc);
+		const from = doc.indexOf("author"), to = from + 3;
+		v.dispatch({ selection: { anchor: from, head: to } });
+		v.dispatch({ changes: { from, to, insert: "Z" }, selection: { anchor: from + 1 }, userEvent: "input.type" });
+		expect(v.state.doc.toString()).toBe(`p {--{"author":"me"}@@gone--}{++{"author":"alice"}@@Z++} q`);
+	});
+});

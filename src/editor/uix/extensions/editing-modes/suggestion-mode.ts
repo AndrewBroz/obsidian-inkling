@@ -127,6 +127,17 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 
 		/** The change as a tracked suggestion in `state` (whose ranges are `ranges`), and where its cursor ends up. */
 		function track(editor_change: EditorEditChange, state: EditorState, ranges: CriticMarkupRanges): GuardedEdit {
+			// EXPL: A selection only of a range's markup (its opener and metadata, or its closer) deletes nothing; text
+			//       typed over it goes after the range.
+			const { from: start, to: end } = editor_change;
+			const zone = editor_change.selection && start < end &&
+				ranges.ranges_in_interval(start, end).find(r =>
+					(r.from <= start && end <= r.range_start) || (r.closer_to - 3 <= start && end <= r.to)
+				);
+			if (zone) {
+				if (!editor_change.inserted) return { changes: [], cursor: start };
+				editor_change = { ...editor_change, from: zone.to, to: zone.to, deleted: "", selection: false };
+			}
 			let type: MarkType = editor_change.deleted ?
 				(editor_change.inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION) :
 				SuggestionType.ADDITION;
@@ -146,8 +157,8 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				//       opener it only clips, is beside it.
 				const { from, to } = editor_change;
 				for (const range of ranges.ranges_in_interval(from, to)) {
-					if (range.closer_to - 3 < from && from < range.to && range.to < to) editor_change.from = range.to;
-					if (from < range.from && range.from < to && to < range.range_start) editor_change.to = range.from;
+					if (range.closer_to - 3 <= from && from < range.to && range.to < to) editor_change.from = range.to;
+					if (from < range.from && range.from < to && to <= range.range_start) editor_change.to = range.from;
 				}
 				const ranges_in_range = ranges.ranges_in_interval(editor_change.from, editor_change.to)
 					.filter(range => range.from < editor_change.to && editor_change.from < range.to);
@@ -216,48 +227,58 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			inRange: pos => ranges.ranges_in_interval(pos, pos).some(r => r.from <= pos && pos < r.to),
 		});
 
-		// EXPL: Each change is decided by the fence guard in the document the earlier cursors' edits left (parsed afresh:
-		//       range-state updates its ranges in place). A refused change, or one overlapping an earlier edit, keeps
-		//       its cursor and leaves the others alone.
-		let state = tr.startState, all = ChangeSet.empty(state.doc.length), unchanged = true;
+		// EXPL: The changes are decided by the fence guard one by one, from the last cursor to the first, each in the
+		//       document the cursors after it left, its positions (and cursor) mapped there: the same as applying each
+		//       cursor in turn. A Backspace or Delete is taken from its mapped cursor. The ranges and blocks are parsed
+		//       afresh (range-state updates its ranges in place, so the start state is not advanced); the cursor code
+		//       reads only the document and the editor's character categories, taken from the start state at the
+		//       mapped-back position. A refused change keeps its cursor and leaves the others alone.
+		let state = tr.startState, all = ChangeSet.empty(state.doc.length), unchanged = true, refused = false;
 		let { ranges, code_regions } = state.field(rangeParser);
-		let refused: string | undefined;
 		const cursors: number[] = [];
-		changed_ranges.forEach((change, i) => {
-			let overlaps = false;
-			all.iterChangedRanges((fromA, toA) => {
-				overlaps ||= fromA < change.to && change.from < toA ||
-					(fromA === toA && change.from < fromA && fromA < change.to);
-			});
-			const at = {
-				...change,
-				from: all.mapPos(change.from, 1),
-				to: Math.max(all.mapPos(change.from, 1), all.mapPos(change.to, -1)),
-			};
-			const edit = !overlaps && guardChange(state.doc, code_regions, at, trackerFor(state, ranges));
+		for (let i = changed_ranges.length - 1; i >= 0; i--) {
+			const original = changed_ranges[i], anchor = original.anchor ?? original.from;
+			const keystroke = !original.selection && !original.inserted, mapped = all.mapPos(anchor, -1);
+			const length = state.doc.length,
+				start = keystroke ? mapped + original.from - anchor : all.mapPos(original.from, -1);
+			const from = Math.min(Math.max(0, start), length);
+			const to = Math.min(
+				keystroke ? start + original.to - original.from : Math.max(from, all.mapPos(original.to, -1)),
+				length,
+			);
+			const change = { ...original, from, to, anchor: mapped, deleted: state.doc.sliceString(from, to) };
+			// One whose text an earlier edit already removed has nothing left to do.
+			const edit = from === to && !change.inserted ?
+				{ changes: [], cursor: from } :
+				guardChange(state.doc, code_regions, change, trackerFor(state, ranges));
 			if (!edit) {
-				refused ??= overlaps ?
-					"Inkling: this edit overlaps another cursor's edit, so Suggest mode didn't apply it." :
-					"Inkling: this edit would break a code fence in Suggest mode.";
-				cursors.push(all.mapPos(tr.startState.selection.ranges[i]?.head ?? change.from));
+				refused = true;
 				unchanged = false;
-				return;
+				cursors[i] = all.mapPos(tr.startState.selection.ranges[i]?.head ?? change.from);
+				continue;
 			}
 			const [first] = edit.changes;
-			if (edit.changes.length !== 1 || first.from !== at.from || first.to !== at.to || first.insert !== at.inserted)
+			if (
+				edit.changes.length !== 1 || first.from !== change.from || first.to !== change.to ||
+				first.insert !== change.inserted
+			) {
 				unchanged = false;
-			const changes = ChangeSet.of(minimalChanges(state.doc, edit.changes), state.doc.length);
-			for (let k = 0; k < cursors.length; k++) cursors[k] = changes.mapPos(cursors[k]);
-			cursors.push(edit.cursor);
-			all = all.compose(changes);
-			if (i < changed_ranges.length - 1 && !changes.empty) {
-				state = EditorState.create({ doc: changes.apply(state.doc) });
-				const text = state.doc.toString();
-				ranges = new CriticMarkupRanges(getRangesInText(text, settings));
-				code_regions = findCodeRegions(text);
 			}
-		});
-		if (refused) new Notice(refused);
+			const changes = ChangeSet.of(minimalChanges(state.doc, edit.changes), state.doc.length);
+			for (let k = i + 1; k < changed_ranges.length; k++) cursors[k] = changes.mapPos(cursors[k]);
+			cursors[i] = edit.cursor;
+			all = all.compose(changes);
+			if (i > 0 && !changes.empty) {
+				const doc = changes.apply(state.doc), back = all.invertedDesc;
+				state = {
+					doc,
+					charCategorizer: (pos: number) => tr.startState.charCategorizer(back.mapPos(pos)),
+				} as EditorState;
+				ranges = new CriticMarkupRanges(getRangesInText(doc.toString(), settings));
+				code_regions = findCodeRegions(doc.toString());
+			}
+		}
+		if (refused) new Notice("Inkling: this edit would break a code fence in Suggest mode.");
 
 		if (unchanged)
 			return tr;

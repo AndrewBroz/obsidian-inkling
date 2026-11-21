@@ -71,6 +71,9 @@ const PARTS: [string, string[]][] = [
 	["- ```js\n  m\n  ```", ["- ```js\n  m\n  ```"]],
 	["> ```\n> open", ["> ```\n> open"]],
 	["10. a\n\n    ```\n    o\n    ```", ["    ```\n    o\n    ```"]],
+	["<!--\n```\n-->", []],
+	["<pre>\n```\n</pre>", []],
+	["-\n\n```\nx\n```", ["```\nx\n```"]],
 ];
 
 const TYPED = ["a", " ", "`", ">", "~", "}", "x"];
@@ -87,10 +90,7 @@ const PASTES = [
 
 const SEQUENCES = 1000;
 const EDITS_PER_SEQUENCE = 6;
-const NOTICES = [
-	"Inkling: this edit would break a code fence in Suggest mode.",
-	"Inkling: this edit overlaps another cursor's edit, so Suggest mode didn't apply it.",
-];
+const NOTICE = "Inkling: this edit would break a code fence in Suggest mode.";
 const DELIMITER = /\{(?:\+\+|--|~~|==|>>)|(?:\+\+|--|~~|==|<<)\}|~>/g;
 const HAS_DELIMITER = new RegExp(DELIMITER.source);
 
@@ -137,7 +137,7 @@ function hidden(ranges: Range[]): Set<number> {
 	}
 	return at;
 }
-/** The text with every suggestion rejected and highlights removed, without lines holding only a prefix. */
+/** The text with every suggestion rejected and highlights removed. */
 function rejected(text: string, ranges: Range[]): string {
 	let out = "", last = 0;
 	for (const r of ranges) {
@@ -149,7 +149,42 @@ function rejected(text: string, ranges: Range[]): string {
 		out += text.slice(last, r.from) + keep;
 		last = r.to;
 	}
-	return (out + text.slice(last)).split("\n").filter(line => !/^[ \t>]*$/.test(line)).join("\n");
+	return out + text.slice(last);
+}
+
+/**
+ * Dispatches the user's edit of `kind` at `changes` (one per cursor) to `view`, as an editor would: the key, the
+ * cursors (or selections) it starts from, then the change.
+ */
+function dispatchEdit(view: EditorView, kind: number, changes: Change[]) {
+	const key = kind === 2 ? "Backspace" : kind === 3 ? "Delete" : kind === 1 ? "Enter" : "a";
+	view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+	view.dispatch({
+		selection: EditorSelection.create(
+			changes.map(c =>
+				kind === 2 ?
+					EditorSelection.cursor(c.to) :
+					EditorSelection.range(c.from, c.insert || kind === 6 ? c.to : c.from)
+			),
+		),
+	});
+	const tr = view.state.update({
+		changes,
+		selection: EditorSelection.create(changes.map((c, i) =>
+			EditorSelection.cursor(
+				c.from + c.insert.length + changes.slice(0, i).reduce((n, d) => n + d.insert.length - (d.to - d.from), 0),
+			)
+		)),
+		userEvent: kind === 2 ?
+			"delete.backward" :
+			kind === 3 ?
+			"delete.forward" :
+			kind === 6 ?
+			"delete.selection" :
+			"input.type",
+	});
+	view.dispatch(tr);
+	return tr;
 }
 const inCode = (regions: CodeRegion[], pos: number) => regions.some(r => r.from <= pos && pos <= r.to);
 const count = (text: string, part: string) => text.split(part).length - 1;
@@ -184,7 +219,7 @@ describe.each(CONFIGS)(
 			for (let seq = 0; seq < SEQUENCES; seq++) {
 				const parts = Array.from({ length: 3 + Math.floor(rng() * 5) }, () => pick(PARTS));
 				const doc = parts.map(([text]) => text).join("\n\n") + "\n\ntail {++t++}";
-				const view = suggestView(doc);
+				let view = suggestView(doc);
 				const log: [number, Change[]][] = [];
 				const fail_example = (kind: string, detail: string, before: string) => {
 					failures[kind]++;
@@ -285,43 +320,16 @@ describe.each(CONFIGS)(
 					let tr;
 					try {
 						// The key behind the edit, as the editor sees it (Backspace and Delete delete in different directions).
-						const key = kind === 2 ? "Backspace" : kind === 3 ? "Delete" : kind === 1 ? "Enter" : "a";
-						view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-						view.dispatch({
-							selection: EditorSelection.create(
-								disjoint.map(c =>
-									kind === 2 ?
-										EditorSelection.cursor(c.to) :
-										EditorSelection.range(c.from, c.insert || kind === 6 ? c.to : c.from)
-								),
-							),
-						});
-						tr = view.state.update({
-							changes: disjoint,
-							selection: EditorSelection.create(disjoint.map((c, i) =>
-								EditorSelection.cursor(
-									c.from + c.insert.length +
-										disjoint.slice(0, i).reduce((n, d) => n + d.insert.length - (d.to - d.from), 0),
-								)
-							)),
-							userEvent: kind === 2 ?
-								"delete.backward" :
-								kind === 3 ?
-								"delete.forward" :
-								kind === 6 ?
-								"delete.selection" :
-								"input.type",
-						});
-						view.dispatch(tr);
+						tr = dispatchEdit(view, kind, disjoint);
 					} catch (error) {
-						fail("throws", String(error));
+						fail("throws", String((error as Error).stack));
 						break;
 					}
 					const shown = notice.mock.calls.slice(notices_before).map(call => call[0] as string);
 					if (shown.length) refused++;
-					// The decisions, in order; a change refused for overlapping an earlier cursor's edit is not decided.
-					const decisions: (fence_guard.GuardedEdit | null)[] = guard.mock.results.map(r => r.value);
-					while (decisions.length < disjoint.length) decisions.push(null);
+					// The decisions, made from the last cursor to the first; `decisions` in cursor order.
+					const calls: (fence_guard.GuardedEdit | null)[] = guard.mock.results.map(r => r.value);
+					const decisions = [...calls].reverse();
 					const refused_changes = disjoint.filter((_, i) => decisions[i] === null);
 					const accepted = disjoint.filter(c => !refused_changes.includes(c));
 					const block_line = (c: Change) => before_regions.some(r => r.from <= c.to && c.from <= r.to);
@@ -341,10 +349,10 @@ describe.each(CONFIGS)(
 					// earlier ones left), the blocks of the document after each plain one.
 					const plain_blocks = new Set<string>();
 					let replay = Text.of(before.split("\n"));
-					decisions.forEach((decision, i) => {
+					calls.forEach((decision, k) => {
 						if (!decision) return;
 						replay = ChangeSet.of(decision.changes, replay.length).apply(replay);
-						if (plain_changes_in_code.includes(disjoint[i])) {
+						if (plain_changes_in_code.includes(disjoint[calls.length - 1 - k])) {
 							const text = replay.toString();
 							for (const r of findCodeRegions(text)) plain_blocks.add(text.slice(r.from, r.to));
 						}
@@ -427,8 +435,19 @@ describe.each(CONFIGS)(
 					}
 
 					// (e)
-					if (!plain_changes_in_code.length && rejected(after, after_ranges) !== rejected(before, before_ranges))
-						fail("e", "rejecting every suggestion does not restore the text");
+					// Exact, but for the lines holding only a quote or indent prefix that a tracked change around a block adds
+					// so its markers are on lines of their own (at most two per change).
+					if (!plain_changes_in_code.length) {
+						const want = rejected(before, before_ranges).split("\n"), got = rejected(after, after_ranges).split("\n");
+						let w = 0, extra = 0;
+						for (const line of got) {
+							if (w < want.length && line === want[w]) w++;
+							else if (/^[ \t>]*$/.test(line)) extra++;
+							else extra = Infinity;
+						}
+						if (w < want.length || extra > 2 * accepted.length)
+							fail("e", "rejecting every suggestion does not restore the text");
+					}
 
 					// (f)
 					// Changes whose windows (W around each) overlap are checked together: text may move a little (next to a
@@ -481,7 +500,10 @@ describe.each(CONFIGS)(
 						// Typed characters are all there, in the text without markup (a change into a block inside an
 						// addition may remove the whole block, one's own suggested text).
 						const [text_before, text_after] = window(markup_before, markup_after);
-						const lost = !cluster.some(c => own_blocks.some(r => c.from <= r.to && r.from <= c.to)) &&
+						// (With several cursors, one's selection may cover text another typed: checked step by step below.)
+						const lost = cluster.length === 1 && !cluster.some(c =>
+							own_blocks.some(r => c.from <= r.to && r.from <= c.to)
+						) &&
 							[...new Set(typed)].some(ch =>
 								count(text_after, ch) < count(text_before, ch) + count(typed, ch) -
 										cluster.reduce((n, c) => n + count(visible(before, c.from, c.to, markup_before), ch), 0)
@@ -501,8 +523,70 @@ describe.each(CONFIGS)(
 						if (cluster.every(c => !refused_changes.includes(c)) && dropped(cluster))
 							fail("f", "dropped a change that was not refused");
 					}
-					if (shown.length !== (refused_changes.length ? 1 : 0) || shown.some(text => !NOTICES.includes(text)))
+					// A Backspace or Delete deletes the character its cursor reaches past markup, unless that one is
+					// already deleted (or is a line break kept next to a fence line).
+					for (const c of accepted.filter(() => kind === 2 || kind === 3)) {
+						let k = kind === 2 ? c.to - 1 : c.from;
+						while (markup_before.has(k)) k += kind === 2 ? -1 : 1;
+						if (k < 0 || k >= len || hidden_before.has(k) || fence_breaks.has(k)) continue;
+						const lo = Math.max(0, k - W), hi = Math.min(len, k + W);
+						const ch = before[k], [after_lo, after_hi] = [tr.changes.mapPos(lo, -1), tr.changes.mapPos(hi, 1)];
+						if (
+							count(visible(before, lo, hi, hidden_before), ch) <=
+								count(visible(after, after_lo, after_hi, hidden_after), ch)
+						) {
+							fail("f", `${kind === 2 ? "Backspace" : "Delete"} left ${JSON.stringify(ch)} at ${k}`);
+						}
+					}
+					if (shown.length !== (refused_changes.length ? 1 : 0) || shown.some(text => text !== NOTICE))
 						fail("f", `notices ${JSON.stringify(shown)}, refused ${refused_changes.length}`);
+
+					// Several cursors: the same as each cursor's change alone, from the last to the first.
+					if (disjoint.length > 1) {
+						// Each cursor stays on its text: mapped through the edits already made (a Backspace or Delete by its
+						// cursor).
+						const alone = suggestView(before);
+						let made = ChangeSet.empty(len);
+						for (const c of [...disjoint].reverse()) {
+							const cursor = made.mapPos(kind === 2 ? c.to : c.from, -1), end = alone.state.doc.length;
+							const start = kind === 2 ? cursor - 1 : kind === 3 ? cursor : made.mapPos(c.from, -1);
+							const from = Math.min(Math.max(0, start), end);
+							const to = Math.min(kind === 2 || kind === 3 ? start + 1 : Math.max(from, made.mapPos(c.to, -1)), end);
+							if (from === to && !c.insert) continue;
+							// Each step keeps the text it types (outside markup), unless it is refused. What it may remove is
+							// what it selected, or what it actually removed (such as a whole pending block of the user's own).
+							const text_and_markup = () => {
+								const text = alone.state.doc.toString();
+								return [text, markup(alone.state.field(rangeParser).ranges.ranges.map(copy))] as const;
+							};
+							const [text_before, markup_before_step] = text_and_markup();
+							const notices_now = notice.mock.calls.length;
+							const tr_alone = dispatchEdit(alone, kind, [{ from, to, insert: c.insert }]);
+							if (notice.mock.calls.length === notices_now) {
+								const [text_after, markup_after_step] = text_and_markup();
+								const selected = visible(text_before, from, to, markup_before_step);
+								// (The span of its changes: a character diff may match a typed character to an equal one.)
+								let lo = Infinity, hi = -Infinity;
+								tr_alone.changes.iterChangedRanges((fromA, toA) => (lo = Math.min(lo, fromA), hi = Math.max(hi, toA)));
+								const removed = lo <= hi ? visible(text_before, lo, hi, markup_before_step) : "";
+								const shown_before = visible(text_before, 0, text_before.length, markup_before_step);
+								const shown_after = visible(text_after, 0, text_after.length, markup_after_step);
+								for (const ch of new Set(c.insert)) {
+									const may_remove = Math.max(count(selected, ch), count(removed, ch));
+									if (count(shown_after, ch) < count(shown_before, ch) + count(c.insert, ch) - may_remove)
+										fail("f", `a cursor's typed ${JSON.stringify(ch)} is lost when applied in turn`);
+								}
+							}
+							made = made.compose(
+								alone.state.doc === tr_alone.startState.doc ? ChangeSet.empty(made.newLength) : tr_alone.changes,
+							);
+						}
+						const strip = (text: string) => text.replace(/"time":\d+/g, "");
+						if (strip(alone.state.doc.toString()) !== strip(after))
+							fail("f", `differs from the cursors in turn: ${JSON.stringify(alone.state.doc.toString())}`);
+						// A second view replaces the test harness's settings field, so the sequence goes on in a new view.
+						view = suggestView(after);
+					}
 
 					// Later edits would start from a broken document; each sequence counts its first failure only.
 					if (failed) break;

@@ -1,4 +1,5 @@
 import { ChangeSet, type Text } from "@codemirror/state";
+import DiffMatchPatch from "diff-match-patch";
 
 import type { EditorChange, EditorEditChange } from "../../../base";
 import { type CodeRegion, fenceMarker, findCodeRegions, regionsPreserved } from "../../../base/edit-util/code-regions";
@@ -52,15 +53,17 @@ export function guardChange(doc: Text, regions: CodeRegion[], change: EditorEdit
 	// EXPL: An edit within lines, after their container prefixes, off fence lines and writing no fence moves no region
 	//       (no rescan); with `prose`, it also writes nothing in a block.
 	function shifts({ changes, next }: ReturnType<typeof apply>, prose: boolean) {
+		// Text after the container prefix that can't start or end a block (or a paragraph a block interrupts).
+		const inert = (line: string) => {
+			const content = line.slice(PREFIX.exec(line)![0].length);
+			return !!content.trim() && !/^[`~<>#=*_+\-\d]/.test(content) && !/[<>]|```|~~~/.test(content);
+		};
 		let ok = true;
 		changes.iterChanges((fromA, toA, fromB, _toB, text) => {
-			const line = doc.lineAt(fromA), after = next.lineAt(fromB).text;
-			ok &&= !text.toString().includes("\n") && toA <= line.to &&
-				fromA - line.from >= PREFIX.exec(line.text)![0].length && !FENCE_TEXT.test(after) && !!line.text.trim() &&
-				!!after.trim() &&
-				!fences.some(f => f.at <= toA && fromA <= f.end) && !(prose && regions.some(r =>
-					r.from <= toA && fromA <= r.to
-				));
+			const line = doc.lineAt(fromA);
+			ok &&= !text.toString().includes("\n") && toA <= line.to && inert(line.text) && inert(next.lineAt(fromB).text) &&
+				fromA - line.from >= PREFIX.exec(line.text)![0].length && !fences.some(f => f.at <= toA && fromA <= f.end) &&
+				!(prose && regions.some(r => r.from <= toA && fromA <= r.to));
 		});
 		return ok;
 	}
@@ -128,8 +131,10 @@ export function guardChange(doc: Text, regions: CodeRegion[], change: EditorEdit
 		if (at_fence && at_fence.at > 0)
 			candidates.push([tracker.addition(at_fence.at - 1, "\n" + at_fence.prefix + inserted), at_fence.at]);
 		if (after && from < doc.length) {
-			const below = doc.lineAt(from + 1), prefix = /^[ \t>]*/.exec(below.text)![0];
-			const edit = tracker.addition(below.from + prefix.length, inserted + "\n" + prefix);
+			// Indented as the block's container (a list item) where the line below is less so.
+			const below = doc.lineAt(from + 1), prefix = /^[ \t>]*/.exec(below.text)![0], own = continuation(after.prefix);
+			const indent = own.length > prefix.length && own.startsWith(prefix) ? own.slice(prefix.length) : "";
+			const edit = tracker.addition(below.from + prefix.length, indent + inserted + "\n" + prefix);
 			candidates.push([edit && { ...edit, cursor: edit.cursor - 1 - prefix.length }, from]);
 		}
 		const h = "\n" + continuation(doc.lineAt(from).text);
@@ -139,12 +144,10 @@ export function guardChange(doc: Text, regions: CodeRegion[], change: EditorEdit
 			if (char(from - 1) === inserted.at(-1))
 				candidates.push([add(from - 1, char(from - 1) + inserted.slice(0, -1)), from]);
 			if (char(from) === inserted[0]) candidates.push([add(from + 1, inserted.slice(1) + char(from)), from]);
-			if (at_fence) {
-				const prefix = continuation(at_fence.prefix);
-				candidates.push([around(add(at_fence.at, inserted), at_fence.at, prefix, "\n"), at_fence.at]);
-			}
-			if (after) candidates.push([around(add(from, inserted), from, "\n" + after.prefix, ""), from]);
 			if (i > 0) continue;
+			const own_prefix = at_fence && continuation(at_fence.prefix);
+			if (at_fence) candidates.push([around(add(at_fence.at, inserted), at_fence.at, own_prefix!, "\n"), at_fence.at]);
+			if (after) candidates.push([around(add(from, inserted), from, "\n" + after.prefix, ""), from]);
 			const end = tracker.rangeEnd(from);
 			if (end !== undefined) candidates.push([tracker.addition(end, inserted), from]);
 			if (at_fence) {
@@ -210,28 +213,32 @@ export function guardChange(doc: Text, regions: CodeRegion[], change: EditorEdit
 			const del = wrap(deletion(s, e), before, after);
 			if (!del) continue;
 			if (!inserted && valid(del, s, e)) return del;
-			for (const [before, after] of inserted ? helpers(h2, h2) : []) {
-				const add = del.changes.every(c => c.to <= e) ? tracker.addition(e, before + inserted + after) : undefined;
-				const delta = del.changes.reduce((n, c) => n + c.insert.length - (c.to - c.from), 0);
-				const edit = add && { changes: [...del.changes, ...add.changes], cursor: add.cursor + delta };
-				if (valid(edit, s, e)) return edit;
-			}
+			const add = inserted && del.changes.every(c => c.to <= e) ? tracker.addition(e, inserted) : undefined;
+			const delta = del.changes.reduce((n, c) => n + c.insert.length - (c.to - c.from), 0);
+			const edit = add && { changes: [...del.changes, ...add.changes], cursor: add.cursor + delta };
+			if (valid(edit, s, e)) return edit;
 		}
 	}
 	return null;
 }
 
-/** `changes` cut down to what changed (a re-emitted range), so two cursors in one range don't overlap. */
+const dmp = new DiffMatchPatch();
+
+/** `changes` cut down to what changed (a character diff), so the other cursors keep their places in a re-emitted range. */
 export function minimalChanges(doc: Text, changes: EditorChange[]): EditorChange[] {
 	return changes.flatMap(change => {
-		const old = doc.sliceString(change.from, change.to), insert = change.insert;
-		const max = Math.min(old.length, insert.length);
-		let head = 0, tail = 0;
-		while (head < max && old[head] === insert[head]) head++;
-		while (tail < max - head && old[old.length - 1 - tail] === insert[insert.length - 1 - tail]) tail++;
-		while (head > 0 && /[{}+~=<>-]/.test(old[head - 1])) head--;
-		while (tail > 0 && /[{}+~=<>-]/.test(old[old.length - tail])) tail--;
-		if (head === old.length && head === insert.length) return [];
-		return [{ from: change.from + head, to: change.to - tail, insert: insert.slice(head, insert.length - tail) }];
+		const out: EditorChange[] = [];
+		let pos = change.from;
+		for (const [op, text] of dmp.diff_main(doc.sliceString(change.from, change.to), change.insert)) {
+			const last = out.at(-1), joined = last && last.to === pos;
+			if (op === 0) pos += text.length;
+			else if (op < 0) {
+				if (joined) last.to += text.length;
+				else out.push({ from: pos, to: pos + text.length, insert: "" });
+				pos += text.length;
+			} else if (joined) last.insert += text;
+			else out.push({ from: pos, to: pos, insert: text });
+		}
+		return out;
 	});
 }

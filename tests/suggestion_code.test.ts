@@ -310,6 +310,14 @@ describe("rule 4: fence lines are protected", () => {
 			22,
 			"> ```\n> x\n> ```\n> a\n> q",
 		],
+		[
+			"after a closing fence in a list item (re-review N5)",
+			"- a\n- ```js\n  m\n  ```\n- b",
+			21,
+			"- a\n- ```js\n  m\n  ```\n{++  a\n++}- b",
+			28,
+			"- a\n- ```js\n  m\n  ```\n  a\n- b",
+		],
 	])(
 		"text typed %s goes on a line of its own, tracked, and Accept and Reject are exact (M1)",
 		(_, doc, at, expected, head, accept) => {
