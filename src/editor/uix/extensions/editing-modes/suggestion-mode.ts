@@ -25,7 +25,7 @@ import {
 	SuggestionType,
 } from "../../../base";
 
-import { FENCE } from "../../../base/edit-util/code-regions";
+import { findCodeRegions } from "../../../base/edit-util/code-regions";
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
 import { is_exempt_from_tracking, pluginEditAnnotation } from "./tracked-edit";
@@ -111,7 +111,7 @@ function minimal(old: string, edit: { from: number; insert: string }) {
 	return out;
 }
 
-const FENCE_LINE = new RegExp(FENCE.source, "m");
+const FENCES = /`{3}|~{3}/;
 const MARKUP = /\{(?:\+\+|--|~~|==|>>)(?:\{[^{}]*\}@@)?|(?:\+\+|--|~~|==|<<)\}(?:\{[^{}]*\})?|~>/g;
 
 // TODO: Functionality: Double click mouse should also floodfill (problem: no specific userevent attached)
@@ -142,11 +142,15 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 
 		const { ranges: start_ranges, code_regions } = tr.startState.field(rangeParser);
 		let ranges: CriticMarkupRanges;
-		// EXPL: A change touching a code block (its content or a fence line, start-document positions), or inserting a
-		//       fence-shaped line, is applied as typed, untracked: markup there would be inert text in the code, or would
-		//       sit on a fence line. A user who breaks a fence breaks it.
+		// EXPL: A change touching a code block (its content or a fence line, in the document before it), or inserting text
+		//       that is part of a code block after it (a pasted block), is applied as typed, untracked: markup there would
+		//       be inert text in the code, or would sit on a fence line. A user who breaks a fence breaks it.
+		const pasted_regions = changed_ranges.some(c => FENCES.test(c.inserted)) ?
+			findCodeRegions(tr.state.doc.toString()) :
+			[];
 		const in_code = ({ from, to, inserted }: EditorEditChange) =>
-			FENCE_LINE.test(inserted) || code_regions.some(region => region.from <= to && from <= region.to);
+			code_regions.some(region => region.from <= to && from <= region.to) || FENCES.test(inserted) &&
+				pasted_regions.some(r => r.from <= tr.changes.mapPos(to, 1) && tr.changes.mapPos(from, -1) <= r.to);
 		if (changed_ranges.length > 0 && changed_ranges.every(in_code))
 			return tr;
 
@@ -202,21 +206,31 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length);
 				continue;
 			}
-			// EXPL: Typing in one's own addition that would make its closer's line fence-shaped (markup ignored) ends the
-			//       addition before that line; the line's text goes in untracked. A block typed key by key stays a block.
+			// EXPL: Typing in one's own addition that would make one of its lines a fence line (markup ignored, as the
+			//       parser reads fences) ends the addition before that line, and reopens it after the line if it goes on;
+			//       the line's text goes in untracked. A block typed key by key stays a block.
 			const line = doc.lineAt(from),
 				r = from === to &&
 					ranges.ranges_in_interval(from, from).find(r =>
 						r.type === SuggestionType.ADDITION && r.range_start <= from && from <= r.closer_to - 3 &&
-						r.closer_to <= line.to && range_metadata_compatible(r, metadata).compatible
+						range_metadata_compatible(r, metadata).compatible
 					);
-			const plain = doc.sliceString(line.from, from) + original.inserted + doc.sliceString(from, line.to);
-			if (r && FENCE.test(plain.replace(MARKUP, ""))) {
+			const plain = (doc.sliceString(line.from, from) + original.inserted + doc.sliceString(from, line.to))
+				.replace(MARKUP, "");
+			if (
+				r && FENCES.test(plain) &&
+				findCodeRegions(doc.sliceString(0, line.from) + plain + doc.sliceString(line.to))
+					.some(c => c.from === line.from || c.close_from === line.from)
+			) {
 				const keep = r.range_start < line.from - 1, start = keep ? line.from - 1 : r.from;
-				const rest = doc.sliceString(from, r.closer_to - 3);
-				const insert = (keep ? doc.sliceString(r.closer_to - 3, r.to) : "") + (r.range_start < line.from ? "\n" : "") +
-					doc.sliceString(Math.max(line.from, r.range_start), from) + original.inserted + rest;
-				apply(i, [{ from: start, to: r.to, insert }], start + insert.length - rest.length);
+				const closer = doc.sliceString(r.closer_to - 3, r.to), end = Math.min(line.to, r.closer_to - 3);
+				const after = doc.sliceString(line.to + 1, r.closer_to - 3), rest = doc.sliceString(from, end);
+				const typed = (keep ? closer : "") + (r.range_start < line.from ? "\n" : "") +
+					doc.sliceString(Math.max(line.from, r.range_start), from) + original.inserted;
+				const tail = end < r.closer_to - 3 ?
+					"\n" + (after && doc.sliceString(r.from, r.range_start) + after + closer) :
+					"";
+				apply(i, [{ from: start, to: r.to, insert: typed + rest + tail }], start + typed.length);
 				continue;
 			}
 			// EXPL: A selection end inside a substitution's "~>" is at its start (or, for the selection's start, its end):

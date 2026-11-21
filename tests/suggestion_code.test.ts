@@ -151,6 +151,68 @@ describe("changes inserting or deleting a fence line are untracked, and later su
 		expect(v.state.selection.main.head).toBe(5);
 	});
 
+	/** `doc` after typing `keys` one by one at `at`, metadata off. Enter in a quote continues it, as Obsidian does. */
+	function typed(doc: string, at: number, keys: string) {
+		const v = view(doc);
+		v.dispatch({ selection: { anchor: at } });
+		for (const [ch] of keys.matchAll(/\n> |[^]/g)) {
+			v.contentDOM.dispatchEvent(
+				new KeyboardEvent("keydown", { key: ch.startsWith("\n") ? "Enter" : ch, bubbles: true }),
+			);
+			v.dispatch(v.state.replaceSelection(ch), { userEvent: "input.type" });
+		}
+		return v;
+	}
+
+	test.each([
+		[
+			"in a quote",
+			"> \n\nlater {==note==}{>>c<<}",
+			2,
+			"intro\n> ```js\n> code\n> ```",
+			"> {++intro++}\n> ```js\n> code\n> ```\n\nlater {==note==}{>>c<<}",
+		],
+		[
+			"in a list item",
+			"- \n\nlater {==note==}{>>c<<}",
+			2,
+			"intro\n  ```js\n  code\n  ```",
+			"- {++intro++}\n  ```js\n  code\n  ```\n\nlater {==note==}{>>c<<}",
+		],
+		[
+			"on a list item's marker line",
+			"- \n\nlater {==note==}{>>c<<}",
+			2,
+			"```js\n  code\n  ```",
+			"- ```js\n  code\n  ```\n\nlater {==note==}{>>c<<}",
+		],
+	])("typing a block key by key %s", (_, doc, at, keys, out) => {
+		const v = typed(doc, at, keys);
+		expect(v.state.doc.toString()).toBe(out);
+		expect(v.state.field(rangeParser).code_regions).toHaveLength(1);
+		expect(ranges(v).slice(-2)).toEqual(["{==note==}", "{>>c<<}"]);
+	});
+
+	test("typing a fence in the middle of one's own addition splits it around the fence line", () => {
+		const doc = "{++a\n\nc++}\n\nlater {==note==}{>>c<<}";
+		const v = typed(doc, 5, "```");
+		expect(v.state.doc.toString()).toBe("{++a++}\n```\n{++c++}\n\nlater {==note==}{>>c<<}");
+		expect(v.state.selection.main.head).toBe(11);
+	});
+
+	test("pasting a block with prose in a quote", () => {
+		const v = view("> intro\n\nlater {==note==}{>>c<<}");
+		v.dispatch({ changes: { from: 7, insert: " see:\n> ```js\n> let a;\n> ```" }, userEvent: "input.paste" });
+		expect(v.state.doc.toString()).toBe("> intro see:\n> ```js\n> let a;\n> ```\n\nlater {==note==}{>>c<<}");
+		expect(ranges(v)).toEqual(["{==note==}", "{>>c<<}"]);
+	});
+
+	test("text with backticks pasted mid-line, forming no block, is tracked", () => {
+		const v = view("ab cd");
+		v.dispatch({ changes: { from: 2, insert: "```x" }, userEvent: "input.paste" });
+		expect(v.state.doc.toString()).toBe("ab{++```x++} cd");
+	});
+
 	test("deleting a block with prose", () => {
 		const doc = "intro\n```js\nlet a;\n```\nmore\n\nlater {==note==}{>>c<<}";
 		const v = view(doc);
