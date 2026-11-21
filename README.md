@@ -149,17 +149,19 @@ itself (for the CRI build, `config/critic.py`). Only then should anyone change t
 
 - **Fenced code blocks are left alone.** CriticMarkup inside a fenced code block (``` or ~~~, including inside
   callouts, quotes and lists) is no longer recognised; inline `code` is unchanged. Before updating, accept or reject any
-  pending suggestions or comments inside fenced code blocks. In Suggest mode, edits inside a fenced code block,
-  including its fence lines, are applied as typed and not tracked. Comments cannot be added inside a code block.
+  pending suggestions or comments inside fenced code blocks. In Suggest mode, an edit that touches a fenced code
+  block (its code or a fence line, even if it also covers prose) or pastes a fence line is applied as typed and not
+  tracked. Comments cannot be added inside a code block.
 - **Fix code-block suggestions made by 0.12 by hand.** Inkling 0.12 could write a suggested code block with the markup
   on its fence lines, such as `{++```js` … ```` ```++} ````. A fence line carrying anything after its backticks opens a
   new code block (as Obsidian renders it), so the rest of the note is read as code. Put `{++` and `++}` on lines of
   their own, around the block, to fix it.
 - **Broken markup is cleaned up automatically.** Sync tools can leave stray CriticMarkup brackets or orphaned Inkling
   metadata behind. When a note becomes active, or the open note changes from outside the editor, these are removed.
-  Text is never removed, and one Undo restores the markup (that note is then left alone until Obsidian restarts). Only
-  the note you are viewing is cleaned, and markup inside fenced or inline code is never touched. Turn it off with
-  **Clean up broken markup automatically** (on by default), or run **Clean up broken markup in this note** yourself.
+  Text is never removed, and an Undo right after a cleanup restores the markup and leaves that note alone until Obsidian
+  restarts. Only the note you are viewing is cleaned, and markup inside fenced or inline code is never touched. Turn it
+  off with **Clean up broken markup automatically** (on by default), or run **Clean up broken markup in this note**
+  yourself.
 
 ## Developing
 
