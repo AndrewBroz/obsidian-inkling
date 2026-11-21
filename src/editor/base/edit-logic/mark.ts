@@ -403,6 +403,25 @@ function mark_range(
 				// EXPL: Distinguish "selection contains nothing" from "selection covers only
 				//       pending additions" — the latter must remove those additions outright
 				//       (retracting a suggestion), not no-op.
+				// EXPL: An operation ending partway into a pending range's text (a selection from inside one addition
+				//       into the next, "{++ab++}{++cd++}" less "b++}{++c") retracts that part too: split the range there.
+				//       Bounding the removal by the wholly covered ranges alone silently kept it, or did nothing.
+				if (drop_additions && in_range.some(r => (r.from < from && from < r.to) || (r.from < to && to < r.to))) {
+					// Within one addition's text, its text is simply removed.
+					if (
+						!inserted && in_range.length === 1 && in_range[0].type === SuggestionType.ADDITION &&
+						in_range[0].range_start <= from && to <= in_range[0].closer_to - 3
+					) {
+						return { from, to, insert: "", start: from, end: from };
+					}
+					split_left_range();
+					split_right_range();
+					const added = inserted ?
+						construct_range(inserted, "", SuggestionType.ADDITION, metadata_fields, 0, 0, syntax) :
+						{ insert: "", start_offset: 0 };
+					const start = from + affixes[0].length + added.start_offset;
+					return { from, to, insert: affixes[0] + added.insert + affixes[1], start, end: start + inserted.length };
+				}
 				const covered = in_range.filter(r => from <= r.from && r.to <= to);
 				if (drop_additions && covered.length > 0) {
 					// EXPL: With deleted === "", everything inside [from, to] but outside the covered

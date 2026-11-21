@@ -232,18 +232,15 @@ describe("marking over pending additions consumes them (reject-all safety)", () 
 		});
 
 		// EXPL: Deleting a span WHOLLY INSIDE a single pending addition (neither end covers a base
-		//       character) currently no-ops rather than splitting the addition into {++c++}{++f++}.
-		//       That is an ACCEPT-side limitation, NOT the reject-side resurrection this task fixes:
-		//       reject_all still equals the base document ("abgh"), which is the contract. The covered
-		//       "de" is not resurrected -- it simply is not yet removed on accept. Characterised in
-		//       .superpowers/sdd/task-6-report.md; the reject invariant (asserted first) is what holds.
-		test("deleting the MIDDLE of an addition does not resurrect on reject (accept-side residual)", () => {
+		//       character) used to no-op, so Accept still produced the deleted text. It now removes it.
+		test("deleting the MIDDLE of an addition retracts it, and does not resurrect it on reject", () => {
 			//        a b { + + c d e f + + } g h
 			//        0 1 2 3 4 5 6 7 8 9 ...
 			const output = mark("ab{++cdef++}gh", 6, 8, "", SuggestionType.DELETION);
 			expect(reject_all(output)).toBe("abgh"); // THE CONTRACT: "de" is not resurrected
-			// accept-side residual: the pending "de" is not yet dropped (no split into {++cf++}).
-			expect(accept_all(output)).toBe("abcdefgh");
+			// The covered pending "de" is retracted.
+			expect(output).toBe("ab{++cf++}gh");
+			expect(accept_all(output)).toBe("abcfgh");
 		});
 
 		test("a substitution's inserted half is a pending addition too", () => {
