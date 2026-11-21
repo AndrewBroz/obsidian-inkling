@@ -110,18 +110,19 @@ describe("cleanupChanges", () => {
 		expect(clean(input)).toEqual({ text: input, count: 0 });
 	});
 
-	test("safe removals are kept when another is dropped", () => {
-		// EXPL: Removing `{--` would pair `{++ x {==y++}`; the stray `<<}` at the end is safe on its own.
-		expect(clean("{+{--+ x {==y++} z==} w <<}")).toEqual({ text: "{+{--+ x {==y++} z==} w ", count: 1 });
+	test("one unsafe removal: nothing changes, not even the safe ones", () => {
+		// EXPL: Removing `{--` would pair `{++ x {==y++}`; the stray `<<}` at the end is left too.
+		const input = "{+{--+ x {==y++} z==} w <<}";
+		expect(clean(input)).toEqual({ text: input, count: 0 });
 	});
 
-	test("many fragments with one unsafe removal: nothing changes, without per-fragment re-parsing", () => {
-		// EXPL: Past 50 fragments the per-fragment fallback re-parses once per fragment (seconds on a large note), so a
-		//       failed combined validation gives up instead.
-		const input = "{+{--+ x {==y++} z==}\n" + "w <<}\n".repeat(60);
-		const started = Date.now();
-		expect(cleanupChanges(input, DEFAULT_SETTINGS)).toEqual({ changes: [], count: 0 });
-		expect(Date.now() - started).toBeLessThan(1000);
+	test.each([
+		["The loss is $\\sum_{t=1}^{T} \\ell_t$"],
+		["$\\sum_{a=1}^{n}$"],
+		["x {a=1} y"],
+		["x {t=1} y"],
+	])("shorthand keys are not Inkling metadata: %j is kept", input => {
+		expect(clean(input)).toEqual({ text: input, count: 0 });
 	});
 
 	test("one pass: debris exposed by a removal waits for the next run", () => {

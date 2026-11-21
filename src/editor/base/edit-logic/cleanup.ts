@@ -23,7 +23,6 @@ export interface Debris {
 const CANDIDATE = /\{(?:\+\+|--|~~|==|>>)|(?:\+\+|--|~~|==|<<)\}|\}@@|\{/g;
 
 const INKLING_KEYS = new Set(["author", "time", "done", "style", "color", ...Object.keys(SHORTHAND_KEYS)]);
-const IDENTIFYING_KEYS = ["author", "time", "a", "t"];
 
 // EXPL: A closer-shaped token (`--}`, also `>>}`) sharing characters with an opener: `{---}` is not a broken `{--`.
 const OVERLAPPING_CLOSER = /^([+\-~=<>])\1\}/;
@@ -35,13 +34,12 @@ const ANY_CANDIDATE = /\{(?:\+\+|--|~~|==|>>|[A-Za-z_])|(?:\+\+|--|~~|==|<<)\}|\
 const CLOSERS = new Set(["++}", "--}", "~~}", "==}", "<<}"]);
 
 /**
- * Whether metadata left outside any range is Inkling's: every key is an Inkling key and one names an author or a
- * time. A lone `{style=…}` or `{color=red}` may be another plugin's attribute syntax, and unknown JSON before `@@`
- * may be anything, so both stay.
+ * Whether metadata left outside any range is Inkling's: every key is an Inkling key and its text (`raw`) spells out
+ * `author` or `time`, as Inkling writes it. A lone `{style=…}` or `{color=red}` may be another plugin's attribute
+ * syntax, a shorthand `{t=1}` may be a LaTeX subscript, and unknown JSON before `@@` may be anything, so all stay.
  */
-function inklingMetadata(fields: MetadataFields): boolean {
-	const keys = Object.keys(fields);
-	return keys.every(key => INKLING_KEYS.has(key)) && IDENTIFYING_KEYS.some(key => keys.includes(key));
+function inklingMetadata(fields: MetadataFields, raw: string): boolean {
+	return Object.keys(fields).every(key => INKLING_KEYS.has(key)) && /\b(?:author|time)\b/.test(raw);
 }
 
 /**
@@ -61,7 +59,11 @@ function candidateAt(text: string, match: RegExpExecArray): Debris | undefined {
 		const line_start = text.lastIndexOf("\n", at) + 1;
 		for (let start = text.lastIndexOf("{", at); start >= line_start; start = text.lastIndexOf("{", start - 1)) {
 			const fields = parseLegacyMetadata(text.slice(start, at + 1));
-			if (fields) return inklingMetadata(fields) ? { from: start, to: at + 3, kind: "legacy" } : undefined;
+			if (fields) {
+				return inklingMetadata(fields, text.slice(start, at + 1)) ?
+					{ from: start, to: at + 3, kind: "legacy" } :
+					undefined;
+			}
 			if (start === 0) break;
 		}
 		return undefined;
@@ -72,7 +74,7 @@ function candidateAt(text: string, match: RegExpExecArray): Debris | undefined {
 	//       (a range with legacy metadata ignores a second, trailing block).
 	if (CLOSERS.has(text.slice(Math.max(0, at - 3), at))) return undefined;
 	const block = parseAttrBlock(text, at);
-	if (!block || !inklingMetadata(block.fields)) return undefined;
+	if (!block || !inklingMetadata(block.fields, text.slice(block.from, block.to))) return undefined;
 	return { from: block.from, to: block.to, kind: "attributes" };
 }
 
@@ -194,15 +196,11 @@ function preserves(text: string, settings: PluginSettings, before: string[], spa
 	return after.length === expected.length && after.every((entry, i) => entry === expected[i]);
 }
 
-// EXPL: The per-fragment fallback re-parses the whole note once per fragment: about 10 s at 1000 fragments.
-const FALLBACK_LIMIT = 50;
-
 /**
  * Changes that remove the debris from `text`. One pass only, and validated: removing a fragment can change how the
  * grammar pairs what remains (`{+{--+ x {==y++} z==}` without its `{--` turns `{++ x {==y++}` into an addition) or
- * where a fence opens, so the removals are kept only if every range and fenced region survives unchanged. Failing
- * that, each removal that is safe on its own is kept if they are still safe together; otherwise nothing changes.
- * Past `FALLBACK_LIMIT` fragments the fallback is skipped (it re-parses once per fragment) and nothing changes.
+ * where a fence opens, so the removals are kept only if every range and fenced region survives unchanged; otherwise
+ * nothing changes.
  * Adjacent removals are merged into one change; `count` is the number of fragments removed.
  */
 export function cleanupChanges(
@@ -210,14 +208,7 @@ export function cleanupChanges(
 	settings: PluginSettings,
 ): { changes: { from: number; to: number; insert: "" }[]; count: number } {
 	let debris = findDebris(text, settings);
-	if (debris.length) {
-		const before = structure(text, settings);
-		if (!preserves(text, settings, before, debris)) {
-			if (debris.length > FALLBACK_LIMIT) return { changes: [], count: 0 };
-			debris = debris.filter(span => preserves(text, settings, before, [span]));
-			if (!preserves(text, settings, before, debris)) debris = [];
-		}
-	}
+	if (debris.length && !preserves(text, settings, structure(text, settings), debris)) debris = [];
 
 	const changes: { from: number; to: number; insert: "" }[] = [];
 	for (const span of debris) {
