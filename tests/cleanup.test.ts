@@ -302,6 +302,11 @@ describe("cleanup leaves code in list and quote blocks alone (review C1)", () =>
 		["a 4-space nested list", "- list\n  - nested\n    ```c\n    i++}\n    ```\n"],
 		["a fence on the list-marker line", "- ```c\n  i++}\n  ```\n"],
 		["an ordered list item", "10. a\n\n    ```c\n    i++}\n    ```\n"],
+		["a block after an empty list item (re-review N2)", "-\n\n  ```c\n  int i;\ni++}\n```\n"],
+		[
+			"a block after a paragraph an ordered item can't interrupt (re-review N2)",
+			"para\n2. ```\n   code\n   ```\nfor(;;i++}\n```\n",
+		],
 	])("%s", (_, text) => {
 		expect(findDebris(text, DEFAULT_SETTINGS)).toEqual([]);
 		expect(clean(text)).toEqual({ text, count: 0 });
