@@ -557,6 +557,41 @@ describe.each(CONFIGS)(
 						if (kind === 5 && home && after_ranges.length !== before_ranges.length)
 							fail("f", "retyping inside one addition split it");
 					}
+					// At blocks, text typed over a selection is, in Accept, beside only what was beside the selection on its
+					// lines, or on a line of its own (with a container prefix): never joined to a neighbouring line's text.
+					// (Selection ends inside a range move the text to that range's ends: what is beside it there is checked
+					// by the fragmentation and loss checks.)
+					const outside = (pos: number) => !before_ranges.some(r => r.from < pos && pos < r.to);
+					if (
+						kind === 5 && disjoint.length === 1 && accepted.length === 1 && !off_blocks(accepted[0]) &&
+						outside(accepted[0].from) && outside(accepted[0].to)
+					) {
+						const c = accepted[0];
+						let typed_at = -1;
+						tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+							for (let k = fromB; k < toB && typed_at < 0; k++)
+								if (after[k] === "Z" && !hidden_after.has(k)) typed_at = k;
+						});
+						const line_text = (text: string, at: number, skip: Set<number>, dir: -1 | 1) => {
+							let out = "";
+							for (let k = at; k >= 0 && k < text.length; k += dir) {
+								if (skip.has(k)) continue;
+								if (text[k] === "\n") break;
+								out = dir < 0 ? text[k] + out : out + text[k];
+							}
+							return out;
+						};
+						if (typed_at >= 0) {
+							// (A run of "Z"s is one: a character diff may match the typed one to a neighbour.)
+							const left = line_text(after, typed_at - 1, hidden_after, -1).replace(/Z+$/, "");
+							const right = line_text(after, typed_at + 1, hidden_after, 1).replace(/^Z+/, "");
+							const was_left = line_text(before, c.from - 1, hidden_before, -1).replace(/Z+$/, "");
+							const was_right = line_text(before, c.to, hidden_before, 1).replace(/^Z+/, "");
+							const alone = (t: string) => /^[ \t>]*$/.test(t);
+							if (!(alone(left) || left === was_left) || !(alone(right) || right === was_right))
+								fail("f", `Accept joins the typed text to a neighbouring line: ${JSON.stringify(left + "Z" + right)}`);
+						}
+					}
 					if (shown.length !== (refused_changes.length ? 1 : 0) || shown.some(text => text !== NOTICE))
 						fail("f", `notices ${JSON.stringify(shown)}, refused ${refused_changes.length}`);
 

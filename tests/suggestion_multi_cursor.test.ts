@@ -183,3 +183,36 @@ describe("re-review 2", () => {
 		expect(notices).not.toHaveBeenCalled();
 	});
 });
+
+describe("re-review 3", () => {
+	test.each([
+		[
+			"in a quote",
+			"> intro\n> ```js\n> let a;\n> ```\n> after",
+			"> intro{--\n> ```js\n> let a;\n> ```\n> --}{++\n> x++}\n> after",
+			"> intro\n> x\n> after",
+		],
+		[
+			"in a list item",
+			"- intro\n  ```js\n  let a;\n  ```\n  after",
+			"- intro{--\n  ```js\n  let a;\n  ```\n  --}{++\n  x++}\n  after",
+			"- intro\n  x\n  after",
+		],
+		[
+			"before another block",
+			"intro\n```js\nlet a;\n```\n```py\nb\n```",
+			"intro{--\n```js\nlet a;\n```\n--}{++\nx++}\n```py\nb\n```",
+			"intro\nx\n```py\nb\n```",
+		],
+	])("R6: text typed over part of a fence line %s goes on a line of its own", (_, doc, out, accepted) => {
+		const g = doc.indexOf("```js");
+		const result = edit(doc, [{ from: g, to: g + 2, insert: "x" }]);
+		expect(result.out).toBe(out);
+		expect(result.accept).toBe(accepted);
+		// Rejecting restores the text, with at most a prefix-only line where a marker was.
+		expect(result.reject.split("\n").filter(line => !/^[ \t>]*$/.test(line))).toEqual(
+			doc.split("\n").filter(line => !/^[ \t>]*$/.test(line)),
+		);
+		expect(notices).not.toHaveBeenCalled();
+	});
+});
