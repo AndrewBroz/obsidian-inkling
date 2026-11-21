@@ -123,7 +123,9 @@ function mark_range(
 	//       re-emitting its delimiters inside itself ("{--x--}{++ab++}" with "{++a" deleted, "{++ab++}{--x--}" with
 	//       "b++}" deleted). An operation covering a whole range still sees the range beyond as its neighbour.
 	const starting = ranges.at_cursor(from, true), ending = ranges.at_cursor(to, false);
-	const left_range = from < to && starting?.from === from && to < starting.to ? starting : ranges.at_cursor(from, false);
+	const left_range = from < to && starting?.from === from && to < starting.to ?
+		starting :
+		ranges.at_cursor(from, false);
 	const right_range = from < to && ending?.to === to && ending.from < from ? ending : ranges.at_cursor(to, true);
 	const affixes: [string, string] = ["", ""];
 	let special_case = false;
@@ -283,18 +285,26 @@ function mark_range(
 			const merge_result = mergeable_range(cursor, left_range, type, metadata_fields, left, true);
 			if (!merge_result.type) {
 				// CASE 1: Entire substitution should be split (due to incompatible metadata or range type)
-				const deleted = left_range.unwrap_slice(from, to);
-				split_left_range(to < (left_range as SubstitutionRange).middle);
-				split_right_range(from > (left_range as SubstitutionRange).middle + 2);
-				({ insert, start_offset, end_offset } = construct_range(
-					inserted,
-					deleted,
-					type,
-					metadata_fields,
-					start_offset,
-					end_offset + inserted.length + deleted.length,
-					syntax,
-				));
+				// EXPL: Only the covered part of "old" is deleted base text; the covered part of the pending "new" is
+				//       retracted. Taking the whole slice as deleted made rejecting restore "new" (and the separator).
+				const middle = (left_range as SubstitutionRange).middle;
+				const deleted = from < middle ? left_range.unwrap_slice(from, Math.min(to, middle)) : "";
+				split_left_range(to < middle);
+				split_right_range(from > middle + 2);
+				if (deleted || inserted) {
+					({ insert, start_offset, end_offset } = construct_range(
+						inserted,
+						deleted,
+						type,
+						metadata_fields,
+						start_offset,
+						// The inserted text is added to the end below.
+						end_offset + deleted.length,
+						syntax,
+					));
+				} else {
+					insert = "";
+				}
 			} else {
 				let deleted = "";
 				const parts = left_range.unwrap_parts();
@@ -446,16 +456,16 @@ function mark_range(
 			if (left_merge.type) {
 				// NOTE: Required for case of '{~~yyyabc~>123~~}{++zzz++}'
 				if (left_range!.type === SuggestionType.SUBSTITUTION) {
-					// EXPL: A deletion starting before the separator already took the whole "old" half (see
-					//       unwrap_in_range), and retracts the part of the pending "new" half it covers. Taking both halves
-					//       whole duplicated "old" and kept the covered "new" as deleted base text, which rejecting then
-					//       restored ("{~~old~>new~~} x" with "new~~} x" deleted became "{--old xnew--}").
+					// EXPL: A deletion starting in "old" already took the covered part of it (see unwrap_in_range), and
+					//       retracts the part of the pending "new" half it covers. Taking both halves whole duplicated "old"
+					//       and kept the covered "new" as deleted base text, which rejecting then restored.
 					const parts = (left_range as SubstitutionRange).unwrap_parts();
 					const middle = (left_range as SubstitutionRange).middle;
 					const kept_new = from >= middle + 2 ? parts[1].slice(0, from - middle - 2) : drop_additions ? "" : parts[1];
 					start_offset = parts[0].length;
 					end_offset += kept_new.length;
-					if (!(drop_additions && from < middle)) deleted = parts[0] + deleted;
+					deleted = (drop_additions && from < middle ? left_range!.unwrap_slice(left_range!.from, from) : parts[0]) +
+						deleted;
 					insert = kept_new + inserted;
 				} else {
 					const slice = left_range!.unwrap_slice(0, from);
@@ -475,9 +485,7 @@ function mark_range(
 				if (right_range!.type === SuggestionType.SUBSTITUTION) {
 					const parts = (right_range as SubstitutionRange).unwrap_slice_parts_inverted(from, to);
 					insert = inserted + parts[1];
-					// EXPL: A deletion reaching into the substitution already took its whole "old" half (see
-					//       unwrap_in_range); adding the uncovered rest again duplicated it ("{~~x oldd~>new~~}").
-					if (!(drop_additions && right_range!.from < to)) deleted += parts[0];
+					deleted += parts[0];
 				} else {
 					insert += right_range!.unwrap_slice(to, Infinity);
 				}

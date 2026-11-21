@@ -167,8 +167,9 @@ export class CriticMarkupRanges {
 					//       Conversely, always folding it (the pre-Task-6b behaviour) would LOSE "old" when
 					//       the op consumed the OLD-front of a back-substitution. `from < middle` splits the
 					//       two correctly: no resurrection, no lost committed text.
+					// Only the covered part of "old": a substitution split around the op keeps the rest.
 					if (from < (range as SubstitutionRange).middle)
-						output += range.unwrap_parts()[0];
+						output += range.unwrap_slice(Math.max(0, from), Math.min(to, (range as SubstitutionRange).middle));
 				} else {
 					output += range.unwrap_slice(Math.max(0, from), to);
 				}

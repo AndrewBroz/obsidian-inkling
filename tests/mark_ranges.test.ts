@@ -642,3 +642,47 @@ describe("a deletion from inside a substitution past its end", () => {
 		expect(reject_all(output)).toBe("old x y");
 	});
 });
+
+describe("editing another author's substitution keeps only its old text as base text", () => {
+	test.each([
+		["deleting the start of its new text", 12, 13, "", "x {~~old~>ne~~} y"],
+		["replacing from its old text into its new text", 5, 12, "Z", `x {~~{"author":"me"}@@old~>Z~~}{++w++} y`],
+		["deleting from its old text into its new text", 6, 13, "", `x {--o--}{--{"author":"me"}@@ld--} y`],
+	])("%s", (_, from, to, inserted, expected) => {
+		const doc = "x {~~old~>new~~} y";
+		const type = inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION;
+		const output = mark(doc, from, to, inserted, type, { author: "me" });
+		expect(output).toBe(expected);
+		expect(base_text(output)).toBe("x old y");
+	});
+});
+
+describe("a deletion reaching into a substitution it does not merge with keeps the old text once", () => {
+	test.each([
+		[
+			"another author's deletion",
+			"x {~~old~>new~~} y",
+			0,
+			7,
+			"",
+			{ author: "me" },
+			"x old y",
+			`{--{"author":"me"}@@x ol--}{~~d~>new~~} y`,
+		],
+		["a replacement", "and {~~old~>new~~} y", 3, 8, "Z", undefined, "and old y", "and{~~ o~>Z~~}{~~ld~>new~~} y"],
+	])("%s", (_, doc, from, to, inserted, metadata, base, expected) => {
+		const type = inserted ? SuggestionType.SUBSTITUTION : SuggestionType.DELETION;
+		const output = mark(doc, from, to, inserted, type, metadata as MetadataFields | undefined);
+		expect(base_text(output)).toBe(base);
+		expect(output).toBe(expected);
+	});
+});
+
+test("typing into another author's substitution puts the cursor after the typed text", () => {
+	const doc = "x {~~old~>new~~} y";
+	const edits = mark_edits(doc, 12, 12, "ab", SuggestionType.ADDITION, { author: "me" });
+	const output = apply_edits(doc, edits);
+	const end = edits.at(-1)!.end + edits.slice(0, -1).reduce((n, e) => n + e.insert.length - (e.to - e.from), 0);
+	expect(output.slice(end - 2, end)).toBe("ab");
+	expect(end).toBeLessThanOrEqual(output.length);
+});
