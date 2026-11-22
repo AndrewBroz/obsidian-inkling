@@ -12,7 +12,7 @@
 #   bash obsidian-sandbox.sh reset     stop and delete .obsidian-sandbox/ entirely
 #
 # Env: OBSIDIAN_SANDBOX_PORT (default 9333), OBSIDIAN_SANDBOX_DIR (default ./.obsidian-sandbox),
-#      OBSIDIAN_SANDBOX_FIXTURES (fixture vault copied in on setup; default ./test/e2e/vaults/basic).
+#      OBSIDIAN_SANDBOX_FIXTURES (vault copied in on setup; default ./test/e2e/vaults/basic, else ./sandbox-fixtures).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,16 +51,24 @@ setup() {
 	local asar
 	asar="$(ls "$USER_OBSIDIAN_DATA"/obsidian-*.asar 2>/dev/null | sort -V | tail -1 || true)"
 	if [ -n "$asar" ] && [ ! -e "$DATA/$(basename "$asar")" ]; then cp "$asar" "$DATA/"; fi
-	# EXPL: Optional fixtures: a fixture vault whose files (notes, and .obsidian/ settings such as the plugin's
-	#       data.json) are copied into the sandbox vault, never overwriting. It's the e2e suite's vault, so a note
-	#       added to reproduce a bug here is also there for the spec that guards it.
-	local fixtures="${OBSIDIAN_SANDBOX_FIXTURES:-$PLUGIN_DIR/test/e2e/vaults/basic}"
+	# EXPL: Optional fixtures, copied into the vault and never overwriting. The default is the e2e suite's fixture
+	#       vault (notes, plus .obsidian/ settings such as .obsidian/plugins/<id>/data.json), so a note added to
+	#       reproduce a bug here is also there for the spec that guards it. The older sandbox-fixtures/ layout keeps
+	#       working: its plugin-data.json becomes the plugin's data.json.
+	local fixtures="${OBSIDIAN_SANDBOX_FIXTURES:-}"
+	if [ -z "$fixtures" ]; then
+		if [ -d "$PLUGIN_DIR/test/e2e/vaults/basic" ]; then fixtures="$PLUGIN_DIR/test/e2e/vaults/basic"
+		else fixtures="$PLUGIN_DIR/sandbox-fixtures"; fi
+	fi
 	if [ -d "$fixtures" ]; then
-		find "$fixtures" -type f | while read -r src; do
+		find "$fixtures" -type f ! -name plugin-data.json | while read -r src; do
 			dest="$VAULT/${src#"$fixtures"/}"
 			mkdir -p "$(dirname "$dest")"
 			[ -e "$dest" ] || cp "$src" "$dest"
 		done
+		if [ -f "$fixtures/plugin-data.json" ] && [ ! -e "$VAULT/.obsidian/plugins/$PLUGIN_ID/data.json" ]; then
+			cp "$fixtures/plugin-data.json" "$VAULT/.obsidian/plugins/$PLUGIN_ID/data.json"
+		fi
 	fi
 	echo "sandbox ready: $SANDBOX (plugin $PLUGIN_ID${asar:+, Obsidian $(basename "$asar" .asar | sed 's/obsidian-//')})"
 }
