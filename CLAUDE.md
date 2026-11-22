@@ -41,3 +41,24 @@ bun run sandbox stop                            # when done (reset deletes the s
   `bun run sandbox status` for the version; the window's user-agent shows only the base installer version.
 - Check computed styles and a screenshot, not just the DOM: a class can be present while its colour resolves to
   nothing (0.13.2: `--text-highlight-bg` no longer existed).
+
+## Releasing
+
+Releases go out only when the owner says so. Every release keeps the plugin's community scorecard
+(https://community.obsidian.md/plugins/inkling-markup, "Scorecard" tab) at **Review: Excellent** and
+**Health: Excellent**. Its automated scan of each release is part of the bar, alongside the tests.
+
+Before releasing:
+1. `bun run lint`: 0 errors and 0 warnings. The config includes Obsidian's `eslint-plugin-obsidianmd` and
+   typescript-eslint's type-checked rules, which are what the scorecard's scan reports. Don't silence a rule to
+   get there: fix the code. If a finding is a false positive, disable it on that line only, with a comment saying why.
+2. `bun audit`: no advisories in shipped dependencies.
+3. Full suite (`nice -n 19 npx jest --maxWorkers=2`), `npx tsc --noEmit`, `bun run build`, and a sandbox check of
+   anything user-visible (see "Test in real Obsidian").
+
+Release: `bun run release-patch|minor|major`, then `git push origin main` and `git push origin <tag>` alone (never
+`--follow-tags`). Then confirm the workflow passed: `gh run list --repo AndrewBroz/obsidian-inkling`.
+
+After the scan of the new release appears on the scorecard (read the page in a browser; the Scorecard tab is
+rendered client-side), compare its findings with what lint reported. Anything new is fixed in the next patch,
+and if lint missed it, add a rule or check that catches it next time.
