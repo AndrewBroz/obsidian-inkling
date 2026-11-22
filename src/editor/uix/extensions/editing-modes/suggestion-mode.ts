@@ -1,4 +1,4 @@
-import { ChangeSet, EditorSelection, EditorState, type Extension, Transaction } from "@codemirror/state";
+import { ChangeSet, EditorSelection, EditorState, type Extension, StateEffect, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import DiffMatchPatch from "diff-match-patch";
 import { editorEditorField } from "obsidian";
@@ -99,6 +99,8 @@ export const suggestionMode = (settings: PluginSettings): Extension =>
 const dmp = new DiffMatchPatch();
 
 const FENCES = /`{3}|~{3}/;
+/** A line's start that is only line markers, each followed by a space: `> `, `## `, `- `, `1. `, `- [ ] `. */
+const LINE_MARKERS = /^(?:[ \t]*(?:>|#{1,6}|(?:[-*+]|\d{1,9}[.)])(?: \[[ xX]\])?) +)+$/;
 const MARKUP = /\{(?:\+\+|--|~~|==|>>)(?:\{[^{}]*\}@@)?|(?:\+\+|--|~~|==|<<)\}(?:\{[^{}]*\})?|~>/g;
 
 type Piece = { text: string; markup: boolean };
@@ -209,6 +211,35 @@ function reading(text: string, settings: PluginSettings) {
 	return text;
 }
 
+/**
+ * The effects of `tr`, a single insertion, mapped into the document its tracked form `all` makes, where the inserted
+ * text ends at `end`; none if `tr` is anything else, or its text is not there.
+ * EXPL: The tracked edit replaces the user's, which drops its effects, among them the one by which Obsidian types over
+ *       an auto-paired bracket: `(a)` came out as `(a))`. The two documents are the same before both edits and after
+ *       both, and hold the inserted text; around it, positions map to the edge of the markup that differs.
+ */
+function carriedEffects(tr: Transaction, all: ChangeSet, end: number): readonly StateEffect<unknown>[] {
+	const edits: { fromA: number; toA: number; fromB: number; toB: number; text: string }[] = [];
+	tr.changes.iterChanges((fromA, toA, fromB, toB, text) =>
+		edits.push({ fromA, toA, fromB, toB, text: text.toString() })
+	);
+	if (!tr.effects.length || edits.length !== 1 || edits[0].fromA !== edits[0].toA) return [];
+	const { fromA, fromB, toB, text } = edits[0];
+	let low = fromA, high = fromA;
+	all.iterChangedRanges((from, to) => {
+		low = Math.min(low, from);
+		high = Math.max(high, to);
+	});
+	const theirs = tr.newDoc, ours = all.apply(tr.startState.doc), start = end - text.length;
+	const suffix = tr.startState.doc.length - high;
+	if (start < low || end > ours.length - suffix || ours.sliceString(start, end) !== text) return [];
+	const mapping = ChangeSet.of([
+		{ from: low, to: fromB, insert: ours.sliceString(low, start) },
+		{ from: toB, to: theirs.length - suffix, insert: ours.sliceString(end, ours.length - suffix) },
+	], theirs.length);
+	return StateEffect.mapEffects(tr.effects, mapping);
+}
+
 // TODO: Functionality: Double click mouse should also floodfill (problem: no specific userevent attached)
 function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction {
 	const editor = tr.startState.field(editorEditorField) as EditorView & { cm: VimEditor };
@@ -252,12 +283,22 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		const metadata = generate_metadata(settings);
 
 		const backwards_delete = tr.isUserEvent("delete.backward") || (latest_event as KeyboardEvent)?.key === "Backspace";
+		// EXPL: How far before the end of each change's inserted text the edit left its cursor: an auto-paired bracket
+		//       or quote (`(` typed as `()`) puts it between the pair. The tracked insertion keeps it there. Only a
+		//       cursor the edit set counts: a mapped one stays before text inserted at it.
+		const tails: number[] = [];
+		tr.changes.iterChanges((_fromA, _toA, fromB, toB) => {
+			const sel = tr.selection?.ranges[Math.min(tails.length, tr.selection.ranges.length - 1)];
+			tails.push(sel?.empty && fromB <= sel.head && sel.head < toB ? toB - sel.head : 0);
+		});
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
 		// EXPL: Each change is tracked in turn, from the last cursor to the first, in the document the later ones left
 		//       (its positions mapped there): tracked against the start document, two cursors in one range each rewrote
 		//       it and duplicated its text. Before `low`, the first position the later ones changed, the document and
-		//       its ranges are the start ones; a change whose line or ranges reach `low` gets them parsed afresh. With several
-		//       changes, edits are reduced to what they change, so other positions map through them.
+		//       its ranges are the start ones; a change whose line or ranges reach `low` gets them parsed afresh. Edits are
+		//       reduced to what they change, so other positions map through them: other cursors, and what the editor
+		//       keeps by position, such as where Obsidian put an auto-paired closer it will type over (rewriting the whole
+		//       range dropped it, so `(a)` typed in one's own addition came out as `(a))`).
 		let state = tr.startState, doc = state.doc, all = ChangeSet.empty(doc.length), low = Infinity;
 		let fresh: CriticMarkupRanges | undefined;
 		const cursors: number[] = [];
@@ -266,7 +307,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 			ChangeSet.of(edits.flatMap(edit => minimal(doc.sliceString(edit.from, edit.to), edit, at)), doc.length);
 		/** Applies change `i`'s `edits` (in `doc`, made at `at`), with its cursor at `cursor`, for the changes before it. */
 		const apply = (i: number, edits: { from: number; to: number; insert: string }[], cursor: number, at: number) => {
-			const changes = changed_ranges.length > 1 ? reduce(edits, at) : ChangeSet.of(edits, doc.length);
+			const changes = reduce(edits, at);
 			for (let k = i + 1; k < cursors.length; k++) cursors[k] = changes.mapPos(cursors[k]);
 			cursors[i] = cursor;
 			all = all.compose(changes);
@@ -298,8 +339,26 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				(fresh ??= new CriticMarkupRanges(getRangesInText(doc.toString(), settings)));
 			let editor_change = { ...original, from, to, anchor, deleted: doc.sliceString(from, to) };
 			if (in_code(original)) {
-				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length, from);
+				apply(i, [{ from, to, insert: original.inserted }], from + original.inserted.length - tails[i], from);
 				continue;
+			}
+			// EXPL: A line marker (quote, heading, list item, task) typed at the start of a line goes in as typed,
+			//       untracked, like code; text typed after it is tracked. Key by key, the marker's first characters were
+			//       tracked as one's own addition (`{++-++}`); the space that completes it unwraps them.
+			if (from === to && original.inserted.endsWith(" ") && !original.inserted.includes("\n")) {
+				const line_start = doc.lineAt(from).from;
+				const around = ranges.ranges_in_interval(from, from);
+				const own = around.find(r =>
+					r.type === SuggestionType.ADDITION && r.from >= line_start && from === r.closer_to - 3 &&
+					!r.replies.length && range_metadata_compatible(r, metadata).compatible
+				);
+				const start = own?.from ?? from, typed = (own?.unwrap() ?? "") + original.inserted;
+				// (Not inside another range that began on an earlier line: the line's start there is that range's text.)
+				const outside = around.every(r => r === own || r.from === from);
+				if (outside && LINE_MARKERS.test(doc.sliceString(line_start, start) + typed)) {
+					apply(i, [{ from: start, to: own?.to ?? from, insert: typed }], start + typed.length, from);
+					continue;
+				}
 			}
 			// EXPL: Typing in one's own addition that would make one of its lines a fence line (markup ignored, as the
 			//       parser reads fences) ends the addition before that line, and reopens it after the line if it goes on;
@@ -382,7 +441,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 				false,
 			);
 			const added_offset = edits.slice(0, -1).reduce((acc, op) => acc - (op.to - op.from) + op.insert.length, 0);
-			const cursor = backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset;
+			const cursor = backwards_delete ? edits[0].start : edits[edits.length - 1].end + added_offset - tails[i];
 			// EXPL: A keystroke that changes what the document says (see `reading`) is tracked; one that does not
 			//       (Backspace inside one's own deletion) leaves it alone, where rewriting the range would only have
 			//       converted its metadata's format or refreshed its time. The cursor moves as it would have.
@@ -410,6 +469,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 		return tr.startState.update({
 			changes: all,
 			selection: EditorSelection.create(cursors.map(cursor => EditorSelection.cursor(cursor))),
+			effects: carriedEffects(tr, all, cursors[0] + tails[0]),
 			annotations: forwardedEvent ?
 				[Transaction.userEvent.of(forwardedEvent), pluginEditAnnotation.of(true)] :
 				[pluginEditAnnotation.of(true)],

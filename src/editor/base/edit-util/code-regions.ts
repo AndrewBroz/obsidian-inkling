@@ -124,6 +124,11 @@ const HTML_BLOCKS: [RegExp, RegExp | undefined][] = [
 const htmlStart = (line: string, uninterrupting: boolean) =>
 	HTML_BLOCKS.some(([start], i) => (i < 6 || uninterrupting) && start.test(line));
 
+/** Whether `from`-`to` touches a code region (its content or a fence line, ends included). */
+export function inCode(regions: { from: number; to: number }[], from: number, to: number = from): boolean {
+	return regions.some(r => r.from <= to && from <= r.to);
+}
+
 /** `text` with every character inside a code region (line breaks excepted) replaced by a space. */
 export function maskCode(text: string, regions: { from: number; to: number }[]): string {
 	let out = "", pos = 0;

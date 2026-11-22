@@ -1,6 +1,7 @@
 import { type ChangeSpec, EditorSelection, EditorState } from "@codemirror/state";
 
 import { rangeParser, SubstitutionRange, SuggestionType } from "../../base";
+import { inCode } from "../../base/edit-util/code-regions";
 
 /**
  * Removes initial whitespaces and double newlines from ranges that would otherwise result in markup being applied
@@ -11,7 +12,7 @@ export const rangeCorrecter = EditorState.transactionFilter.of(tr => {
 		const previous_selection = tr.startState.selection.main, current_selection = tr.selection!.main;
 
 		if (current_selection.anchor === current_selection.head) {
-			const ranges = tr.startState.field(rangeParser).ranges;
+			const { ranges, code_regions } = tr.startState.field(rangeParser);
 
 			const start_range = ranges.at_cursor(previous_selection.head);
 			const end_range = ranges.at_cursor(current_selection.head);
@@ -19,6 +20,8 @@ export const rangeCorrecter = EditorState.transactionFilter.of(tr => {
 			// Execute only if the cursor is moved outside a particular range
 			if (
 				start_range && start_range !== end_range &&
+				// EXPL: The correction rewrites the range's text, which would change a code block the range spans.
+				!inCode(code_regions, start_range.from, start_range.to) &&
 				(start_range.type === SuggestionType.SUBSTITUTION || start_range.type === SuggestionType.HIGHLIGHT)
 			) {
 				const is_substitution = start_range.type === SuggestionType.SUBSTITUTION;

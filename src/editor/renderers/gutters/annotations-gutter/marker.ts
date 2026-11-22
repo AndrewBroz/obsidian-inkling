@@ -808,18 +808,18 @@ export const annotationGutterMarkers = StateField.define<RangeSet<AnnotationMark
 		if (tr.startState.facet(annotationGutterIncludedTypesState) !== includedTypes)
 			return this.create(tr.state);
 
-		if (!tr.docChanged)
+		// EXPL: A settings reload rebuilds the ranges without a document change; their markers are replaced too.
+		const parsed = tr.state.field(rangeParser);
+		if (!tr.docChanged && !parsed.inserted_ranges.length && !parsed.deleted_ranges.length)
 			return oldSet;
 
 		itr += 1;
 
-		const added_ranges: CriticMarkupRange[] = [];
-		for (const range of tr.state.field(rangeParser).inserted_ranges) {
-			if (!added_ranges.includes(range.base_range))
-				added_ranges.push(range.base_range);
-		}
-		const deleted_ranges = tr.state.field(rangeParser).deleted_ranges
-			.map(range => range.base_range);
+		// EXPL: Sets, not arrays: after a rebuild every range is both inserted and deleted.
+		const added_ranges = new Set<CriticMarkupRange>();
+		for (const range of parsed.inserted_ranges)
+			added_ranges.add(range.base_range);
+		const deleted_ranges = new Set(parsed.deleted_ranges.map(range => range.base_range));
 
 		return oldSet
 			.map(tr.changes)
@@ -827,13 +827,11 @@ export const annotationGutterMarkers = StateField.define<RangeSet<AnnotationMark
 				filter: (from, to, value) => {
 					// EXPL: This code prevents AnnotationMarkers in existing GutterMarkers from being unloaded
 					//       when the marker is moved from one GutterElement to another
-					const keep = !deleted_ranges.includes(value.annotation);
+					const keep = !deleted_ranges.has(value.annotation);
 					value.preventUnload = keep;
 					return keep;
-
-					// return !deleted_ranges.includes(value.annotation);
 				},
-				add: createMarkers(tr.state, added_ranges.map(range => range.full_thread[0]), includedTypes),
+				add: createMarkers(tr.state, [...added_ranges].map(range => range.full_thread[0]), includedTypes),
 			});
 	},
 });

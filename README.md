@@ -148,6 +148,9 @@ itself (for the CRI build, `config/critic.py`), and only then Inkling 0.14, whic
   it. To update a whole note at once, run **Update Inkling comments and suggestions to the new format**.
 - **The old format is retired.** Inkling no longer saves anything in it, and the Metadata format setting is gone.
   Existing installs see a one-time notice.
+- **Line markers go in as typed in Suggest mode.** A quote `> `, heading `#`, list item `- ` or `1. `, or task `- [ ] `
+  typed at the start of a line is not marked as a suggestion, so the line still works as a quote, heading or list. What
+  you type after it is: `> {++new text++}`.
 
 ### What's new in 0.13
 

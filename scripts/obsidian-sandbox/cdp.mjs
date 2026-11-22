@@ -7,6 +7,9 @@
 //   node cdp.mjs logs [ms] ['<js>']     listen ms (default 3000) for console messages and uncaught errors; <js>, if
 //                                       given, is evaluated (and awaited) inside that window so its errors are caught
 //   node cdp.mjs size <width> <height>  resize the main window (outer size, px; capped at the screen) and print its inner size
+//   node cdp.mjs keys '<keys>'          type real key events into the focused editor, one at a time: characters as typed,
+//                                       {Enter} {Backspace} {Delete} {Tab} {Escape} {ArrowLeft|Right|Up|Down} as keys,
+//                                       {{ and }} for literal braces (focus the editor first, e.g. editor.focus() in eval)
 //
 // `app` (Obsidian's App) and `require` are globals in the window. Port: OBSIDIAN_SANDBOX_PORT (default 9333).
 const PORT = process.env.OBSIDIAN_SANDBOX_PORT ?? "9333";
@@ -151,8 +154,39 @@ if (cmd === "eval") {
 	}
 	await sleep(500);
 	console.log(JSON.stringify({ via, inner: await evaluate("({ width: innerWidth, height: innerHeight })") }, null, 2));
+} else if (cmd === "keys") {
+	const SPECIAL = {
+		Enter: [13, "\r"], Backspace: [8], Delete: [46], Tab: [9, "\t"], Escape: [27],
+		ArrowLeft: [37], ArrowUp: [38], ArrowRight: [39], ArrowDown: [40],
+	};
+	const keys = [];
+	for (let i = 0, s = args[0] ?? ""; i < s.length; i++) {
+		if ((s[i] === "{" || s[i] === "}") && s[i + 1] === s[i]) keys.push(s[i++]);
+		else if (s[i] === "{") {
+			const end = s.indexOf("}", i);
+			if (end < 0 || !SPECIAL[s.slice(i + 1, end)]) throw new Error(`keys: unknown key at ${i}: ${s.slice(i)}`);
+			keys.push({ name: s.slice(i + 1, end) });
+			i = end;
+		} else keys.push(s[i]);
+	}
+	for (const key of keys) {
+		if (typeof key === "string") {
+			// EXPL: Key codes only for letters, digits and space: a character's code otherwise names another key
+			//       (`#` is End, `.` is Delete, `-` is Insert), which the editor would act on.
+			const code = /[a-z]/i.test(key) ? "Key" + key.toUpperCase() : /\d/.test(key) ? "Digit" + key : key === " " ? "Space" : undefined;
+			const windowsVirtualKeyCode = code ? key.toUpperCase().charCodeAt(0) : undefined;
+			await send("Input.dispatchKeyEvent", { type: "keyDown", key, code, text: key, unmodifiedText: key, windowsVirtualKeyCode });
+			await send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode });
+		} else {
+			const [windowsVirtualKeyCode, text] = SPECIAL[key.name];
+			await send("Input.dispatchKeyEvent", { type: "keyDown", key: key.name, code: key.name, text, windowsVirtualKeyCode });
+			await send("Input.dispatchKeyEvent", { type: "keyUp", key: key.name, code: key.name, windowsVirtualKeyCode });
+		}
+		await sleep(40);
+	}
+	await sleep(300);
 } else {
-	console.error("usage: node cdp.mjs eval '<js>' | shot out.png | open 'Note.md' | mode live|source|reading | logs [ms] ['<js>'] | size <width> <height>");
+	console.error("usage: node cdp.mjs eval '<js>' | shot out.png | open 'Note.md' | mode live|source|reading | logs [ms] ['<js>'] | size <width> <height> | keys '<keys>'");
 	process.exitCode = 1;
 }
 ws.close();

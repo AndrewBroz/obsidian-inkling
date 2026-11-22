@@ -41,8 +41,15 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 
 	update(value: ParserData, tr) {
 		const settings = tr.state.field(pluginSettingsField);
+		// EXPL: A rebuild replaces every range object, so all the old ones are reported deleted (at their positions
+		//       in the old document, like any deleted range): consumers that update incrementally remove what they
+		//       drew for them before adding the new ones, instead of drawing every range twice.
+		const rebuild = (): ParserData => ({
+			...(this.create(tr.state) as ParserData),
+			deleted_ranges: value.ranges.ranges,
+		});
 		if (tr.effects.some(effect => effect.is(fullReloadEffect)))
-			return this.create(tr.state) as ParserData;
+			return rebuild();
 
 		if (!tr.docChanged) {
 			value.inserted_ranges = [];
@@ -65,7 +72,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		//       text differs only in the changed spans), the state is rebuilt.
 		const code_regions = findCodeRegions(text);
 		if (!regionsPreserved(value.code_regions, tr.changes, code_regions))
-			return this.create(tr.state) as ParserData;
+			return rebuild();
 		const source = maskCode(text, code_regions);
 		// parse-doc: 0.68 - 1.24 ms
 		const tree = criticmarkupLanguage.parser.parse(source, fragments);
@@ -310,7 +317,8 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 			ranges: value.ranges,
 			fragments,
 			inserted_ranges,
-			deleted_ranges: [...deleted_ranges],
+			// EXPL: In document order: the live-preview renderer walks them with a cursor (`dropOverlapping`).
+			deleted_ranges: [...deleted_ranges].sort((a, b) => a.from - b.from),
 			code_regions,
 		};
 	},

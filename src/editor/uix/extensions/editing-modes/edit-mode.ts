@@ -13,6 +13,7 @@ import {
 	MarkAction,
 	rangeParser,
 } from "../../../base";
+import { inCode } from "../../../base/edit-util/code-regions";
 
 import { latest_event } from "../keypress-catcher";
 import { cursor_transaction_pass_syntax } from "./cursor_movement";
@@ -43,16 +44,25 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 		if (is_exempt_from_tracking(tr))
 			return tr;
 
-		const ranges = tr.startState.field(rangeParser).ranges;
+		// EXPL: Code is plain text: an edit in a code block (content or fence line) is applied as typed, even inside a
+		//       range that spans the block.
+		const { ranges, code_regions } = tr.startState.field(rangeParser);
+		if (changed_ranges.length && changed_ranges.every(c => inCode(code_regions, c.from, c.to)))
+			return tr;
 		const changes = [];
 		const selections: SelectionRange[] = [];
 
 		const backwards_delete = (latest_event as KeyboardEvent)?.key === "Backspace";
 		const group_delete = (latest_event as KeyboardEvent)?.ctrlKey;
 		let offset = 0;
+		// EXPL: Whether any change is applied other than as the edit made it. If none is, the edit itself goes through:
+		//       rebuilding it dropped its effects, such as the one that lets Obsidian type over an auto-paired bracket.
+		let altered = false;
 		for (let editor_change of changed_ranges) {
+			const original = editor_change;
 			if (tr.isUserEvent("delete"))
 				editor_change = cursor_move_range(editor_change, ranges, backwards_delete, group_delete, tr.startState);
+			if (editor_change.from !== original.from || editor_change.to !== original.to) altered = true;
 
 			// NOTE: This change exists to make sure that most regular operations will still function as expected
 			//       Duplicate ranges (caused by bolding) will get filtered away automatically,
@@ -64,6 +74,7 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 				offset += editor_change.inserted.length;
 				continue;
 			}
+			altered = true;
 
 			if (editor_change.from === editor_change.to) {
 				const range = ranges_in_range[0];
@@ -133,7 +144,7 @@ function applyCorrectedEdit(tr: Transaction, settings: PluginSettings): Transact
 			}
 		}
 
-		if (!changes.length)
+		if (!changes.length || !altered)
 			return tr;
 
 		const forwardedEvent = deriveUserEvent(tr);
