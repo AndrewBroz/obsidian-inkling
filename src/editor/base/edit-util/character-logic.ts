@@ -13,8 +13,7 @@ export function findBlockingChar(
 	const categorize = state.charCategorizer(pos);
 	if (cat === CharCategory.Space) cat = null;
 
-	let nextCat = null;
-	for (cat;;) {
+	for (;;) {
 		if (pos == (forward ? line.to : line.from)) {
 			if (pos == start && line.number != (forward ? state.doc.lines : 1))
 				pos += forward ? 1 : -1;
@@ -22,9 +21,9 @@ export function findBlockingChar(
 		}
 		const next = findClusterBreak(line.text, pos - line.from, forward) + line.from;
 		const nextChar = line.text.slice(Math.min(pos, next) - line.from, Math.max(pos, next) - line.from);
-		nextCat = categorize(nextChar);
+		const nextCat = categorize(nextChar);
 		if (cat != null && nextCat != cat) {
-			if (cat == 1 && ignore_initial_space) ignore_initial_space = false;
+			if (cat === CharCategory.Space && ignore_initial_space) ignore_initial_space = false;
 			else break;
 		}
 		if (nextChar != " " || pos != start) cat = nextCat;

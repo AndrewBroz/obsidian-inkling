@@ -35,7 +35,21 @@ const CLOSERS = new Set(["++}", "--}", "~~}", "==}", "<<}"]);
 
 // EXPL: Math (`$$…$$` across lines, `$…$` on one line) is left alone like inline code: `$e^{--x}$` is not debris.
 //       As in Obsidian, `\$` is not a delimiter, and inline math neither starts nor ends next to a space.
-const MATH = /(?<!\\)\$\$[\s\S]*?(?<!\\)\$\$|(?<!\\)\$(?=[^\s$])[^$\n]*?[^\s\\$]\$/g;
+//       (No lookbehinds, which iOS before 16.4 can't parse: `mathSpans` skips a match after a backslash.)
+const MATH = /\$\$(?:[\s\S]*?[^\\])??\$\$|\$(?=[^\s$])[^$\n]*?[^\s\\$]\$/g;
+
+function mathSpans(text: string): { from: number; to: number }[] {
+	const spans: { from: number; to: number }[] = [];
+	MATH.lastIndex = 0;
+	for (let match = MATH.exec(text); match !== null; match = MATH.exec(text)) {
+		if (match.index > 0 && text[match.index - 1] === "\\") {
+			MATH.lastIndex = match.index + 1;
+			continue;
+		}
+		spans.push({ from: match.index, to: match.index + match[0].length });
+	}
+	return spans;
+}
 
 /**
  * Whether metadata left outside any range is Inkling's: every key is an Inkling key and its text (`raw`) spells out
@@ -142,7 +156,7 @@ export function findDebris(text: string, settings: PluginSettings): Debris[] {
 	const ranges = getRangesInText(text, { ...settings, enable_metadata: true }, false);
 	const regions = findCodeRegions(text);
 	const inline_code = inlineCodeSpans(text, regions);
-	const math = [...text.matchAll(MATH)].map(m => ({ from: m.index, to: m.index + m[0].length }));
+	const math = mathSpans(text);
 	const debris: Debris[] = [];
 
 	CANDIDATE.lastIndex = 0;

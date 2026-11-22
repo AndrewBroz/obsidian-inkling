@@ -27,7 +27,7 @@ export class CriticMarkupRanges {
 
 	// Right breaks ties if cursor between two ranges, defaults to the left range
 	at_cursor(cursor: number, right = false): CriticMarkupRange | undefined {
-		const search = this.tree.search([cursor, cursor]);
+		const search = this.tree.search([cursor, cursor]) as CriticMarkupRange[];
 		return search.length ? (right && search.length > 1) ? search[1] : search[0] : undefined;
 	}
 

@@ -49,6 +49,8 @@ export function registerOriginalTextEmbeds(plugin: CommentatorPlugin): void {
 	const state: EmbedState = { disposed: false, children: new WeakMap(), live: new Set(), resolved: new WeakMap() };
 	let frame: number | null = null;
 	const in_flight = new WeakSet<HTMLElement>();
+	// EXPL: The main window's document and each popout window's, with the observer watching it.
+	const observed = new Map<Document, MutationObserver>();
 
 	const scan = async () => {
 		if (state.disposed) return;
@@ -59,7 +61,9 @@ export function registerOriginalTextEmbeds(plugin: CommentatorPlugin): void {
 			}
 		}
 		let rendered = false;
-		for (const embed of Array.from(document.body.querySelectorAll<HTMLElement>(EMBED_SELECTOR))) {
+		const embeds = Array.from(observed.keys())
+			.flatMap(doc => Array.from(doc.body.querySelectorAll<HTMLElement>(EMBED_SELECTOR)));
+		for (const embed of embeds) {
 			if (state.disposed) return;
 			if (in_flight.has(embed)) continue;
 			in_flight.add(embed);
@@ -86,7 +90,7 @@ export function registerOriginalTextEmbeds(plugin: CommentatorPlugin): void {
 
 	// EXPL: Only mutations that add a transclusion matter; anything else (typing, scrolling) would otherwise
 	//       rescan every embed on every DOM change.
-	const observer = new MutationObserver((records) => {
+	const onMutations = (records: MutationRecord[]) => {
 		const adds_embed = records.some(record =>
 			Array.from(record.addedNodes).some(node =>
 				node.instanceOf(Element) &&
@@ -94,25 +98,46 @@ export function registerOriginalTextEmbeds(plugin: CommentatorPlugin): void {
 			)
 		);
 		if (adds_embed) schedule();
-	});
-	observer.observe(document.body, { childList: true, subtree: true });
+	};
+	const observe = (doc: Document) => {
+		if (state.disposed || observed.has(doc)) return;
+		const observer = new MutationObserver(onMutations);
+		observer.observe(doc.body, { childList: true, subtree: true });
+		observed.set(doc, observer);
+	};
+	observe(plugin.app.workspace.containerEl.doc);
+	plugin.registerEvent(plugin.app.workspace.on("window-open", (win) => {
+		observe(win.doc);
+		schedule();
+	}));
+	plugin.registerEvent(plugin.app.workspace.on("window-close", (win) => {
+		observed.get(win.doc)?.disconnect();
+		observed.delete(win.doc);
+	}));
 	plugin.registerEvent(plugin.app.metadataCache.on("changed", (file) => {
 		generation.set(file.path, (generation.get(file.path) ?? 0) + 1);
 		schedule();
 	}));
 	plugin.register(() => {
 		state.disposed = true;
-		observer.disconnect();
 		if (frame !== null) window.cancelAnimationFrame(frame);
-		for (const el of Array.from(document.querySelectorAll<HTMLElement>(`.${RENDERED_CLASS}`))) el.remove();
-		for (const el of Array.from(document.querySelectorAll<HTMLElement>(`.${HIDDEN_CLASS}`)))
-			el.classList.remove(HIDDEN_CLASS);
+		for (const [doc, observer] of observed) {
+			observer.disconnect();
+			for (const el of Array.from(doc.querySelectorAll<HTMLElement>(`.${RENDERED_CLASS}`))) el.remove();
+			for (const el of Array.from(doc.querySelectorAll<HTMLElement>(`.${HIDDEN_CLASS}`)))
+				el.classList.remove(HIDDEN_CLASS);
+		}
+		observed.clear();
 		for (const child of Array.from(state.live)) {
 			state.live.delete(child);
 			plugin.removeChild(child);
 		}
 	});
-	plugin.app.workspace.onLayoutReady(schedule);
+	plugin.app.workspace.onLayoutReady(() => {
+		// EXPL: Popout windows restored with the layout opened before this was registered.
+		plugin.app.workspace.iterateAllLeaves(leaf => observe(leaf.view.containerEl.doc));
+		schedule();
+	});
 }
 
 /** Unloads and forgets the child rendering `embed`, if one is still tracked as live. */

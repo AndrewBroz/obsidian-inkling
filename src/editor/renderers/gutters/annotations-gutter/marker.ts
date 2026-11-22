@@ -209,7 +209,7 @@ class AnnotationNode extends Component {
 						break;
 				}
 				const contents = createDiv({ cls: "cmtr-anno-gutter-annotation-content" });
-				MarkdownRenderer.render(app, this.text || "&nbsp;", contents, "", this).then(() => {
+				void MarkdownRenderer.render(app, this.text || "&nbsp;", contents, "", this).then(() => {
 					(contents.children[0] ?? contents).prepend(
 						createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: description }),
 					);
@@ -219,12 +219,12 @@ class AnnotationNode extends Component {
 			} else {
 				const text_slices = this.range.unwrap_parts();
 				const contents_from = createDiv(), contents_to = createDiv();
-				MarkdownRenderer.render(app, text_slices[0] || "&nbsp;", contents_from, "", this).then(() => {
+				void MarkdownRenderer.render(app, text_slices[0] || "&nbsp;", contents_from, "", this).then(() => {
 					(contents_from.children[0] ?? contents_from).prepend(
 						createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: "Changed: " }),
 					);
 					this.annotation_view.append(...contents_from.childNodes as unknown as Node[]);
-					MarkdownRenderer.render(app, text_slices[1] || "&nbsp;", contents_to, "", this).then(() => {
+					void MarkdownRenderer.render(app, text_slices[1] || "&nbsp;", contents_to, "", this).then(() => {
 						(contents_to.children[0] ?? contents_to).prepend(
 							createSpan({ cls: "cmtr-anno-gutter-annotation-desc", text: "To: " }),
 						);

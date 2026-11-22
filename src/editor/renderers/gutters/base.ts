@@ -54,11 +54,17 @@ export function gutterScrollMargin(side: GutterSide, ltr: boolean, width: number
 	return on_left ? { left: width } : { right: width };
 }
 
+/**
+ * Whether two markers render the same (CodeMirror's internal `GutterMarker.compare`, which isn't public API)
+ */
+function markersMatch(a: GutterMarker, b: GutterMarker): boolean {
+	return a === b || (a.constructor === b.constructor && a.eq(b));
+}
+
 export function sameMarkers(a: readonly GutterMarker[], b: readonly GutterMarker[]): boolean {
 	if (a.length != b.length) return false;
 	for (let i = 0; i < a.length; i++) {
-		// @ts-expect-error (compare does exist on marker)
-		if (!a[i].compare(b[i]))
+		if (!markersMatch(a[i], b[i]))
 			return false;
 	}
 	return true;
@@ -164,8 +170,10 @@ export class GutterElement {
 			this.height = height;
 			this.dom.style.height = height + "px";
 		}
-		if (this.above != above)
-			this.dom.style.marginTop = (this.above = above) ? above + "px" : "";
+		if (this.above != above) {
+			this.above = above;
+			this.dom.style.marginTop = above ? above + "px" : "";
+		}
 		if (!sameMarkers(this.markers, markers)) this.setMarkers(view, markers);
 	}
 
@@ -179,8 +187,7 @@ export class GutterElement {
 				const c = marker.elementClass;
 				if (c) cls += " " + c;
 				for (let i = iOld; i < this.markers.length; i++) {
-					// @ts-expect-error (compare does exist on marker)
-					if (this.markers[i].compare(marker)) {
+					if (markersMatch(this.markers[i], marker)) {
 						skipTo = i;
 						matched = true;
 						break;
@@ -341,7 +348,7 @@ export class SingleGutterView {
 		if (config.initialSpacer) {
 			this.spacer = new GutterElement(view, 0, 0, [config.initialSpacer(view)]);
 			this.dom.appendChild(this.spacer.dom);
-			this.spacer.dom.setCssStyles({ visibility: "hidden", pointerEvents: "none" });
+			this.spacer.dom.addClass("cmtr-gutter-spacer");
 		}
 	}
 
@@ -388,12 +395,7 @@ export class GutterView {
 		this.gutters = this.createGutters(view);
 		for (const gutter of this.gutters) this.dom.appendChild(gutter.dom);
 		this.fixed = !view.state.facet(this.unfixGutters);
-		if (this.fixed) {
-			// FIXME IE11 fallback, which doesn't support position: sticky,
-			// 	by using position: relative + event handlers that realign the
-			// 	gutter (or just force fixed=false on IE11?)
-			this.dom.setCssStyles({ position: "sticky" });
-		}
+		this.dom.toggleClass("cmtr-gutters-fixed", this.fixed);
 		this.syncGutters(false);
 		this.insertGutters(view);
 	}
@@ -439,7 +441,7 @@ export class GutterView {
 		if (update.geometryChanged) this.dom.style.minHeight = this.view.contentHeight + "px";
 		if (this.view.state.facet(this.unfixGutters) != !this.fixed) {
 			this.fixed = !this.fixed;
-			this.dom.style.position = this.fixed ? "sticky" : "";
+			this.dom.toggleClass("cmtr-gutters-fixed", this.fixed);
 		}
 		this.prevViewport = update.view.viewport;
 	}
@@ -467,7 +469,7 @@ export class GutterView {
 			// TODO: ??? If line consists of multiple blocks, does not happen
 			if (Array.isArray(line.type)) {
 				let first = true;
-				for (const b of line.type) {
+				for (const b of line.type as readonly BlockInfo[]) {
 					if (b.type == BlockType.Text && first) {
 						advanceCursor(lineClasses, classSet, b.from);
 						for (const cx of contexts)

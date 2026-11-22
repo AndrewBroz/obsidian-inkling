@@ -1,33 +1,6 @@
-import { type EditorSelection, Text, Transaction } from "@codemirror/state";
+import { type EditorSelection, Text } from "@codemirror/state";
 
-import { CriticMarkupRange, CriticMarkupRanges, SuggestionType } from "../ranges";
-import { getEditorRanges } from "./selection-logic";
-
-function compareChanges(previous: CriticMarkupRanges, current: CriticMarkupRanges, tr: Transaction): {
-	removed: CriticMarkupRange[];
-	added: CriticMarkupRange[];
-} {
-	const removed: CriticMarkupRange[] = [];
-	const added: CriticMarkupRange[] = [];
-
-	const changes = getEditorRanges(tr.startState.selection, tr.changes, tr.startState.doc);
-	let offset = 0;
-
-	for (const change of changes) {
-		const current_offset = change.offset.added - change.offset.removed;
-		const ranges_affected = previous.ranges_in_interval(change.from, change.to);
-		const new_ranges = current.ranges_in_interval(change.from + offset, change.to + current_offset + offset);
-
-		if (ranges_affected.length)
-			removed.push(...ranges_affected);
-		if (new_ranges.length)
-			added.push(...new_ranges);
-
-		offset += current_offset;
-	}
-
-	return { removed, added };
-}
+import { CriticMarkupRange, SuggestionType } from "../ranges";
 
 /**
  * `spans` (sorted, non-overlapping spans being removed), with spans that only spaces separate on one line merged,

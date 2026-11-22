@@ -153,7 +153,7 @@ export function parseLegacyMetadata(json: string): MetadataFields | undefined {
 	} catch {
 		return undefined;
 	}
-	return typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
+	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as MetadataFields : undefined;
 }
 
 /**

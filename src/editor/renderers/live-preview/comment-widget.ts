@@ -39,7 +39,7 @@ export function renderCommentWidget(app: App, range: CommentRange, text?: string
 		if (tooltip) return;
 
 		tooltip = createDiv({ cls: "cmtr-comment-tooltip" });
-		MarkdownRenderer.render(app, str, tooltip, "", component);
+		void MarkdownRenderer.render(app, str, tooltip, "", component);
 		component.load();
 		icon.appendChild(tooltip);
 

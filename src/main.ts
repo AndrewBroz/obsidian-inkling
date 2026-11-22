@@ -278,8 +278,6 @@ export default class CommentatorPlugin extends Plugin {
 
 	async onload() {
 		if (process.env.NODE_ENV === "development") {
-			console.info("Inkling plugin loaded in debug mode");
-
 			// NOTE: debug options only accessible via main Obsidian window
 			window["COMMENTATOR_DEBUG"] = {
 				app: this.app,
@@ -302,7 +300,7 @@ export default class CommentatorPlugin extends Plugin {
 
 		this.registerView(COMMENTATOR_ANNOTATIONS_VIEW, (leaf) => new CommentatorAnnotationsView(leaf, this));
 
-		await this.migrateSettings(await this.loadData());
+		await this.migrateSettings(await this.loadData() as PluginSettings | null);
 
 		// EXPL: Public API for other plugins (e.g. Transclusion Extractor); see README "API for other plugins".
 		this.api = createApi(() => this.settings);
@@ -316,10 +314,10 @@ export default class CommentatorPlugin extends Plugin {
 			noticeLegacyInstall(this.app);
 
 			if (this.first_install && !this.settings.author) {
-				new AuthorNameModal(this.app, async (author) => {
+				new AuthorNameModal(this.app, (author) => {
 					if (author) {
 						this.settings.author = author;
-						await this.setSettings();
+						void this.setSettings();
 					}
 				}).open();
 			}
@@ -381,7 +379,7 @@ export default class CommentatorPlugin extends Plugin {
 		}));
 	}
 
-	async migrateSettings(new_settings: PluginSettings) {
+	async migrateSettings(new_settings: PluginSettings | null) {
 		const original_settings = this.settings;
 		let imported = false;
 
@@ -425,7 +423,7 @@ export default class CommentatorPlugin extends Plugin {
 				if (old_version !== DEFAULT_SETTINGS.version) {
 					// EXPL: Migrate settings from 0.1.x, where the settings did not contain a version field
 					if (!old_version) {
-						this.app.workspace.onLayoutReady(async () => {
+						this.app.workspace.onLayoutReady(() => {
 							new Notice("Inkling: rebuilding database for new version", 5000);
 							new Notice(
 								"Inkling: metadata and replies features are now available, you can opt-in to these features in the settings",
@@ -436,7 +434,7 @@ export default class CommentatorPlugin extends Plugin {
 
 					// EXPL: Migrate settings from 0.2.x to 0.2.3, suggestion and comment gutter settings were renamed
 					if (!old_version || old_version.localeCompare("0.2.3", undefined, { numeric: true }) < 0) {
-						if ((new_settings as unknown as any).suggestion_gutter_hide_empty) {
+						if ((new_settings as unknown as Record<string, unknown>).suggestion_gutter_hide_empty) {
 							const settings_migrations = [
 								["suggestion_gutter", "diff_gutter"],
 								["suggestion_gutter_hide_empty", "diff_gutter_hide_empty"],
@@ -506,10 +504,10 @@ export default class CommentatorPlugin extends Plugin {
 	}
 
 	async onExternalSettingsChange() {
-		await this.migrateSettings(await this.loadData());
+		await this.migrateSettings(await this.loadData() as PluginSettings | null);
 	}
 
-	async onunload() {
+	onunload() {
 		this.previewModeHeaderButton.detachButtons();
 		this.editModeHeaderModeButton.detachButtons();
 
@@ -521,10 +519,6 @@ export default class CommentatorPlugin extends Plugin {
 			// @ts-expect-error Remove debug variable from window
 			window["COMMENTATOR_DEBUG"] = undefined;
 		}
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
 	async setSettings() {

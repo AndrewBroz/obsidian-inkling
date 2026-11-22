@@ -1,4 +1,4 @@
-import type { Command } from "obsidian";
+import type { Command, Editor, MarkdownFileInfo } from "obsidian";
 import type { SuggestionType } from "./editor/base";
 
 export enum PreviewMode {
@@ -336,10 +336,10 @@ export interface ECommand extends Command {
 	/**
 	 * Command with regular callback, if mobile, command will be set to editorCallback by default to add the command to the mobile toolbar
 	 */
-	regular_callback?: (...args: any[]) => void;
+	regular_callback?: (editor: Editor, ctx: MarkdownFileInfo) => unknown;
 
 	/**
 	 * Command with checking callback, if mobile, command will be set to editorCheckCallback by default to add the command to the mobile toolbar
 	 */
-	check_callback?: (checking: boolean, ...args: any[]) => boolean | void;
+	check_callback?: (checking: boolean, editor: Editor, ctx: MarkdownFileInfo) => boolean | void;
 }

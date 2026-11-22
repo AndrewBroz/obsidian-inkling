@@ -1,4 +1,4 @@
-import type { EventRef, MarkdownView } from "obsidian";
+import type { EventRef } from "obsidian";
 import type CommentatorPlugin from "../../main";
 
 import {

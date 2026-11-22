@@ -90,7 +90,7 @@ describe("reading view leaves code blocks alone", () => {
 		(el as any).empty = function(this: HTMLElement) {
 			this.replaceChildren();
 		};
-		const plugin: any = { app: Object.assign(new App(), { workspace: {} }), settings: { ...DEFAULT_SETTINGS } };
+		const plugin: any = { app: Object.assign(new App(), { workspace: { getActiveViewOfType: () => null } }), settings: { ...DEFAULT_SETTINGS } };
 		await postProcess(el, null as any, plugin);
 		expect(el.innerHTML).toBe("<code>{++code++}</code>");
 	});

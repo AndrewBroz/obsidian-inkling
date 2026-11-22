@@ -70,10 +70,10 @@ export class StatusBarButton {
 			if (leaf && leaf.view instanceof MarkdownView) {
 				this.currentView = leaf.view;
 				this.updateButton(this.getvalue(leaf.view.editor));
-				this.button!.setCssStyles({ display: "" });
+				this.button!.show();
 			} else {
 				this.currentView = null;
-				this.button!.setCssStyles({ display: "none" });
+				this.button!.hide();
 			}
 		});
 

@@ -17,7 +17,7 @@ export interface MetadataFields {
 	done?: boolean;
 	style?: string;
 	color?: string;
-	[prop: string]: any;
+	[prop: string]: unknown;
 }
 
 // EXPL: Thread rule 2: the only fields a HIGHLIGHT anchor takes from its first comment.
@@ -183,7 +183,7 @@ export abstract class CriticMarkupRange {
 	}
 
 	copy(): CriticMarkupRange {
-		return Object.assign(Object.create(Object.getPrototypeOf(this)), this);
+		return Object.assign(Object.create(Object.getPrototypeOf(this) as object) as CriticMarkupRange, this);
 	}
 
 	equals(other: CriticMarkupRange) {

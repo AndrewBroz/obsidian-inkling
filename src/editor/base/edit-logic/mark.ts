@@ -1,7 +1,6 @@
 import { EditorSelection, Text } from "@codemirror/state";
 import type { Editor } from "obsidian";
 import { type PluginSettings } from "../../../types";
-import { pluginSettingsField } from "../../uix";
 import { pluginEditAnnotation } from "../../uix/extensions/editing-modes";
 import { type EditorSuggestion } from "../edit-handler";
 import { type MetadataCompatibility, MetadataMergeAction, range_metadata_compatible, rangeParser } from "../edit-util";
@@ -320,7 +319,7 @@ function mark_range(
 					insert = "";
 				}
 			} else {
-				let deleted = "";
+				let deleted: string;
 				const parts = left_range.unwrap_parts();
 				if (merge_result.type === SuggestionType.ADDITION) {
 					// CASE 2: Adding to the addition-part (right) of the substitution

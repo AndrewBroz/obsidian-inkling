@@ -27,7 +27,7 @@ export class RangeMarker extends GutterMarker {
 
 export const diffGutterMarkers = ViewPlugin.fromClass(
 	class diffGutterMarkers implements PluginValue {
-		markers: RangeSet<RangeMarker> = RangeSet.empty;
+		markers: RangeSet<RangeMarker> = RangeSet.empty as RangeSet<RangeMarker>;
 
 		constructMarkers(view: EditorView) {
 			const ranges = view.state.field(rangeParser).ranges;

@@ -17,7 +17,7 @@ function render(html: string, source: string | null) {
 	(el as any).empty = function(this: HTMLElement) {
 		this.replaceChildren();
 	};
-	const plugin: any = { app: Object.assign(new App(), { workspace: {} }), settings: { ...DEFAULT_SETTINGS } };
+	const plugin: any = { app: Object.assign(new App(), { workspace: { getActiveViewOfType: () => null } }), settings: { ...DEFAULT_SETTINGS } };
 	const ctx: any = source === null ? null : {
 		docId: "doc",
 		getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: source.split("\n").length - 1 }),
@@ -125,7 +125,7 @@ describe("reading view reads fences as plain CommonMark, like the editor", () =>
 		(el as any).empty = function(this: HTMLElement) {
 			this.replaceChildren();
 		};
-		const plugin: any = { app: Object.assign(new App(), { workspace: {} }), settings: { ...DEFAULT_SETTINGS } };
+		const plugin: any = { app: Object.assign(new App(), { workspace: { getActiveViewOfType: () => null } }), settings: { ...DEFAULT_SETTINGS } };
 		const ctx: any = {
 			docId: "doc",
 			sourcePath: "note.md",

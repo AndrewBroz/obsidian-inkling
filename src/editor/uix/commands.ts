@@ -1,4 +1,4 @@
-import { type Editor, type MarkdownView, Notice, Platform } from "obsidian";
+import { type Editor, type MarkdownFileInfo, Notice, Platform } from "obsidian";
 
 import { type SelectionRange } from "@codemirror/state";
 import type CommentatorPlugin from "../../main";
@@ -65,7 +65,7 @@ export const suggestion_commands: (plugin: CommentatorPlugin) => ECommand[] = (p
 		name: `Mark as ${text}`,
 		icon: text.toLowerCase(),
 		editor_context: true,
-		regular_callback: (editor: Editor, view: MarkdownView) => {
+		regular_callback: (editor: Editor, view: MarkdownFileInfo) => {
 			mark_editor_ranges(editor, type, plugin.settings);
 		},
 	}));
@@ -77,7 +77,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Update Inkling comments and suggestions to the new format",
 		icon: "replace-all",
 		editor_context: true,
-		regular_callback: (editor: Editor, _: MarkdownView) => {
+		regular_callback: (editor: Editor, _: MarkdownFileInfo) => {
 			const ranges = editor.cm.state.field(rangeParser).ranges.ranges;
 			const { changes, converted, skipped } = convert_metadata(ranges);
 			const count = (n: number) => n === 1 ? "1 comment or suggestion" : `${n} comments and suggestions`;
@@ -109,7 +109,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Remove resolved comments in this note",
 		icon: "message-square-x",
 		editor_context: true,
-		regular_callback: (editor: Editor, _: MarkdownView) => {
+		regular_callback: (editor: Editor, _: MarkdownFileInfo) => {
 			const { changes, count } = remove_resolved_threads(
 				editor.cm.state.field(rangeParser).ranges.ranges,
 				editor.cm.state.doc,
@@ -132,7 +132,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Clean up broken markup in this note",
 		icon: "eraser",
 		editor_context: true,
-		regular_callback: (editor: Editor, view: MarkdownView) => {
+		regular_callback: (editor: Editor, view: MarkdownFileInfo) => {
 			cleanupUndos.forget(view.file?.path);
 			const count = cleanupView(editor.cm, plugin.settings);
 			new Notice(count ? cleanupNotice(count) : "Inkling: no broken markup found.");
@@ -143,7 +143,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Accept all suggestions",
 		icon: "check-check",
 		editor_context: true,
-		regular_callback: (editor: Editor, _) => {
+		regular_callback: (editor: Editor, _: MarkdownFileInfo) => {
 			// TODO: Add warning is #ranges > 100 ('Are you sure you want to accept all suggestions?')
 			editor.cm.dispatch(editor.cm.state.update({
 				changes: acceptSuggestions(editor.cm.state),
@@ -156,7 +156,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Reject all suggestions",
 		icon: "cross",
 		editor_context: true,
-		regular_callback: (editor: Editor, _) => {
+		regular_callback: (editor: Editor, _: MarkdownFileInfo) => {
 			editor.cm.dispatch(editor.cm.state.update({
 				changes: rejectSuggestions(editor.cm.state),
 				annotations: [pluginEditAnnotation.of(true)],
@@ -168,7 +168,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Accept suggestions in selection",
 		icon: "check",
 		editor_context: true,
-		check_callback: (checking: boolean, editor: Editor, _) => {
+		check_callback: (checking: boolean, editor: Editor, _: MarkdownFileInfo) => {
 			const contains_range = selectionContainsRanges(editor.cm.state);
 			if (checking || !contains_range)
 				return contains_range;
@@ -185,7 +185,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Reject suggestions in selection",
 		icon: "cross",
 		editor_context: true,
-		check_callback: (checking: boolean, editor: Editor, _) => {
+		check_callback: (checking: boolean, editor: Editor, _: MarkdownFileInfo) => {
 			const contains_range = selectionContainsRanges(editor.cm.state);
 			if (checking || !contains_range)
 				return contains_range;
@@ -204,7 +204,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Add comment",
 		icon: "message-square",
 		editor_context: true,
-		regular_callback: (editor: Editor, _) => {
+		regular_callback: (editor: Editor, _: MarkdownFileInfo) => {
 			addCommentToView(
 				editor.cm,
 				editor.cm.state.field(rangeParser).ranges.at_cursor(editor.cm.state.selection.main.head),
@@ -216,7 +216,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Fold annotation gutter",
 		icon: "arrow-right-from-line",
 		editor_context: true,
-		regular_callback: (editor: Editor, _) => {
+		regular_callback: (editor: Editor, _: MarkdownFileInfo) => {
 			editor.cm.dispatch({
 				annotations: [
 					annotationGutterFoldAnnotation.of(null),
@@ -229,7 +229,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Cycle preview mode",
 		icon: "comment",
 		editor_context: true,
-		regular_callback: (editor: Editor, view: MarkdownView) => {
+		regular_callback: (editor: Editor, view: MarkdownFileInfo) => {
 			const resulting_mode = (editor.cm.state.facet(previewModeState) + 1) % 3;
 			editor.cm.dispatch(editor.cm.state.update({
 				effects: previewMode.reconfigure(previewModeState.of(resulting_mode)),
@@ -242,7 +242,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Toggle suggestion mode",
 		icon: "file-edit",
 		editor_context: true,
-		regular_callback: (editor: Editor, view: MarkdownView) => {
+		regular_callback: (editor: Editor, view: MarkdownFileInfo) => {
 			if (editor.cm.state.facet(editModeEnforcedState)) {
 				new Notice(
 					"Inkling: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
@@ -266,7 +266,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Toggle comment mode",
 		icon: "message-square",
 		editor_context: true,
-		regular_callback: (editor: Editor, view: MarkdownView) => {
+		regular_callback: (editor: Editor, view: MarkdownFileInfo) => {
 			if (editor.cm.state.facet(editModeEnforcedState)) {
 				new Notice(
 					"Inkling: the edit mode is enforced by this note's frontmatter and cannot be changed here.",
@@ -290,7 +290,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Generate text diff from clipboard",
 		icon: "diff",
 		editor_context: true,
-		regular_callback: async (editor: Editor, _) => {
+		regular_callback: async (editor: Editor, _: MarkdownFileInfo) => {
 			const newText = await navigator.clipboard.readText();
 			const ranges = editor.cm.state.field(rangeParser).ranges;
 			const selection = editor.cm.state.selection.main;
@@ -315,7 +315,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: Platform.isMacOS ? "Duplicate current file without markup" : "Make a copy of the current file without markup",
 		icon: "copy",
 		editor_context: true,
-		regular_callback: async (editor: Editor, view: MarkdownView) => {
+		regular_callback: async (editor: Editor, view: MarkdownFileInfo) => {
 			if (view.file) {
 				const new_path = plugin.app.vault.getAvailablePath(pathWithoutExtension(view.file.path), view.file.extension);
 				const original_content = await plugin.app.vault.read(view.file);
@@ -372,11 +372,12 @@ export function initializeCommands(commands: ECommand[]) {
 				delete command.check_callback;
 			}
 		} else {
+			// EXPL: Only commands that take no arguments lack `editor_context`, so they can run without an editor.
 			if (command.regular_callback) {
-				command.callback = command.regular_callback;
+				command.callback = command.regular_callback as () => unknown;
 				delete command.regular_callback;
 			} else {
-				command.checkCallback = command.check_callback;
+				command.checkCallback = command.check_callback as ((checking: boolean) => boolean | void) | undefined;
 				delete command.check_callback;
 			}
 		}

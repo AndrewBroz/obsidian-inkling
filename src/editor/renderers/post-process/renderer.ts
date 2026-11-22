@@ -60,8 +60,8 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 	let preview_mode = plugin.settings.default_preview_mode;
 	if (ctx) {
 		// FIXME: Temporarily getting preview mode from the leaf editor state
-		if (plugin.app.workspace.activeLeaf?.view instanceof MarkdownView) {
-			const view = plugin.app.workspace.activeLeaf.view;
+		const view = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+		if (view) {
 			if (view.previewMode.docId === ctx.docId)
 				preview_mode = view.editor.cm.state.facet(previewModeState);
 		}
@@ -157,7 +157,7 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 
 	// Part of the block is one or more CriticMarkup ranges
 
-	const masked = element_contents.replace(/\uE000([^\uE001]*)\uE001/g, (_, code) => code.replace(/[^\n]/g, " "));
+	const masked = element_contents.replace(/\uE000([^\uE001]*)\uE001/g, (_, code: string) => code.replace(/[^\n]/g, " "));
 	element_contents = element_contents.replace(SENTINEL, "");
 	const element_ranges = getRangesInText(element_contents, plugin.settings, true, masked.replace(SENTINEL, ""));
 

@@ -60,7 +60,7 @@ export function range_metadata_compatible(
 			if (MetadataMergeAction.SPLIT === action || MetadataMergeAction.MOVE_OUTSIDE === action)
 				return { compatible: false, merged_metadata: undefined };
 			else if (MetadataMergeAction.OLD === action)
-				merged_metadata[type as METADATA_TYPE] = range.fields[type];
+				merged_metadata[type] = range.fields[type];
 		}
 	}
 	return { compatible: true, merged_metadata };

@@ -159,7 +159,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 
 		for (const changed_range of changed_ranges) {
 			markDirty(changed_range.fromB, changed_range.toB);
-			for (const range of value.ranges.tree.search([changed_range.fromA, changed_range.toA]))
+			for (const range of value.ranges.tree.search([changed_range.fromA, changed_range.toA]) as CriticMarkupRange[])
 				invalidate(range);
 			const owner_start = settings.enable_metadata ?
 				newBlockOwnerStart(changed_range.fromA, changed_range.fromB) :
@@ -241,7 +241,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 				node.update_max();
 			}
 		}
-		visitNode(value.ranges.tree.root!);
+		visitNode(value.ranges.tree.root as Node<CriticMarkupRange>);
 		const inserted_ranges = Array.from(inserted_set.values());
 
 		// insert-new-ranges: <0.01 - 0.05 ms
@@ -310,7 +310,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		}
 
 		// finalize: 1.80 - 1.85 ms
-		value.ranges.ranges = value.ranges.tree.values;
+		value.ranges.ranges = value.ranges.tree.values as CriticMarkupRange[];
 
 		return {
 			tree,

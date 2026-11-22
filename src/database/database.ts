@@ -85,8 +85,8 @@ export class Database<T> extends EventComponent {
 	): EventRef;
 	public on(name: "database-migrate", callback: () => void, ctx?: unknown): EventRef;
 
-	on(name: string, callback: (...args: any[]) => void, ctx?: unknown): EventRef {
-		return super.on(name, callback, ctx);
+	on(name: string, callback: (update: DatabaseEntry<T>[]) => void, ctx?: unknown): EventRef {
+		return super.on(name, callback as (...data: unknown[]) => unknown, ctx);
 	}
 
 	/**
@@ -132,50 +132,55 @@ export class Database<T> extends EventComponent {
 		if (startDatabase) this.startDatabase();
 	}
 
-	async startDatabase() {
-		this.plugin.app.workspace.onLayoutReady(async () => {
-			await this.persist.ready(async () => {
-				if (this.old_version === null) {
-					await this.rebuildDatabase();
-					this.trigger("database-create");
-				} else if (this.old_version < this.version) {
-					await this.clearDatabase();
-					await this.rebuildDatabase();
-					this.trigger("database-migrate");
-				} else {
-					await this.loadDatabase();
-					await this.syncDatabase();
-				}
-				this.trigger("database-update", this.allEntries());
+	startDatabase() {
+		this.plugin.app.workspace.onLayoutReady(() => void this.initializeDatabase());
+	}
 
-				// Alternatives: use 'this.editorExtensions.push(EditorView.updateListener.of(async (update) => {'
-				// 	for instant View updates, but this requires the file to be read into the file cache first
-				this.registerEvent(this.plugin.app.vault.on("modify", async (file) => {
-					if (file instanceof TFile && file.extension === "md") {
-						const current_editor = this.plugin.app.workspace.activeEditor;
-						const state =
-							(current_editor && current_editor.file?.path === file.path && current_editor.editor) ?
-								current_editor.editor.cm.state :
-								undefined;
-						this.storeKey(file.path, await this.extractValue(file, state), file.stat.mtime);
-					}
-				}));
+	private async initializeDatabase() {
+		await this.persist.ready();
+		if (this.old_version === null) {
+			await this.rebuildDatabase();
+			this.trigger("database-create");
+		} else if (this.old_version < this.version) {
+			await this.clearDatabase();
+			await this.rebuildDatabase();
+			this.trigger("database-migrate");
+		} else {
+			await this.loadDatabase();
+			await this.syncDatabase();
+		}
+		this.trigger("database-update", this.allEntries());
 
-				this.registerEvent(this.plugin.app.vault.on("delete", async (file) => {
-					if (file instanceof TFile && file.extension === "md") this.deleteKey(file.path);
-				}));
+		// Alternatives: use 'this.editorExtensions.push(EditorView.updateListener.of(async (update) => {'
+		// 	for instant View updates, but this requires the file to be read into the file cache first
+		this.registerEvent(this.plugin.app.vault.on("modify", (file) => {
+			if (file instanceof TFile && file.extension === "md") void this.updateFromFile(file);
+		}));
 
-				this.registerEvent(this.plugin.app.vault.on("rename", async (file, oldPath) => {
-					if (file instanceof TFile && file.extension === "md")
-						this.renameKey(oldPath, file.path, file.stat.mtime);
-				}));
+		this.registerEvent(this.plugin.app.vault.on("delete", (file) => {
+			if (file instanceof TFile && file.extension === "md") this.deleteKey(file.path);
+		}));
 
-				this.registerEvent(this.plugin.app.vault.on("create", async (file) => {
-					if (file instanceof TFile && file.extension === "md")
-						this.storeKey(file.path, this.defaultValue(), file.stat.mtime);
-				}));
-			});
-		});
+		this.registerEvent(this.plugin.app.vault.on("rename", (file, oldPath) => {
+			if (file instanceof TFile && file.extension === "md")
+				this.renameKey(oldPath, file.path, file.stat.mtime);
+		}));
+
+		this.registerEvent(this.plugin.app.vault.on("create", (file) => {
+			if (file instanceof TFile && file.extension === "md")
+				this.storeKey(file.path, this.defaultValue(), file.stat.mtime);
+		}));
+	}
+
+	/**
+	 * Store the value extracted from a modified file, reading the open editor's state when it shows that file
+	 */
+	private async updateFromFile(file: TFile) {
+		const current_editor = this.plugin.app.workspace.activeEditor;
+		const state = (current_editor && current_editor.file?.path === file.path && current_editor.editor) ?
+			current_editor.editor.cm.state :
+			undefined;
+		this.storeKey(file.path, await this.extractValue(file, state), file.stat.mtime);
 	}
 
 	/**
@@ -183,7 +188,8 @@ export class Database<T> extends EventComponent {
 	 */
 	async loadDatabase() {
 		this.memory = new Map();
-		for (const [key, value] of Object.entries(await this.persist.getItems())) {
+		const items: Record<string, DatabaseItem<T>> = await this.persist.getItems();
+		for (const [key, value] of Object.entries(items)) {
 			const data = this.loadValue(value.data);
 			if (data === undefined) continue;
 			this.memory.set(key, { ...value, data });
@@ -335,7 +341,7 @@ export class Database<T> extends EventComponent {
 		await localforage.dropInstance({
 			name: this.name + `/${this.plugin.app.appId}`,
 		});
-		localStorage.removeItem(this.plugin.app.appId + "-" + this.name + "-version");
+		this.plugin.app.saveLocalStorage(this.name + "-version", null);
 	}
 
 	/**

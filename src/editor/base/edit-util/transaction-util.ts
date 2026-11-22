@@ -1,8 +1,9 @@
 import { Transaction } from "@codemirror/state";
 
-export function getUserEvents(tr: Transaction) {
-	// @ts-expect-error (Transaction has annotations)
-	return tr.annotations.map(x => x.value).filter(x => typeof x === "string");
+export function getUserEvents(tr: Transaction): string[] {
+	// EXPL: `annotations` is internal to Transaction; the public API only reads one annotation type at a time.
+	const { annotations } = tr as unknown as { annotations: readonly { value: unknown }[] };
+	return annotations.map(x => x.value).filter((x): x is string => typeof x === "string");
 }
 
 export function isUserEvent(event: string, events: string[]): boolean {
@@ -15,7 +16,7 @@ export function deriveUserEvent(tr: Transaction): string | undefined {
 	if (tr.isUserEvent("delete")) return "delete";
 
 	const events = getUserEvents(tr);
-	const selectEvent = events.find((e: string) => e.startsWith("select"));
+	const selectEvent = events.find(e => e.startsWith("select"));
 
 	return selectEvent;
 }

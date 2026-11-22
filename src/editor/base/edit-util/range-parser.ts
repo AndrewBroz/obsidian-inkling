@@ -201,5 +201,7 @@ export const RANGE_PROTOTYPE_MAPPER = {
  */
 export function reviveCachedRanges(data: CriticMarkupRange[]): CriticMarkupRange[] | undefined {
 	if (data.some(range => !Object.hasOwn(range, "own_fields"))) return undefined;
-	return data.map(range => Object.setPrototypeOf(range, RANGE_PROTOTYPE_MAPPER[range.type].prototype));
+	return data.map(range =>
+		Object.setPrototypeOf(range, RANGE_PROTOTYPE_MAPPER[range.type].prototype) as CriticMarkupRange
+	);
 }

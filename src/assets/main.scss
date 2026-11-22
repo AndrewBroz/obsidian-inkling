@@ -118,6 +118,16 @@ DEFAULT: hidden
   display: none;
 }
 
+// EXPL: Inkling's gutters (editor/renderers/gutters/base.ts) stay in place while the note scrolls, as CodeMirror's do.
+.cm-gutters.cmtr-gutters-fixed {
+  position: sticky;
+}
+
+.cmtr-gutter-spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .cmtr-debug-comment-line {
   width: 100%;
   border-bottom: 1px dashed red;

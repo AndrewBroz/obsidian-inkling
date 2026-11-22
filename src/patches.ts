@@ -70,7 +70,7 @@ export const syncMarkdownViewCustomStatePatch = (
 		setState: (oldMethod) => {
 			return async function(this: MarkdownView, ...args) {
 				if (args[0])
-					await setState(this, args[0]);
+					await setState(this, args[0] as Record<string, unknown>);
 				return oldMethod && oldMethod.apply(this, args);
 			};
 		},
@@ -87,7 +87,7 @@ export const syncMarkdownViewCustomStatePatch = (
 		// EXPL: Called on every file change, particularly hot path code
 		// 		 If clear is enabled, the extensions will be reloaded (guaranteed to be synchronous)
 		setData: (oldMethod) => {
-			return async function(this: MarkdownView, ...args) {
+			return function(this: MarkdownView, ...args) {
 				// NOTE: Checking via args[1] (`clear`) will only execute syncState if the file is changed
 				if (args[1])
 					beforeEditorReload(this);

@@ -9,11 +9,11 @@ export function providePluginSettingsExtension(plugin: CommentatorPlugin) {
 }
 
 export const providePluginSettings = (plugin: CommentatorPlugin) =>
-	StateField.define({
+	StateField.define<PluginSettings>({
 		create() {
 			return plugin.settings;
 		},
 		update() {
 			return plugin.settings;
 		},
-	}) as StateField<PluginSettings>;
+	});

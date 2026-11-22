@@ -109,9 +109,7 @@ export function noticeLegacyInstall(app: App) {
 	button.addClass("inkling-legacy-uninstall-button");
 
 	const notice = new Notice(fragment, 0);
-	button.addEventListener("click", async (evt) => {
-		evt.stopPropagation();
-		notice.hide();
+	const uninstall = async () => {
 		try {
 			await app.plugins.uninstallPlugin(LEGACY_PLUGIN_ID);
 			new Notice("Inkling: removed the old \"inkling\" copy", 5000);
@@ -119,5 +117,10 @@ export function noticeLegacyInstall(app: App) {
 			console.error("Inkling: failed to uninstall legacy plugin", e);
 			new Notice("Inkling: could not remove the old copy, uninstall \"Inkling\" (0.11 or older) manually", 0);
 		}
+	};
+	button.addEventListener("click", (evt) => {
+		evt.stopPropagation();
+		notice.hide();
+		void uninstall();
 	});
 }

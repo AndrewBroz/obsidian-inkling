@@ -42,6 +42,26 @@ function createElHelper(tag: string) {
 (HTMLElement.prototype as any).setCssStyles = function(styles: Partial<CSSStyleDeclaration>) {
 	Object.assign(this.style, styles);
 };
+// Obsidian's visibility and class helpers on Element.
+(HTMLElement.prototype as any).show = function() {
+	this.style.display = "";
+};
+(HTMLElement.prototype as any).hide = function() {
+	this.style.display = "none";
+};
+(HTMLElement.prototype as any).toggle = function(show: boolean) {
+	this.style.display = show ? "" : "none";
+};
+if (!(Element.prototype as any).toggleClass) {
+	(Element.prototype as any).toggleClass = function(cls: string, value: boolean) {
+		this.classList.toggle(cls, value);
+	};
+}
+if (!(Element.prototype as any).addClass) {
+	(Element.prototype as any).addClass = function(...cls: string[]) {
+		this.classList.add(...cls);
+	};
+}
 (HTMLElement.prototype as any).setCssProps = function(props: Record<string, string>) {
 	for (const [key, value] of Object.entries(props))
 		this.style.setProperty(key, value);
