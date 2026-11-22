@@ -8,6 +8,7 @@ import { rangeParser } from "../src/editor/base";
 import {
 	annotation_gutter,
 	annotationGutterFoldAnnotation,
+	annotationGutterView,
 } from "../src/editor/renderers/gutters/annotations-gutter/annotation-gutter";
 import { annotationGutterMarkers } from "../src/editor/renderers/gutters/annotations-gutter/marker";
 import { providePluginSettingsExtension } from "../src/editor/uix/extensions";
@@ -77,7 +78,8 @@ if (!("win" in proto)) {
  */
 function setup(foldState: boolean) {
 	const app = new App();
-	(app.workspace as any).requestSaveLayout = () => {};
+	const saves = { count: 0 };
+	(app.workspace as any).requestSaveLayout = () => saves.count++;
 	(app.vault as any).getConfig = () => undefined;
 
 	const { extension } = annotation_gutter({
@@ -109,7 +111,7 @@ function setup(foldState: boolean) {
 	document.body.appendChild(parent);
 
 	const view = new EditorView({ state, parent });
-	return { view };
+	return { view, saves };
 }
 
 function getFoldIcon(view: EditorView): HTMLElement {
@@ -141,7 +143,7 @@ describe("annotation gutter fold button icon state", () => {
 
 	test("clicking the button toggles the folded class both ways", () => {
 		const { view } = setup(false);
-		const button = view.dom.querySelector<HTMLElement>(".cmtr-anno-gutter-button a")!;
+		const button = view.dom.querySelector<HTMLElement>(".cmtr-anno-gutter-button button")!;
 		const icon = getFoldIcon(view);
 
 		button.click();
@@ -180,6 +182,113 @@ describe("annotation gutter fold button icon state", () => {
 		view.dispatch({ annotations: [annotationGutterFoldAnnotation.of(false)] });
 		expect(icon.classList.contains(FOLDED_CLASS)).toBe(false);
 
+		view.destroy();
+	});
+});
+
+/**
+ * Gives the editor's scroller a width (jsdom lays nothing out) and fires the gutter's ResizeObserver, as Obsidian does
+ * when the pane is resized. The readable line width falls back to 700px under jsdom, so with the 300px gutter and its
+ * 24px margin the threshold is 1024px.
+ */
+function resizePane(view: EditorView, width: number) {
+	Object.defineProperty(view.scrollDOM, "clientWidth", { configurable: true, get: () => width });
+	(globalThis as any).fireResizeObservers(view.scrollDOM);
+}
+
+function gutterOf(view: EditorView) {
+	return view.plugin(annotationGutterView)!.gutters[0];
+}
+
+describe("annotation gutter fold button", () => {
+	test("is a real button with a label, so it takes keyboard focus", () => {
+		const { view } = setup(false);
+		const button = getFoldIcon(view);
+		expect(button.tagName).toBe("BUTTON");
+		expect(button.getAttribute("type")).toBe("button");
+		expect(button.ariaLabel).toBe("Fold gutter");
+		view.destroy();
+	});
+});
+
+describe("annotation gutter in a narrow pane", () => {
+	test("folds on its own and comes back when the pane widens, without touching the saved fold state", () => {
+		const { view, saves } = setup(false);
+		const gutter = gutterOf(view);
+		resizePane(view, 1600);
+		expect(gutter.dom.style.width).toBe("300px");
+
+		resizePane(view, 900);
+		expect(gutter.dom.style.width).toBe("0px");
+		expect(getFoldIcon(view).classList.contains(FOLDED_CLASS)).toBe(true);
+		expect(gutter.folded).toBe(false);
+
+		resizePane(view, 1600);
+		expect(gutter.dom.style.width).toBe("300px");
+		expect(getFoldIcon(view).classList.contains(FOLDED_CLASS)).toBe(false);
+		expect(saves.count).toBe(0);
+		view.destroy();
+	});
+
+	test("a gutter the user folded stays folded when the pane widens again", () => {
+		const { view } = setup(true);
+		const gutter = gutterOf(view);
+		resizePane(view, 900);
+		resizePane(view, 1600);
+		expect(gutter.dom.style.width).toBe("0px");
+		expect(gutter.folded).toBe(true);
+		view.destroy();
+	});
+
+	test("folds at the threshold: the readable width, the gutter and its margin", () => {
+		const { view } = setup(false);
+		const gutter = gutterOf(view);
+		resizePane(view, 1024);
+		expect(gutter.dom.style.width).toBe("300px");
+		resizePane(view, 1023);
+		expect(gutter.dom.style.width).toBe("0px");
+		view.destroy();
+	});
+
+	test("the button shows the gutter as a peek that isn't saved, and the peek ends when the pane changes size", () => {
+		const { view, saves } = setup(false);
+		const gutter = gutterOf(view);
+		resizePane(view, 900);
+		const button = view.dom.querySelector<HTMLElement>(".cmtr-anno-gutter-button button")!;
+
+		button.click();
+		expect(gutter.dom.style.width).toBe("300px");
+		expect(button.ariaLabel).toBe("Fold gutter");
+		button.click();
+		expect(gutter.dom.style.width).toBe("0px");
+		expect(gutter.folded).toBe(false);
+		expect(saves.count).toBe(0);
+
+		button.click();
+		resizePane(view, 1600);
+		resizePane(view, 900);
+		expect(gutter.dom.style.width).toBe("0px");
+		view.destroy();
+	});
+
+	test("a draft's unfold opens the gutter as a peek, not a saved unfold", () => {
+		const { view, saves } = setup(true);
+		const gutter = gutterOf(view);
+		resizePane(view, 900);
+		view.dispatch({ annotations: [annotationGutterFoldAnnotation.of(false)] });
+		expect(gutter.dom.style.width).toBe("300px");
+		expect(gutter.folded).toBe(true);
+		expect(saves.count).toBe(0);
+		view.destroy();
+	});
+
+	test("a manual fold in a wide pane is still saved", () => {
+		const { view, saves } = setup(false);
+		const gutter = gutterOf(view);
+		resizePane(view, 1600);
+		view.dom.querySelector<HTMLElement>(".cmtr-anno-gutter-button button")!.click();
+		expect(gutter.folded).toBe(true);
+		expect(saves.count).toBe(1);
 		view.destroy();
 	});
 });

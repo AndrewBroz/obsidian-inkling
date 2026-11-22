@@ -564,6 +564,21 @@ describe("provisional comment card", () => {
 		view.destroy();
 	});
 
+	// EXPL: The fold button was hidden at creation in a note with nothing to show, but only its wrapper was ever shown
+	//       again, so in a note whose first comment was being drafted the button never appeared.
+	test("the fold button appears when a draft gives an empty note's gutter something to show", () => {
+		const { view } = setup("hello world", { hideOnEmpty: true });
+		const wrapper = view.dom.querySelector<HTMLElement>(".cmtr-anno-gutter-button")!;
+		const button = wrapper.querySelector<HTMLElement>("button")!;
+		expect(wrapper.style.display).toBe("none");
+
+		view.dispatch({ effects: setCommentDraft.of({ from: 6, to: 11 }) });
+		expect(wrapper.style.display).toBe("");
+		expect(button.style.display).toBe("");
+
+		view.destroy();
+	});
+
 	// EXPL: THE PILL-FOCUS BUG. `.focus()` used to be reached inside PendingAnnotationMarker.toDOM()
 	//       (via ReplyBox's default `focus: true`, fired by Component.load() during toDOM()), on the
 	//       node toDOM() is still building. But toDOM()'s RETURN VALUE is exactly what
