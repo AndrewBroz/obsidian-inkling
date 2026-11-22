@@ -47,6 +47,17 @@ export function rangePostProcess(
 const SENTINEL = /[\uE000\uE001]/g;
 const markCodeBlocks = (html: string) => html.replace(/<pre(?=[\s>])[\s\S]*?<\/pre>/g, m => "\uE000" + m + "\uE001");
 
+/**
+ * The element's contents as HTML. `Element.getHTML()` only exists from Chromium 125, and Obsidian's minimum version runs
+ * on older installers (1.8.7 supports installer 1.5.8, Chromium 120), where calling it threw and reading view rendered
+ * no markup. Found by the e2e suite on the earliest supported version.
+ */
+export function elementHTML(el: HTMLElement): string {
+	const modern = el as HTMLElement & { getHTML?: () => string };
+	// EXPL: Reading the serialised contents, never assigning them: this is not an HTML sink.
+	return typeof modern.getHTML === "function" ? modern.getHTML() : el.innerHTML;
+}
+
 export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorContext, plugin: CommentatorPlugin) {
 	// EXPL: A code block's contents are code, not markup.
 	if (el.closest("pre")) return;
@@ -55,7 +66,7 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 	let start_char: number | null = null, end_char: number | null = null;
 
 	// Undo HTML encoding of specific characters
-	let element_contents = decodeHTML(markCodeBlocks(el.getHTML()), DecodingMode.Strict);
+	let element_contents = decodeHTML(markCodeBlocks(elementHTML(el)), DecodingMode.Strict);
 
 	let preview_mode = plugin.settings.default_preview_mode;
 	if (ctx) {

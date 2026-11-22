@@ -1,7 +1,7 @@
 import { App } from "obsidian";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
-import { postProcess } from "../src/editor/renderers/post-process/renderer";
+import { elementHTML, postProcess } from "../src/editor/renderers/post-process/renderer";
 
 // EXPL: Reading view hands the post-processor Obsidian's rendered HTML, which has already turned
 //       `==x==` into a highlight and `~~x~~` into a strikethrough. postProcess maps those back to
@@ -147,5 +147,37 @@ describe("reading view reads fences as plain CommonMark, like the editor", () =>
 		const source = "intro{++\n```js\ncode\n```\n++}\nrest";
 		const block = await section("<pre><code>code\n</code></pre>", source, 1, 3);
 		expect(block.querySelector(".cmtr-addition pre code")?.textContent).toBe("code\n");
+	});
+});
+
+// EXPL: Element.getHTML() exists only from Chromium 125; Obsidian 1.8.7 runs on installer 1.5.8 (Chromium 120), where
+//       calling it threw and reading view rendered no markup (found by the e2e suite on the earliest version).
+describe("reading an element's HTML", () => {
+	test("falls back to innerHTML where getHTML doesn't exist", () => {
+		const el = document.createElement("p");
+		el.innerHTML = "a <mark>b</mark> &amp; c";
+		Object.defineProperty(el, "getHTML", { value: undefined });
+		expect(elementHTML(el)).toBe("a <mark>b</mark> &amp; c");
+	});
+
+	test("uses getHTML where it exists", () => {
+		const el = document.createElement("p");
+		Object.defineProperty(el, "getHTML", { value: () => "from getHTML" });
+		expect(elementHTML(el)).toBe("from getHTML");
+	});
+
+	test("reading view renders markup without getHTML", async () => {
+		const el = document.createElement("p");
+		el.innerHTML = "an {++addition++}";
+		Object.defineProperty(el, "getHTML", { value: undefined });
+		(el as any).empty = function(this: HTMLElement) {
+			this.replaceChildren();
+		};
+		const plugin: any = {
+			app: Object.assign(new App(), { workspace: { getActiveViewOfType: () => null } }),
+			settings: { ...DEFAULT_SETTINGS },
+		};
+		await postProcess(el, null as any, plugin);
+		expect(el.querySelector(".cmtr-addition")?.textContent).toBe("addition");
 	});
 });
