@@ -11,7 +11,8 @@
 #   bash obsidian-sandbox.sh status    is it running, which Obsidian version, which plugins
 #   bash obsidian-sandbox.sh reset     stop and delete .obsidian-sandbox/ entirely
 #
-# Env: OBSIDIAN_SANDBOX_PORT (default 9333), OBSIDIAN_SANDBOX_DIR (default ./.obsidian-sandbox).
+# Env: OBSIDIAN_SANDBOX_PORT (default 9333), OBSIDIAN_SANDBOX_DIR (default ./.obsidian-sandbox),
+#      OBSIDIAN_SANDBOX_FIXTURES (fixture vault copied in on setup; default ./test/e2e/vaults/basic).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -50,16 +51,16 @@ setup() {
 	local asar
 	asar="$(ls "$USER_OBSIDIAN_DATA"/obsidian-*.asar 2>/dev/null | sort -V | tail -1 || true)"
 	if [ -n "$asar" ] && [ ! -e "$DATA/$(basename "$asar")" ]; then cp "$asar" "$DATA/"; fi
-	# EXPL: Optional fixtures: notes copied into the vault (never overwriting), and plugin settings.
-	local fixtures="$PLUGIN_DIR/sandbox-fixtures"
+	# EXPL: Optional fixtures: a fixture vault whose files (notes, and .obsidian/ settings such as the plugin's
+	#       data.json) are copied into the sandbox vault, never overwriting. It's the e2e suite's vault, so a note
+	#       added to reproduce a bug here is also there for the spec that guards it.
+	local fixtures="${OBSIDIAN_SANDBOX_FIXTURES:-$PLUGIN_DIR/test/e2e/vaults/basic}"
 	if [ -d "$fixtures" ]; then
-		find "$fixtures" -type f ! -name plugin-data.json | while read -r src; do
+		find "$fixtures" -type f | while read -r src; do
 			dest="$VAULT/${src#"$fixtures"/}"
 			mkdir -p "$(dirname "$dest")"
 			[ -e "$dest" ] || cp "$src" "$dest"
 		done
-		[ -f "$fixtures/plugin-data.json" ] && [ ! -e "$VAULT/.obsidian/plugins/$PLUGIN_ID/data.json" ] &&
-			cp "$fixtures/plugin-data.json" "$VAULT/.obsidian/plugins/$PLUGIN_ID/data.json"
 	fi
 	echo "sandbox ready: $SANDBOX (plugin $PLUGIN_ID${asar:+, Obsidian $(basename "$asar" .asar | sed 's/obsidian-//')})"
 }
@@ -127,5 +128,5 @@ case "${1:-}" in
 	reload) reload ;;
 	status) status ;;
 	reset) stop || true; rm -rf "$SANDBOX"; echo "removed $SANDBOX" ;;
-	*) sed -n '2,15p' "$0"; exit 1 ;;
+	*) sed -n '2,16p' "$0"; exit 1 ;;
 esac

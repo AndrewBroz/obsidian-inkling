@@ -19,3 +19,8 @@ data.json
 
 # Obsidian sandbox (scripts/obsidian-sandbox)
 .obsidian-sandbox/
+
+# e2e tests: wdio-obsidian-service downloads Obsidian versions here
+.obsidian-cache/
+# Fixture vaults carry preset plugin settings; the data.json rule above must not hide them
+!test/e2e/vaults/**/data.json

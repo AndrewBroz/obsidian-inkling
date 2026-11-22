@@ -42,5 +42,12 @@
 	"include": [
 		"**/**.ts",
 		"src/**/*.svelte"
+	],
+	// The e2e suite has its own tsconfig (test/e2e/tsconfig.json): mocha's and wdio's globals clash with jest's.
+	// Setting `exclude` replaces the default, so node_modules is listed again.
+	"exclude": [
+		"node_modules",
+		"test/e2e",
+		"wdio.conf.mts"
 	]
 }

@@ -33,10 +33,11 @@ bun run sandbox reload                          # after each rebuild
 bun run sandbox stop                            # when done (reset deletes the sandbox)
 ```
 
-- Fixtures live in `sandbox-fixtures/`: notes are copied into the vault, and `plugin-data.json` pre-sets the author
-  so the first-run author prompt doesn't appear. Add a fixture note for each bug you reproduce. `plugin-data.json`
-  must keep `version` and the metadata keys: a partial settings file is treated as an older install, which turns
-  metadata off and runs migrations. After changing fixtures: `bun run sandbox reset`, then `start`.
+- Fixtures live in `test/e2e/vaults/basic/`, the e2e suite's fixture vault (one source for both): its files are
+  copied into the sandbox vault, and `.obsidian/plugins/inkling-markup/data.json` pre-sets the author so the
+  first-run author prompt doesn't appear. Add a fixture note for each bug you reproduce. That `data.json` must keep
+  `version` and the metadata keys: a partial settings file is treated as an older install, which turns metadata off
+  and runs migrations. After changing fixtures: `bun run sandbox reset`, then `start`.
 - The sandbox runs the same Obsidian version as the user (it copies their newest `obsidian-<ver>.asar`). Trust
   `bun run sandbox status` for the version; the window's user-agent shows only the base installer version.
 - Check computed styles and a screenshot, not just the DOM: a class can be present while its colour resolves to
