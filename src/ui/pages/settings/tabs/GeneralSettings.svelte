@@ -165,9 +165,6 @@ const preview_mode_notices = {
 		class="translator-fail"
 		text="REPORT BUG"
 		icon="bug"
-		onClick={() =>
-		openGithubIssueLink(plugin.app, undefined, {
-			/* Additional data that will be added to the debugger information */
-		})}
+		onClick={() => openGithubIssueLink(plugin.app)}
 	/>
 </div>

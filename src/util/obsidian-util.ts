@@ -15,99 +15,39 @@ export function openSettingTab(app: App, plugin_id: string = PLUGIN_ID) {
 }
 
 /**
- * Helper function for getting debug information
+ * Link to a new bug report on GitHub, with the Obsidian and Inkling versions and the platform filled in
  * @param app - Obsidian app instance
- * @async
- * @returns \{platform: string, plugin_version: string, obsidian_version: string, framework_version: string}
- * @remarks Added plugins and operating system info based on RyotaUshio's https://gist.github.com/RyotaUshio/c3faf7513cecc02f0103f4b420ab9752#file-obsidian-debug-info-ts-L54
+ * @param title - Title of the bug report
  */
-export async function getObsidianData(app: App) {
-	let framework_version, operating_system;
-	if (Platform.isMobileApp) {
-		// @ts-expect-error (nativePromise exists and is used internally)
-		const app_info = await window.Capacitor.nativePromise("App", "getInfo");
-		if (app_info)
-			framework_version = app_info.version + " (" + app_info.build + ")";
-
-		// @ts-expect-error (nativePromise exists and is used internally)
-		const device_info = await window.Capacitor.nativePromise("Device", "getInfo");
-		if (device_info) {
-			operating_system =
-				`${device_info.platform} ${device_info.osVersion} (${device_info.manufacturer} ${device_info.model})`;
-		} else {
-			operating_system = Platform.isAndroidApp ? "Android" : Platform.isIosApp ? "iOS" : "unknown";
-		}
-	} else if (Platform.isDesktopApp) {
-		const os = require("os") as typeof import("os");
-		operating_system = os.version() + " " + os.release();
-		try {
-			// EXPL: Obsidian's main process answers "version" with the installer version.
-			framework_version = String(window.electron.ipcRenderer.sendSync("version"));
-		} catch {
-			framework_version = "unknown";
-		}
-	} else {
-		// EXPL: Obsidian's directory review forbids sniffing navigator for the OS; Platform only gives the family.
-		operating_system = Platform.isMacOS ? "macOS" : Platform.isWin ? "Windows" : Platform.isLinux ? "Linux" : "unknown";
-		framework_version = "unknown";
-	}
-
-	const other_plugins = Object.values(app.plugins.plugins)
-		.filter((plugin) => plugin.manifest.id !== PLUGIN_ID)
-		.map((plugin) => {
-			return plugin.manifest.id + (plugin.manifest.version ? ` (v${plugin.manifest.version})` : "");
-		});
-
-	return {
-		plugin_version: app.plugins.plugins[PLUGIN_ID].manifest.version,
-		other_plugins,
-		operating_system: operating_system!,
-		platform: Platform.isMobileApp ?
-			(Platform.isAndroidApp ? "Android" : Platform.isIosApp ? "iOS" : "mobile") :
-			(Platform.isMacOS ? "macOS" : "Desktop"),
-		framework_version: framework_version!,
-		obsidian_version: apiVersion,
-	};
+export function generateGithubIssueLink(app: App, title: string): string {
+	const platform = Platform.isAndroidApp ?
+		"Android" :
+		Platform.isIosApp ?
+		"iOS" :
+		Platform.isMacOS ?
+		"macOS" :
+		Platform.isWin ?
+		"Windows" :
+		Platform.isLinux ?
+		"Linux" :
+		"";
+	const params = new URLSearchParams({
+		title,
+		template: "bug-report.yml",
+		"app-version": apiVersion,
+		"inkling-version": app.plugins.plugins[PLUGIN_ID]?.manifest.version ?? "",
+		"operating-systems": platform,
+	});
+	return `https://github.com/AndrewBroz/obsidian-inkling/issues/new?${params.toString()}`;
 }
 
 /**
- * Helper function for generating a pre-filled bug report for GitHub
- * @async
+ * Open a new bug report on GitHub for the user
  * @param app - Obsidian app instance
  * @param title - Title of the bug report
- * @param data - Debug information
- * @returns {string} - URL to create a new issue on GitHub
  */
-export async function generateGithubIssueLink(
-	app: App,
-	title: string,
-	data: Record<string, string> = {},
-): Promise<string> {
-	const base_data = await getObsidianData(app);
-	const issue_data = { ...base_data, ...data };
-
-	return `https://github.com/AndrewBroz/obsidian-inkling/issues/new?` +
-		new URLSearchParams({
-			title: title,
-			template: "bug-report.yml",
-			"installer-version": issue_data.framework_version,
-			"app-version": issue_data.obsidian_version,
-			"inkling-version": issue_data.plugin_version,
-			"operating-systems": issue_data.operating_system,
-			"installed-plugins": issue_data.other_plugins.join(", "),
-		});
-}
-
-/**
- * Helper function to open GitHub issue link for user
- * @async
- * @param app - Obsidian app instance
- * @param title - Title of the bug report
- * @param data - Debug information
- * @returns {Promise<void>}
- */
-export async function openGithubIssueLink(app: App, title: string = "", data: Record<string, string> = {}) {
-	window.open(await generateGithubIssueLink(app, title, data), "_blank");
+export function openGithubIssueLink(app: App, title: string = "") {
+	window.open(generateGithubIssueLink(app, title), "_blank");
 }
 
 /**
@@ -162,11 +102,11 @@ export function showProgressBarNotice(
 	description?: string,
 ) {
 	const notice = new Notice("", 0);
-	notice.messageEl.appendChild(createEl("span", { text: initialMessage }));
+	notice.messageEl.appendChild(createSpan({ text: initialMessage }));
 
 	if (description) {
 		notice.messageEl.appendChild(createEl("br"));
-		notice.messageEl.appendChild(createEl("span", { cls: "u-small", text: description }));
+		notice.messageEl.appendChild(createSpan({ cls: "u-small", text: description }));
 	}
 
 	let progressBar = createEl("progress");
@@ -178,7 +118,7 @@ export function showProgressBarNotice(
 		if (val >= numOperations) {
 			notice.setMessage(finishedMessage);
 			notice.noticeEl.addClass("mod-success");
-			activeWindow.setTimeout(() => {
+			window.setTimeout(() => {
 				notice.hide();
 			}, duration);
 		} else {
