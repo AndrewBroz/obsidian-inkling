@@ -59,10 +59,10 @@ export function pill_eligible(state: EditorState): boolean {
 }
 
 function createPillDom(view: EditorView): TooltipView {
-	const dom = document.createElement("div");
+	const dom = createDiv();
 	dom.className = "cmtr-comment-pill";
 
-	const button = document.createElement("button");
+	const button = createEl("button");
 	button.type = "button";
 	button.className = "cmtr-comment-pill-button";
 	// EXPL: setTooltip is Obsidian's sanctioned tooltip API (over a raw aria-label) because

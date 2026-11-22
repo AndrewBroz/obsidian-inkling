@@ -700,7 +700,7 @@ export default class CommentatorPlugin extends Plugin {
 			}
 
 			this.previewModeStatusBarButton.updateButton(mode);
-			this.previewModeHeaderButton.updateButton(view as MarkdownView, mode);
+			this.previewModeHeaderButton.updateButton(view, mode);
 		}
 	}
 }

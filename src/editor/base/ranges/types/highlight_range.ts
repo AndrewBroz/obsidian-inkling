@@ -12,7 +12,7 @@ export class HighlightRange extends CriticMarkupRange {
 			if (!(key in this.own_fields) && first.own_fields[key] !== undefined)
 				inherited[key] = first.own_fields[key];
 		}
-		return Object.keys(inherited).length ? { ...inherited, ...this.own_fields } as MetadataFields : this.own_fields;
+		return Object.keys(inherited).length ? { ...inherited, ...this.own_fields } : this.own_fields;
 	}
 
 	constructor(from: number, to: number, text: string, meta?: MetaLocation) {

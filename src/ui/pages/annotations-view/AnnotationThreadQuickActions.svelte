@@ -55,7 +55,7 @@ const refresh_resolve_label = () => (resolve_label = resolve_label_for());
 			{#if entry.range.replies.length}
 				<Button
 					icon="message-square-off"
-					tooltip={"Delete comment thread"}
+					tooltip="Delete comment thread"
 					onClick={(() =>
 					applyRangeEditsToVault(
 						plugin,
@@ -66,7 +66,7 @@ const refresh_resolve_label = () => (resolve_label = resolve_label_for());
 			{:else}
 				<Button
 					icon="cross"
-					tooltip={"Delete comment"}
+					tooltip="Delete comment"
 					onClick={(() =>
 					applyRangeEditsToVault(
 						plugin,

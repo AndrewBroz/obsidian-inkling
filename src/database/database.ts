@@ -183,7 +183,7 @@ export class Database<T> extends EventComponent {
 	 */
 	async loadDatabase() {
 		this.memory = new Map();
-		for (const [key, value] of Object.entries(await this.persist.getItems() as Record<string, DatabaseItem<T>>)) {
+		for (const [key, value] of Object.entries(await this.persist.getItems())) {
 			const data = this.loadValue(value.data);
 			if (data === undefined) continue;
 			this.memory.set(key, { ...value, data });

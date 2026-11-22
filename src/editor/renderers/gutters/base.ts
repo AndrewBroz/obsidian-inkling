@@ -203,7 +203,7 @@ export class GutterElement {
 						// 		A more sane solution would be to change the StateField to construct new Markers
 						// 		for _all_ markers in a single line, but this requires much more effort.
 						if (!next.preventUnload)
-							next.destroy(domPos!);
+							next.destroy(domPos);
 						next.preventUnload = false;
 						// ORIGINAL: next.destroy(domPos!)
 						const after = domPos.nextSibling;
@@ -416,7 +416,7 @@ export class GutterView {
 	}
 
 	insertDetachedGutters(after: HTMLElement) {
-		after!.parentNode!.insertBefore(this.dom, after);
+		after.parentNode!.insertBefore(this.dom, after);
 	}
 
 	getUpdateContexts() {

@@ -34,6 +34,8 @@ function createElHelper(tag: string) {
 }
 (global as any).createSpan = createElHelper("span");
 (global as any).createDiv = createElHelper("div");
+(global as any).createEl = (tag: string, o?: { cls?: string }) => createElHelper(tag)(o);
+(global as any).createFragment = () => document.createDocumentFragment();
 
 // Obsidian's style helpers on HTMLElement (used instead of direct `el.style.x = ...`
 // assignments, which its plugin review rejects).

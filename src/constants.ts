@@ -227,7 +227,7 @@ export function backfillMarkupFocus(settings: PluginSettings): void {
 const LIVE_EDIT_MODES: ReadonlySet<number> = new Set([EditMode.CORRECTED, EditMode.SUGGEST, EditMode.COMMENT]);
 
 export function clampEditMode(settings: PluginSettings): void {
-	if (!LIVE_EDIT_MODES.has(settings.default_edit_mode as number))
+	if (!LIVE_EDIT_MODES.has(settings.default_edit_mode))
 		settings.default_edit_mode = EditMode.CORRECTED;
 }
 

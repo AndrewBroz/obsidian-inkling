@@ -68,10 +68,10 @@ function cursor_advance_through_syntax(
 	let cursor_changed = true;
 	while (cursor_changed && range) {
 		const old_cursor_head = cursor_head;
-		cursor_head = range!.cursor_move_through(cursor_head, move_forwards, movement_options[range!.type]);
+		cursor_head = range.cursor_move_through(cursor_head, move_forwards, movement_options[range.type]);
 		cursor_changed = cursor_head !== old_cursor_head;
 		if (cursor_changed && cursor_head === (move_forwards ? range.to : range.from)) {
-			range = ranges.adjacent_range(range!, !move_forwards, true);
+			range = ranges.adjacent_range(range, !move_forwards, true);
 			if (range && bracket_options && bracket_options[range.type] === RANGE_BRACKET_MOVEMENT_OPTION.STAY_OUTSIDE)
 				break;
 		}

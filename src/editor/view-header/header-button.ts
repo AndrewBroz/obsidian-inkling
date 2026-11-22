@@ -232,7 +232,7 @@ export class HeaderButton {
 			if (!(leaf.view instanceof MarkdownView)) continue;
 			this.detachButton(leaf);
 		}
-		this.plugin.app.workspace.offref(this.changeEvent!);
+		this.plugin.app.workspace.offref(this.changeEvent);
 		this.changeEvent = null;
 	}
 }

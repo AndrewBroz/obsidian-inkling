@@ -136,7 +136,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 export const cmenuViewportCommands: (plugin: CommentatorPlugin) => EventRef = (plugin) =>
 	plugin.app.workspace.on("markdown-viewport-menu", (menu, view, sectionName, menuItem) => {
 		if (plugin.settings.annotation_gutter) {
-			const editor_cm = (view as unknown as MarkdownView).editor.cm;
+			const editor_cm = view.editor.cm;
 			let current_settings = editor_cm.state.facet(annotationGutterIncludedTypesState);
 			stickyContextMenuPatch(true);
 

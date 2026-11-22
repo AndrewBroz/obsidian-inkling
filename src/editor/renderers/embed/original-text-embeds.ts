@@ -89,7 +89,7 @@ export function registerOriginalTextEmbeds(plugin: CommentatorPlugin): void {
 	const observer = new MutationObserver((records) => {
 		const adds_embed = records.some(record =>
 			Array.from(record.addedNodes).some(node =>
-				node instanceof Element &&
+				node.instanceOf(Element) &&
 				(node.matches(EMBED_NODE_SELECTOR) || node.querySelector(EMBED_NODE_SELECTOR) !== null)
 			)
 		);

@@ -37,7 +37,7 @@ export function cursor_transaction_pass_syntax(
 	const ranges = tr.startState.field(rangeParser).ranges;
 	const selections: SelectionRange[] = tr.selection!.ranges.map((range, idx) => {
 		return cursor_move(
-			tr.startState.selection!.ranges[idx],
+			tr.startState.selection.ranges[idx],
 			range,
 			ranges,
 			!backwards_select,

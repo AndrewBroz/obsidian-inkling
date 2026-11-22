@@ -304,7 +304,7 @@ async function onClickOutside() {
 						value={search_filter}
 						type="text"
 						enterkeyhint="search"
-						placeholder={"Search..."}
+						placeholder="Search..."
 						spellcheck={false}
 						onChange={(value) => {
 							search_filter = value;

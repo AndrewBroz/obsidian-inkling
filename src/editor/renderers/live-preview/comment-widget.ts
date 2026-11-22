@@ -41,10 +41,10 @@ export function renderCommentWidget(app: App, range: CommentRange, text?: string
 		tooltip = createDiv({ cls: "cmtr-comment-tooltip" });
 		MarkdownRenderer.render(app, str, tooltip, "", component);
 		component.load();
-		icon!.appendChild(tooltip);
+		icon.appendChild(tooltip);
 
 		// EXPL: Sets the tooltip position
-		const icon_rect = icon!.getBoundingClientRect();
+		const icon_rect = icon.getBoundingClientRect();
 		const tooltip_rect = tooltip.getBoundingClientRect();
 		tooltip.style.left = icon_rect.x - tooltip_rect.x + 12 + "px";
 	};
@@ -52,7 +52,7 @@ export function renderCommentWidget(app: App, range: CommentRange, text?: string
 	icon.onmouseleave = () => {
 		if (tooltip) {
 			component.unload();
-			icon!.removeChild(tooltip!);
+			icon.removeChild(tooltip);
 			tooltip = null;
 		}
 	};

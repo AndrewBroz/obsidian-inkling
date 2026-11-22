@@ -53,7 +53,7 @@ export const debug_application_commands = (plugin: CommentatorPlugin) => [
 			);
 			for (let i = 0; i < 10; i++) {
 				progressBarUpdate(i + 1);
-				await new Promise(resolve => activeWindow.setTimeout(resolve, 300));
+				await new Promise(resolve => window.setTimeout(resolve, 300));
 			}
 		},
 	},

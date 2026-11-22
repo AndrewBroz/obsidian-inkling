@@ -25,6 +25,8 @@ export default defineConfig([
 		"styles.css",
 		"node_modules",
 		".obsidian-sandbox",
+		".claude",
+		".superpowers",
 		"docs",
 		"sandbox-fixtures",
 		"scripts",

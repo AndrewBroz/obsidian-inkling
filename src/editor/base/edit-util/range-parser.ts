@@ -31,7 +31,7 @@ function constructRangeFromSyntaxNode(
 		undefined;
 	const legacy = separator !== undefined && parseLegacyMetadata(text.slice(from + 3, separator)) !== undefined;
 	const meta: MetaLocation | undefined = legacy ?
-		{ syntax: "legacy", from: from + 3, to: separator! + 2 } :
+		{ syntax: "legacy", from: from + 3, to: separator + 2 } :
 		undefined;
 	let middle = undefined;
 	if (range.type.name === "Substitution") {

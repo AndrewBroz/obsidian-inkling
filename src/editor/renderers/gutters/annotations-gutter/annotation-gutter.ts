@@ -128,7 +128,7 @@ export class AnnotationGutterView extends GutterView {
 	}
 
 	getUpdateContexts(): UpdateContext[] {
-		return (this.gutters as AnnotationSingleGutterView[]).map(gutter =>
+		return this.gutters.map(gutter =>
 			new AnnotationUpdateContext(gutter, this.view.viewport, -this.view.documentPadding.top)
 		);
 	}
@@ -156,7 +156,7 @@ export class AnnotationGutterView extends GutterView {
 		marker.focus_annotation(index, scroll);
 
 		if (focus_markup) {
-			activeWindow.setTimeout(() => {
+			window.setTimeout(() => {
 				this.view.dispatch(
 					this.view.state.update({
 						effects: [
@@ -189,7 +189,7 @@ export class AnnotationGutterView extends GutterView {
 			// TODO: Improve the performance of this code, I am not a big fan of linearly searching like this
 			// NOTE: Did you know you can label loops? I didn't. Neat huh?
 			outer_loop:
-			for (const element of this.gutters[0].elements as AnnotationGutterElement[]) {
+			for (const element of this.gutters[0].elements) {
 				if (from >= element.block!.from) {
 					for (const marker of element.markers as AnnotationMarker[]) {
 						if (from >= marker.annotation.from && to <= marker.annotation.full_range_back) {
@@ -252,7 +252,7 @@ export class AnnotationGutterView extends GutterView {
 	}
 
 	public foldGutter() {
-		(this.gutters[0] as AnnotationSingleGutterView).foldGutter();
+		this.gutters[0].foldGutter();
 	}
 }
 
@@ -632,7 +632,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			if (!this.folded)
 				setReservedWidth(this.view, this.width, false);
 
-			setTimeout(() => {
+			window.setTimeout(() => {
 				// EXPL: Transition to the new margin
 				this.view.scrollDOM.children[0].setAttribute(
 					"style",

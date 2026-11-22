@@ -71,7 +71,7 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 			const all_ranges = getRangesInText(lines.text, plugin.settings);
 
 			// We have access to the endlines, so we can determine which range(s) the element belongs to
-			const endlines = [...lines.text.matchAll(/\n/g)].map((m) => m.index!);
+			const endlines = [...lines.text.matchAll(/\n/g)].map((m) => m.index);
 
 			start_char = !lines.lineStart ? 0 : endlines[lines.lineStart - 1] + 1;
 			end_char = endlines[lines.lineEnd] ?? lines.text.length;

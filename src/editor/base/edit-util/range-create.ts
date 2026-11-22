@@ -42,13 +42,13 @@ export function construct_range(
 	//       would lose something. Merging into a legacy range can carry fields a block cannot hold, and content that
 	//       starts with a JSON object and `@@` would read back as legacy metadata; keep both legacy.
 	const syntax: MetadataSyntax =
-		has_fields && (unconvertibleReason(metadata_fields!) || unconvertibleContent(brackets[0] + body)) ?
+		has_fields && (unconvertibleReason(metadata_fields) || unconvertibleContent(brackets[0] + body)) ?
 			"legacy" :
 			"attributes";
 	// EXPL: Legacy metadata sits between the opener and the content, so it shifts every offset into the range.
 	//       An attribute block sits after the closer and shifts nothing the caller measures.
 	const prefix = has_fields && syntax === "legacy" ? JSON.stringify(metadata_fields) + "@@" : "";
-	const suffix = has_fields && syntax === "attributes" ? serializeAttrBlock(metadata_fields!) : "";
+	const suffix = has_fields && syntax === "attributes" ? serializeAttrBlock(metadata_fields) : "";
 	const output = brackets[0] + prefix + body + suffix;
 	start_offset += brackets[0].length + prefix.length;
 	// FIXME: end may not be offset if the bracket appears after the end

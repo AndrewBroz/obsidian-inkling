@@ -250,7 +250,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 	if (vim_mode && !tr.docChanged && tr.selection) {
 		if (cursorMoved(tr)) {
 			userEvents.push(
-				tr.startState.selection.ranges[0].from < tr.selection!.ranges[0].from ?
+				tr.startState.selection.ranges[0].from < tr.selection.ranges[0].from ?
 					"select.forward" :
 					"select.backward",
 			);

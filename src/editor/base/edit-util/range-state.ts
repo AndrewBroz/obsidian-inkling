@@ -45,7 +45,7 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		//       in the old document, like any deleted range): consumers that update incrementally remove what they
 		//       drew for them before adding the new ones, instead of drawing every range twice.
 		const rebuild = (): ParserData => ({
-			...(this.create(tr.state) as ParserData),
+			...this.create(tr.state),
 			deleted_ranges: value.ranges.ranges,
 		});
 		if (tr.effects.some(effect => effect.is(fullReloadEffect)))

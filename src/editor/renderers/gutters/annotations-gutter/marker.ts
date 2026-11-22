@@ -716,7 +716,7 @@ export class AnnotationMarker extends GutterMarker {
 			console.error("[Inkling] Invalid index for focusing annotation:", index);
 
 		if (scroll) {
-			activeWindow.setTimeout(() => {
+			window.setTimeout(() => {
 				const top = this.view.lineBlockAt(this.annotations[0].from).top - 100;
 				this.view.scrollDOM.scrollTo({ top, behavior: "smooth" });
 			}, 200);

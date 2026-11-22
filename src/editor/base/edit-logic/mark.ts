@@ -678,7 +678,7 @@ export function mark_ranges(
 						adj_type,
 						metadata_fields,
 					);
-					if (edit) range_operations.push(edit!);
+					if (edit) range_operations.push(edit);
 				}
 				last_range_start = range.to;
 			}

@@ -99,12 +99,12 @@ export function noticeLegacyInstall(app: App) {
 	if (!isOwnLegacyManifest(app.plugins.manifests[LEGACY_PLUGIN_ID]))
 		return;
 
-	const fragment = document.createDocumentFragment();
-	const message = fragment.appendChild(document.createElement("div"));
+	const fragment = createFragment();
+	const message = fragment.appendChild(createDiv());
 	message.textContent = "Inkling now uses the plugin id \"inkling-markup\". Your settings and hotkeys were " +
 		"carried over and the old copy (\"inkling\") was disabled. Uninstall the old copy: the community plugin " +
 		"store will otherwise offer an unrelated plugin as its \"update\".";
-	const button = fragment.appendChild(document.createElement("button"));
+	const button = fragment.appendChild(createEl("button"));
 	button.textContent = "Uninstall old copy";
 	button.addClass("inkling-legacy-uninstall-button");
 

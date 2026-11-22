@@ -172,8 +172,8 @@ export function filterRanges(
 						item.range.full_thread.some(
 							(range) =>
 								range.fields.time &&
-								range.fields.time >= date_filter![0] &&
-								range.fields.time <= date_filter![1],
+								range.fields.time >= date_filter[0] &&
+								range.fields.time <= date_filter[1],
 						),
 				);
 			} else if (date_filter[0]) {
@@ -182,7 +182,7 @@ export function filterRanges(
 						item.range.full_thread.some(
 							(range) =>
 								range.fields.time &&
-								range.fields.time >= date_filter![0],
+								range.fields.time >= date_filter[0],
 						),
 				);
 			} else if (date_filter[1]) {
@@ -191,7 +191,7 @@ export function filterRanges(
 						item.range.full_thread.some(
 							(range) =>
 								range.fields.time &&
-								range.fields.time <= date_filter![1],
+								range.fields.time <= date_filter[1],
 						),
 				);
 			}

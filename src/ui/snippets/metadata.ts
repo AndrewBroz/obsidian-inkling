@@ -63,7 +63,7 @@ export function createMetadataInfoElement(
 
 		const time = createSpan({
 			cls: "cmtr-metadata-info-time-data",
-			text: time_text ?? window.moment.unix(range.fields.time!).format("MMM DD YYYY, HH:mm"),
+			text: time_text ?? window.moment.unix(range.fields.time).format("MMM DD YYYY, HH:mm"),
 		});
 		timeField.appendChild(time);
 		metadata_container.appendChild(timeField);
