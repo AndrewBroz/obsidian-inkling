@@ -26,7 +26,14 @@ env:
   BETA_REPO: AndrewBroz/obsidian-inkling-beta
 
 jobs:
+  # The end-to-end suite in real Obsidian, on the tagged commit. A red suite stops the release: nothing below runs.
+  e2e:
+    uses: ./.github/workflows/e2e.yml
+    permissions:
+      contents: read
+
   build:
+    needs: e2e
     runs-on: ubuntu-latest
     permissions:
       contents: write
