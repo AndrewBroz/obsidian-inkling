@@ -26,7 +26,7 @@
 </script>
 
 <div class="setting-command-hotkeys">
-  {#each items as { value, text }, index}
+  {#each items as { value, text }, index (value)}
     <span class="setting-hotkey svelcomlib-icon-text">
       {text}
       {#if !disabled}

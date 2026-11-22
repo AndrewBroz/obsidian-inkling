@@ -23,7 +23,7 @@ const preview_mode_notices = {
 </script>
 
 <SettingItem
-	name="Default <i>Edit</i> Mode"
+	name="Default edit mode"
 	type="dropdown"
 	notices={[
 		{
@@ -40,17 +40,17 @@ const preview_mode_notices = {
 				{ value: EditMode.COMMENT.toString(), text: "Commenting" },
 			]}
 			value={plugin.settings.default_edit_mode.toString()}
-			onChange={(value) => {
-				let edit_mode = parseInt(value);
+			onChange={(value: string) => {
+				const edit_mode = parseInt(value);
 				plugin.settings.default_edit_mode = edit_mode;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
 </SettingItem>
 
 <SettingItem
-	name="Default <i>Preview</i> Mode"
+	name="Default preview mode"
 	type="dropdown"
 	notices={[
 		{
@@ -68,10 +68,10 @@ const preview_mode_notices = {
 				{ value: PreviewMode.REJECT.toString(), text: "Preview 'reject all'" },
 			]}
 			value={plugin.settings.default_preview_mode.toString()}
-			onChange={(value) => {
+			onChange={(value: string) => {
 				preview_mode = parseInt(value);
 				plugin.settings.default_preview_mode = preview_mode;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -89,7 +89,7 @@ const preview_mode_notices = {
 		{
 			type: "warning",
 			text:
-				"Suggestion metadata is <b>not</b> part of the official CriticMarkup standard, this metadata will not get processed/rendered correctly in other editors",
+				"Suggestion metadata is not part of the official CriticMarkup standard, this metadata will not get processed/rendered correctly in other editors",
 		},
 		{
 			type: "error",
@@ -101,9 +101,9 @@ const preview_mode_notices = {
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.enable_metadata}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.enable_metadata = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -128,9 +128,9 @@ const preview_mode_notices = {
 			max={navigator.hardwareConcurrency / 2}
 			step={1}
 			value={plugin.settings.database_workers}
-			onChange={(value) => {
+			onChange={(value: number) => {
 				plugin.settings.database_workers = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}

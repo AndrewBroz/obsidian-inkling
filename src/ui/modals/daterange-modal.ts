@@ -33,6 +33,6 @@ export class DaterangeModal extends Modal {
 
 	onClose() {
 		if (this.view)
-			unmount(this.view);
+			void unmount(this.view);
 	}
 }

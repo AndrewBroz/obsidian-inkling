@@ -27,11 +27,11 @@
   {step}
   oninput={() => {
     const tooltip_el = activeDocument.body.lastChild;
-    if (tooltip_el.classList.contains("tooltip")) {
+    if (tooltip_el?.instanceOf(HTMLElement) && tooltip_el.classList.contains("tooltip")) {
       // Manually grabbing the tooltip and forcefully updating it, as I do not have the proper reference to it
-      // Note: width="auto" is necessary, as width is exactly set, and sometimes the text overflows
-      tooltip_el.firstChild.textContent = getTooltip(value);
-      tooltip_el.style.width = "auto";
+      // Note: the width Obsidian sets is removed, as the new text can be wider than the old
+      if (tooltip_el.firstChild) tooltip_el.firstChild.textContent = getTooltip(value);
+      tooltip_el.style.removeProperty("width");
     }
   }}
   onchange={(_) => {

@@ -22,21 +22,47 @@ import { around } from "monkey-around";
 
 function resolveEditorPrototype(app: App) {
 	// EXPL: Create a temporary editor to resolve the prototype of ScrollableMarkdownEditor
-	const widgetEditorView = app.embedRegistry.embedByExtension.md(
-		{ app, containerEl: createDiv() },
-		null as unknown as TFile,
-		"",
-	) as WidgetEditorView;
+	// EXPL: The file may be null here; Obsidian's typing only allows a TFile.
+	const createEmbed = app.embedRegistry.embedByExtension.md as (
+		context: { app: App; containerEl: HTMLElement },
+		file: TFile | null,
+		subpath: string,
+	) => WidgetEditorView;
+	const widgetEditorView = createEmbed({ app, containerEl: createDiv() }, null, "");
 
 	// EXPL: Mark as editable to instantiate the editor
 	widgetEditorView.editable = true;
 	widgetEditorView.showEditor();
-	const MarkdownEditor = Object.getPrototypeOf(Object.getPrototypeOf(widgetEditorView.editMode!));
+	const MarkdownEditor = Object.getPrototypeOf(Object.getPrototypeOf(widgetEditorView.editMode!) as object) as {
+		constructor: Constructor<MarkdownScrollableEditView>;
+	};
 
 	// EXPL: Unload to remove the temporary editor
 	widgetEditorView.unload();
 
-	return MarkdownEditor.constructor as Constructor<MarkdownScrollableEditView>;
+	return MarkdownEditor.constructor;
+}
+
+type SetActiveLeaf = (leaf: WorkspaceLeaf, params?: { focus?: boolean }) => void;
+
+/**
+ * Stands in for Obsidian's markdown editor class until `resolveEmbeddableEditor` has found it: that class isn't
+ * exported, and can only be reached through a live App.
+ */
+class UnresolvedEditor {
+	constructor() {
+		throw new Error("Inkling: an embedded editor was created before resolveEmbeddableEditor(app) ran");
+	}
+}
+
+/**
+ * Makes EmbeddableMarkdownEditor extend Obsidian's markdown editor class. Call once, from the plugin's onload,
+ * before any editor is created.
+ */
+export function resolveEmbeddableEditor(app: App) {
+	const Base = resolveEditorPrototype(app);
+	Object.setPrototypeOf(EmbeddableMarkdownEditor, Base);
+	Object.setPrototypeOf(EmbeddableMarkdownEditor.prototype, Base.prototype as object);
 }
 
 export interface MarkdownEditorProps {
@@ -76,7 +102,9 @@ export const defaultMarkdownEditorProps: MarkdownEditorProps = {
 	onChange: () => {},
 };
 
-export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implements MarkdownScrollableEditView {
+export class EmbeddableMarkdownEditor extends (UnresolvedEditor as unknown as Constructor<MarkdownScrollableEditView>)
+	implements MarkdownScrollableEditView
+{
 	options: MarkdownEditorProps;
 	initial_value: string;
 	scope: Scope;
@@ -121,15 +149,13 @@ export class EmbeddableMarkdownEditor extends resolveEditorPrototype(app) implem
 
 		this.set(options.value || "", true);
 		this.register(
-			around(this.app.workspace, {
-				// @ts-expect-error Incorrectly matches the deprecated setActiveLeaf method
-				setActiveLeaf:
-					(oldMethod: (leaf: WorkspaceLeaf, params?: { focus?: boolean }) => void) =>
-					(leaf: WorkspaceLeaf, params: { focus?: boolean }) => {
-						// EXPL: If the editor is currently focused, prevent the workspace setting the focus to a workspaceLeaf instead
-						if (!this.activeCM.hasFocus)
-							oldMethod.call(this.app.workspace, leaf, params);
-					},
+			// EXPL: Typed by hand: there is one setActiveLeaf at runtime, but its typings name a deprecated overload.
+			around(this.app.workspace as unknown as { setActiveLeaf: SetActiveLeaf }, {
+				setActiveLeaf: (oldMethod: SetActiveLeaf) => (leaf: WorkspaceLeaf, params?: { focus?: boolean }) => {
+					// EXPL: If the editor is currently focused, prevent the workspace setting the focus to a workspaceLeaf instead
+					if (!this.activeCM.hasFocus)
+						oldMethod.call(this.app.workspace, leaf, params);
+				},
 			}),
 		);
 

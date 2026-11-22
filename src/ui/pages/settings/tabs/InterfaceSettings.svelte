@@ -19,7 +19,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.toolbar_show_buttons_labels = !plugin.settings
 					.toolbar_show_buttons_labels;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -36,7 +36,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.toolbar_preview_button = !plugin.settings
 					.toolbar_preview_button;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -52,7 +52,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			value={plugin.settings.toolbar_edit_button}
 			onChange={() => {
 				plugin.settings.toolbar_edit_button = !plugin.settings.toolbar_edit_button;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -71,7 +71,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.status_bar_preview_button = !plugin.settings
 					.status_bar_preview_button;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -88,7 +88,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.status_bar_edit_button = !plugin.settings
 					.status_bar_edit_button;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -105,7 +105,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.status_bar_metadata_button = !plugin.settings
 					.status_bar_metadata_button;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}

@@ -31,7 +31,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			value={plugin.settings.diff_gutter}
 			onChange={() => {
 				plugin.settings.diff_gutter = !plugin.settings.diff_gutter;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -55,7 +55,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.diff_gutter_hide_empty = !plugin.settings
 					.diff_gutter_hide_empty;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -73,7 +73,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			value={plugin.settings.annotation_gutter}
 			onChange={() => {
 				plugin.settings.annotation_gutter = !plugin.settings.annotation_gutter;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -86,7 +86,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 	type="subheading"
 	depth={1}
 />
-{#each Object.keys(AnnotationInclusionType).filter(key => isNaN(Number(key))) as key, idx}
+{#each Object.keys(AnnotationInclusionType).filter(key => isNaN(Number(key))) as key (key)}
 	<SettingItem
 		name={key.toLowerCase().replace(/\b\w/g, s => s.toUpperCase())}
 		type="toggle"
@@ -99,7 +99,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 				onChange={() => {
 					plugin.settings.annotation_gutter_included_types ^=
 						AnnotationInclusionType[key];
-					plugin.saveSettings();
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -118,7 +118,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.annotation_gutter_focus_on_click = !plugin.settings
 					.annotation_gutter_focus_on_click;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -136,9 +136,9 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			max={500}
 			step={50}
 			value={plugin.settings.annotation_gutter_width}
-			onChange={(value) => {
+			onChange={(value: number) => {
 				plugin.settings.annotation_gutter_width = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -156,7 +156,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.annotation_gutter_resize_handle = !plugin.settings
 					.annotation_gutter_resize_handle;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -175,7 +175,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.annotation_gutter_default_fold_state = !plugin.settings
 					.annotation_gutter_default_fold_state;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -193,7 +193,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.annotation_gutter_fold_button = !plugin.settings
 					.annotation_gutter_fold_button;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -216,7 +216,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 			onChange={() => {
 				plugin.settings.annotation_gutter_hide_empty = !plugin.settings
 					.annotation_gutter_hide_empty;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}

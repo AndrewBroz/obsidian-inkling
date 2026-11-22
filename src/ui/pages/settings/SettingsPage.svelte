@@ -44,7 +44,7 @@ let Component = $derived.by(() => {
 	}
 });
 
-async function changedTabs(index: number) {
+function changedTabs(index: number) {
 	tab_idx = index;
 	tab_id = tabs[index].id;
 	plugin.settings_tab = tab_id;
@@ -68,7 +68,7 @@ async function changedTabs(index: number) {
 			}
 		}}
 	>
-		{#each tabs as { id, name, icon }, index}
+		{#each tabs as { id, name, icon }, index (id)}
 			<div
 				class:cmtr-settings-navigation-selected-item={tab_idx === index}
 				class="cmtr-settings-navigation-item"

@@ -155,7 +155,7 @@ export class PreviewEditor extends Component {
 		if (this.options.preview_cls)
 			this.container.addClass(...([] as string[]).concat(this.options.preview_cls));
 
-		MarkdownRenderer.render(this.app, this.options.value, this.container, "", this);
+		void MarkdownRenderer.render(this.app, this.options.value, this.container, "", this);
 		this.removeClickListener();
 		const click_listener = () => {
 			this.removeClickListener();

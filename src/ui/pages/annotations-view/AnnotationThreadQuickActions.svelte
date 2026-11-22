@@ -27,7 +27,7 @@ interface Props {
 
 	menu_open?: boolean;
 	moreOptionsMenu: (
-		plugin: any,
+		plugin: CommentatorPlugin,
 		evt: MouseEvent,
 		entries: CriticMarkupRangeEntry[],
 	) => Menu;
@@ -149,7 +149,7 @@ const refresh_resolve_label = () => (resolve_label = resolve_label_for());
 		<Button
 			icon="more-vertical"
 			tooltip="More options"
-			onClick={(evt) => {
+			onClick={(evt: MouseEvent) => {
 				menu_open = true;
 				const menu = moreOptionsMenu(plugin, evt, [entry]);
 				menu.onHide(() => {

@@ -62,6 +62,7 @@ import {
 import { resolveFrontmatterMode } from "./editor/uix/frontmatter-mode";
 import { editModeHeaderButton, type HeaderButton, previewModeHeaderButton } from "./editor/view-header";
 
+import { resolveEmbeddableEditor } from "./ui/embeddable-editor";
 import { AuthorNameModal } from "./ui/modals";
 import { CommentatorSettings } from "./ui/settings";
 import { COMMENTATOR_ANNOTATIONS_VIEW, CommentatorAnnotationsView } from "./ui/view.svelte";
@@ -277,6 +278,7 @@ export default class CommentatorPlugin extends Plugin {
 	}
 
 	async onload() {
+		resolveEmbeddableEditor(this.app);
 		if (process.env.NODE_ENV === "development") {
 			// NOTE: debug options only accessible via main Obsidian window
 			window["COMMENTATOR_DEBUG"] = {

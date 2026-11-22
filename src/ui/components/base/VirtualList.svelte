@@ -1,25 +1,25 @@
 <!-- This is a fork of the svelte-virtual-list-ce repository, available: here https://github.com/gitbreaker222/svelte-virtual-list/issues -->
-<script lang="ts">
-    import {onMount, tick} from "svelte";
+<script lang="ts" generics="T">
+    import {onMount, tick, type Snippet} from "svelte";
 
     interface Props {
-        items: any[];
+        items: T[];
         height?: string;
         itemHeight?: number | undefined;
         start?: number;
         end?: number;
-        item: any
+        item: Snippet<[T, number]>
     }
 
     let {items, height = "100%", itemHeight = undefined, start = 0, end = 0, item}: Props = $props();
 
     // local state
-    let height_map: any[] = $state([]);
-    let rows: any[] = $state([]);
-    let viewport: Element = $state();
-    let contents: HTMLElement = $state();
+    let height_map: number[] = $state([]);
+    let rows: ArrayLike<HTMLElement> = $state([]);
+    let viewport: HTMLElement | undefined = $state();
+    let contents: HTMLElement | undefined = $state();
     let viewport_height = $state(0);
-    let mounted = $state();
+    let mounted = $state(false);
 
     let top = $state(0);
     let bottom = $state(0);
@@ -33,16 +33,17 @@
     // whenever `items` changes, invalidate the current heightmap
     $effect(() => {
         if (mounted) {
-            refresh(items, viewport_height, itemHeight);
+            void refresh(items, viewport_height, itemHeight);
         }
     });
 
 
-    async function refresh(items: any[], viewport_height: number, itemHeight: number) {
+    async function refresh(items: T[], viewport_height: number, itemHeight: number | undefined) {
+        if (!viewport) return;
         const isStartOverflow = items.length < start;
 
         if (isStartOverflow) {
-            await scrollToIndex(items.length - 1, {behavior: "auto"});
+            scrollToIndex(items.length - 1, {behavior: "auto"});
         }
 
         const {scrollTop} = viewport;
@@ -75,7 +76,8 @@
         height_map.length = items.length;
     }
 
-    async function handle_scroll() {
+    function handle_scroll() {
+        if (!viewport) return;
         const {scrollTop} = viewport;
         scrolltop = scrollTop;
 
@@ -121,23 +123,23 @@
         // more. maybe we can just call handle_scroll again?
     }
 
-    export async function scrollToIndex(index: number, opts: any) {
+    export function scrollToIndex(index: number, opts: ScrollToOptions) {
+        if (!viewport) return;
         const {scrollTop} = viewport;
         const itemsDelta = index - start;
         const _itemHeight = itemHeight || average_height;
         const distance = itemsDelta * _itemHeight;
-        opts = {
+        viewport.scrollTo({
             left: 0,
             top: scrollTop + distance,
             behavior: "smooth",
             ...opts,
-        };
-        viewport.scrollTo(opts);
+        });
     }
 
     // trigger initial refresh
     onMount(() => {
-        rows = contents.getElementsByClassName("svelcomlib-virtual-list-row");
+        if (contents) rows = contents.getElementsByClassName("svelcomlib-virtual-list-row") as HTMLCollectionOf<HTMLElement>;
         mounted = true;
     });
 </script>

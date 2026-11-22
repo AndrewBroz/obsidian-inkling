@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type CommentatorPlugin from "../../../main";
 
-import { onDestroy, onMount } from "svelte";
+import { onDestroy, onMount, untrack } from "svelte";
 import {
 	Button,
 	Icon,
@@ -15,6 +15,7 @@ import type { CommentatorAnnotationsViewState } from "../../view.svelte";
 import AnnotationThread from "./AnnotationThread.svelte";
 
 import { debounce, Menu, TFile } from "obsidian";
+import { moment } from "../../../util/moment";
 
 import { type DatabaseEntry } from "../../../database";
 
@@ -197,38 +198,41 @@ let description_blurb = $derived.by(() => {
 
 const debouncedUpdate = debounce(filterRanges, 500);
 
+// EXPL: The picker is a range picker, so it gives two dates, or null when it closes without a choice.
+function setDateFilter(value: string | string[] | null) {
+	date_filter = Array.isArray(value) ?
+		value.map((date) => date ? moment(date, "YYYY-MM-DD HH:mm:ss").unix() : 0) :
+		undefined;
+}
+
 const save_view_state = debounce(
-	() => {
-		sync_props(
-			{
-				range_type_filter,
-				location_filter,
-				content_filter,
-				author_filter,
-				date_filter,
-				search_filter,
-				resolved_filter,
-			},
-		);
+	(state: Parameters<typeof sync_props>[0]) => {
+		sync_props(state);
 		plugin.app.workspace.requestSaveLayout();
 	},
 	2500,
 );
 
 $effect(() => {
-	range_type_filter;
-	location_filter;
-	content_filter;
-	author_filter;
-	date_filter;
-	resolved_filter;
-	save_view_state();
+	// EXPL: Reading the filters here makes them the effect's dependencies; the search text is saved with them but
+	//       doesn't trigger a save of its own.
+	save_view_state({
+		range_type_filter,
+		location_filter,
+		content_filter,
+		author_filter,
+		date_filter,
+		search_filter: untrack(() => search_filter),
+		resolved_filter,
+	});
 });
 
+// EXPL: Any change to the list clears the selection (reading filtered_items makes it the dependency).
 $effect(() => {
-	filtered_items;
-	selected_ranges = [];
-	anchor_selected_range = null;
+	if (filtered_items) {
+		selected_ranges = [];
+		anchor_selected_range = null;
+	}
 });
 
 async function handleThreadClick(
@@ -306,7 +310,7 @@ async function onClickOutside() {
 						enterkeyhint="search"
 						placeholder="Search..."
 						spellcheck={false}
-						onChange={(value) => {
+						onChange={(value: string) => {
 							search_filter = value;
 							debouncedUpdate();
 						}}
@@ -315,7 +319,7 @@ async function onClickOutside() {
 
 				<div class="cmtr-view-action-container">
 					<StateButton
-						onContextMenu={(e) => {
+						onContextMenu={(e: MouseEvent) => {
 							let menu = new Menu();
 
 							range_filters.map((filter, index) => {
@@ -336,7 +340,7 @@ async function onClickOutside() {
 						states={range_filters}
 					/>
 					<StateButton
-						onContextMenu={(e) => {
+						onContextMenu={(e: MouseEvent) => {
 							let menu = new Menu();
 
 							location_filters.map((filter, index) => {
@@ -357,7 +361,7 @@ async function onClickOutside() {
 						states={location_filters}
 					/>
 					<StateButton
-						onContextMenu={(e) => {
+						onContextMenu={(e: MouseEvent) => {
 							let menu = new Menu();
 
 							content_filters.map((filter, index) => {
@@ -378,7 +382,7 @@ async function onClickOutside() {
 						states={content_filters}
 					/>
 					<StateButton
-						onContextMenu={(e) => {
+						onContextMenu={(e: MouseEvent) => {
 							const menu = new Menu();
 
 							resolved_filters.map((filter, index) => {
@@ -401,7 +405,7 @@ async function onClickOutside() {
 					{#if plugin.settings.enable_metadata}
 						{#if plugin.settings.enable_author_metadata}
 							<StateButton
-								onContextMenu={(e) => {
+								onContextMenu={(e: MouseEvent) => {
 									let menu = new Menu();
 
 									author_filters.map((filter, index) => {
@@ -429,13 +433,7 @@ async function onClickOutside() {
 								class="cmtr-view-action clickable-icon nav-action-button svelcomlib-icon-text"
 								aria-label="Filter by date"
 								onclick={() =>
-								new DaterangeModal(plugin, date_filter, (val) => {
-									date_filter = val?.map((date) =>
-										date ?
-											window.moment(date, "YYYY-MM-DD HH:mm:ss").unix() :
-											0
-									);
-								}).open()}
+								new DaterangeModal(plugin, date_filter, setDateFilter).open()}
 								oncontextmenu={(e) => {
 									e.preventDefault();
 									const menu = new Menu();
@@ -452,7 +450,7 @@ async function onClickOutside() {
 											.setTitle("Filter to today")
 											.setIcon("calendar-days")
 											.onClick(() => {
-												const today = window.moment().startOf("day").unix();
+												const today = moment().startOf("day").unix();
 												date_filter = [today, today + 86400];
 											});
 									});
@@ -461,10 +459,10 @@ async function onClickOutside() {
 											.setTitle("Filter to this week")
 											.setIcon("calendar-range")
 											.onClick(() => {
-												const today = window.moment().startOf("day").unix();
+												const today = moment().startOf("day").unix();
 												date_filter = [
-													today - window.moment().day() * 86400,
-													today + (7 - window.moment().day()) * 86400,
+													today - moment().day() * 86400,
+													today + (7 - moment().day()) * 86400,
 												];
 											});
 									});
@@ -473,12 +471,12 @@ async function onClickOutside() {
 											.setTitle("Filter to this month")
 											.setIcon("calendar-clock")
 											.onClick(() => {
-												const today = window.moment().startOf("day").unix();
+												const today = moment().startOf("day").unix();
 												date_filter = [
-													today - window.moment().date() * 86400,
+													today - moment().date() * 86400,
 													today +
-													(window.moment().daysInMonth() -
-															window.moment().date()) *
+													(moment().daysInMonth() -
+															moment().date()) *
 														86400,
 												];
 											});
@@ -497,7 +495,7 @@ async function onClickOutside() {
 						class="clickable-icon nav-action-button cmtr-view-action"
 						icon="more-vertical"
 						tooltip="More options"
-						onClick={(evt) => {
+						onClick={(evt: MouseEvent) => {
 							stickyContextMenuPatch(true);
 							const menu = new Menu();
 
@@ -587,13 +585,7 @@ async function onClickOutside() {
 									.setIcon("calendar")
 									.setSection("filter-actions")
 									.onClick(() => {
-										new DaterangeModal(plugin, date_filter, (val) => {
-											date_filter = val?.map((date) =>
-												date ?
-													window.moment(date, "YYYY-MM-DD HH:mm:ss").unix() :
-													0
-											);
-										}).open();
+										new DaterangeModal(plugin, date_filter, setDateFilter).open();
 									});
 							});
 
@@ -623,23 +615,11 @@ async function onClickOutside() {
 									.setIcon("circle-alert")
 									.setSection("selection-actions")
 									.onClick(() => {
-										const sorted_ranges = [...selected_ranges].sort((a, b) => {
-											a.range.from - b.range.from;
-										});
-										const new_selection = [];
-										let current_idx = 0;
-										for (const [idx, row] of filtered_items.entries()) {
-											if (
-												current_idx < sorted_ranges.length &&
-												row.path === sorted_ranges[current_idx].path &&
-												row.range.from === sorted_ranges[current_idx].range.from
-											) {
-												current_idx++;
-											} else {
-												new_selection.push(row);
-											}
-										}
-										selected_ranges = new_selection;
+										// EXPL: Matched by note and position: the old version walked both lists in step, but
+										//       its sort compared nothing, so a selection made out of list order
+										//       inverted wrongly.
+										const selected = new Set(selected_ranges.map(entry => entry.path + "\0" + entry.range.from));
+										selected_ranges = filtered_items.filter(row => !selected.has(row.path + "\0" + row.range.from));
 										anchor_selected_range = null;
 									});
 							});
@@ -651,7 +631,7 @@ async function onClickOutside() {
 									.setSection("history-actions")
 									.setDisabled(!plugin.file_history.length)
 									.onClick(() => {
-										undoRangeEditsToVault(plugin);
+										void undoRangeEditsToVault(plugin);
 									});
 							});
 
@@ -670,8 +650,6 @@ async function onClickOutside() {
 	{/snippet}
 
 	{#snippet view()}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="cmtr-view-container"
 			tabindex="-1"

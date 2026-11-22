@@ -7,7 +7,7 @@
 	thread_resolved,
 } from "../../../editor/base";
 import type CommentatorPlugin from "../../../main";
-import { Icon, MarkdownRenderer } from "../../components";
+import { Icon, MarkdownRenderer, mountElement } from "../../components";
 import { createMetadataInfoElement } from "../../snippets";
 import AnnotationThreadQuickActions from "./AnnotationThreadQuickActions.svelte";
 import { onContextMenu } from "./context-menu";
@@ -17,8 +17,8 @@ interface Props {
 	selected_ranges: CriticMarkupRangeEntry[];
 	row: CriticMarkupRangeEntry;
 	index: number;
-	onClick: (evt: MouseEvent, row: Row, index: number) => void;
-	onDblClick: (evt: MouseEvent, row: Row, index: number) => void;
+	onClick: (evt: MouseEvent, row: CriticMarkupRangeEntry, index: number) => void;
+	onDblClick: (evt: MouseEvent, row: CriticMarkupRangeEntry, index: number) => void;
 	menu_open: boolean;
 }
 
@@ -32,11 +32,10 @@ let {
 	menu_open = $bindable(false),
 }: Props = $props();
 
-let is_focused = $state(false);
 let hovered_idx = $state<number | null>(null);
-let menu_open_at_idx = $state(null);
+let menu_open_at_idx = $state<number | null>(null);
 
-function setHoveredIndex(idx: number) {
+function setHoveredIndex(idx: number | null) {
 	if (!menu_open) {
 		hovered_idx = idx;
 		menu_open_at_idx = hovered_idx;
@@ -73,10 +72,6 @@ const is_anchor_quote = $derived(
 	}}
 	onclick={(e) => {
 		onClick(e, row, index);
-		is_focused = true;
-	}}
-	onblur={() => {
-		is_focused = false;
 	}}
 	ondblclick={(e) => {
 		onDblClick(e, row, index);
@@ -87,7 +82,7 @@ const is_anchor_quote = $derived(
 			e,
 			selected_ranges.length ?
 				selected_ranges :
-				[{ path: row.path, range: row.range.thread[hovered_idx] ?? row.range }],
+				[{ path: row.path, range: (hovered_idx === null ? undefined : row.range.thread[hovered_idx]) ?? row.range }],
 		);
 	}}
 >
@@ -107,7 +102,7 @@ const is_anchor_quote = $derived(
 		<div>
 			<span class="cmtr-view-range-title">{row.path}</span>
 			{#if !is_anchor_quote}
-				{@html createMetadataInfoElement(row.range, "", "icon").outerHTML}
+				<span class="svelcomlib-contents" use:mountElement={createMetadataInfoElement(row.range, "", "icon")}></span>
 			{/if}
 		</div>
 	</div>
@@ -140,7 +135,7 @@ const is_anchor_quote = $derived(
 	{/key}
 
 	{#if row.range.replies.length}
-		{#each row.range.replies as reply, idx}
+		{#each row.range.replies as reply, idx (reply.from)}
 			{#key reply.text}
 				<div
 					class="cmtr-view-range-reply"
@@ -159,7 +154,7 @@ const is_anchor_quote = $derived(
 						/>
 					{/if}
 
-					{@html createMetadataInfoElement(reply, "cmtr-view-range-reply-top").outerHTML}
+					<span class="svelcomlib-contents" use:mountElement={createMetadataInfoElement(reply, "cmtr-view-range-reply-top")}></span>
 
 					<div class="cmtr-view-range-reply-text">
 						<MarkdownRenderer

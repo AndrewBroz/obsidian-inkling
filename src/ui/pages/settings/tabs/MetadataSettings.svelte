@@ -14,9 +14,9 @@ let author = $state(plugin.settings.author);
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.enable_metadata}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.enable_metadata = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -30,9 +30,9 @@ let author = $state(plugin.settings.author);
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.enable_author_metadata}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.enable_author_metadata = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -48,9 +48,9 @@ let author = $state(plugin.settings.author);
 		{#snippet control()}
 			<Toggle
 				value={plugin.settings.add_author_metadata}
-				onChange={(value) => {
+				onChange={(value: boolean) => {
 					plugin.settings.add_author_metadata = value;
-					plugin.saveSettings();
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -70,10 +70,10 @@ let author = $state(plugin.settings.author);
 			<Input
 				type="text"
 				bind:value={plugin.settings.author}
-				onChange={(value) => {
+				onChange={(value: string) => {
 					author = value;
 					plugin.settings.author = value;
-					plugin.saveSettings();
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -88,9 +88,9 @@ let author = $state(plugin.settings.author);
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.enable_timestamp_metadata}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.enable_timestamp_metadata = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -105,9 +105,9 @@ let author = $state(plugin.settings.author);
 		{#snippet control()}
 			<Toggle
 				value={plugin.settings.add_timestamp_metadata}
-				onChange={(value) => {
+				onChange={(value: boolean) => {
 					plugin.settings.add_timestamp_metadata = value;
-					plugin.saveSettings();
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -122,9 +122,9 @@ let author = $state(plugin.settings.author);
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.enable_completed_metadata}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.enable_completed_metadata = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -139,9 +139,9 @@ let author = $state(plugin.settings.author);
 		{#snippet control()}
 			<Toggle
 				value={plugin.settings.add_completed_metadata}
-				onChange={(value) => {
+				onChange={(value: boolean) => {
 					plugin.settings.add_completed_metadata = value;
-					plugin.saveSettings();
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -156,9 +156,9 @@ let author = $state(plugin.settings.author);
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.enable_style_metadata}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.enable_style_metadata = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -173,9 +173,9 @@ let author = $state(plugin.settings.author);
 		{#snippet control()}
 			<Toggle
 				value={plugin.settings.add_style_metadata}
-				onChange={(value) => {
+				onChange={(value: boolean) => {
 					plugin.settings.add_style_metadata = value;
-					plugin.saveSettings();
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -190,9 +190,9 @@ let author = $state(plugin.settings.author);
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.enable_color_metadata}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.enable_color_metadata = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -207,9 +207,9 @@ let author = $state(plugin.settings.author);
 		{#snippet control()}
 			<Toggle
 				value={plugin.settings.add_color_metadata}
-				onChange={(value) => {
+				onChange={(value: boolean) => {
 					plugin.settings.add_color_metadata = value;
-					plugin.saveSettings();
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}

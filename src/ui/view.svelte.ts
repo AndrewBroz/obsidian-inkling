@@ -82,8 +82,8 @@ export class CommentatorAnnotationsView extends ItemView {
 					...this.props,
 					// TODO: Find a more canonical way to get props synced from the view to the mounter
 					sync_props: (props: CommentatorAnnotationsViewState) => {
-						for (const [key, value] of Object.entries(props))
-							this.props[key as keyof typeof this.props] = value;
+						for (const [key, value] of Object.entries(props) as [string, unknown][])
+							(this.props as Record<string, unknown>)[key] = value;
 					},
 				},
 			});

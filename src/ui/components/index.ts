@@ -23,6 +23,7 @@ import {
 
 import {
 	clickOutside,
+	mountElement,
 } from "./scripts";
 
 export {
@@ -33,6 +34,7 @@ export {
 	Icon,
 	Input,
 	MarkdownRenderer,
+	mountElement,
 	NavHeader,
 	SettingItem,
 	Slider,

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { Dropdown, SettingItem, Slider, Toggle } from "../../../components";
+	import { Dropdown, SettingItem, Toggle } from "../../../components";
 
 import type CommentatorPlugin from "../../../../main";
+import type { PluginSettings } from "../../../../types";
 
 let { plugin }: { plugin: CommentatorPlugin } = $props();
 
@@ -24,7 +25,7 @@ let comment_rendering_mode_notices = {
 		{
 			type: "info",
 			text:
-				"When typing <code>{++</code>, the tag automatically gets completed with <code>++}</code>",
+				"When typing {++, the tag automatically gets completed with ++}",
 		},
 	]}
 	type="toggle"
@@ -34,7 +35,7 @@ let comment_rendering_mode_notices = {
 			value={plugin.settings.tag_completion}
 			onChange={() => {
 				plugin.settings.tag_completion = !plugin.settings.tag_completion;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -47,7 +48,7 @@ let comment_rendering_mode_notices = {
 		{
 			type: "info",
 			text:
-				"Copying <code>my {++text++}</code> will result in <code>my text</code>",
+				"Copying \"my {++text++}\" will result in \"my text\"",
 		},
 	]}
 	type="toggle"
@@ -59,7 +60,7 @@ let comment_rendering_mode_notices = {
 			onChange={() => {
 				plugin.settings.clipboard_remove_syntax = !plugin.settings
 					.clipboard_remove_syntax;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -75,7 +76,7 @@ let comment_rendering_mode_notices = {
 			value={plugin.settings.tag_correcter}
 			onChange={() => {
 				plugin.settings.tag_correcter = !plugin.settings.tag_correcter;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -106,7 +107,7 @@ let comment_rendering_mode_notices = {
 			value={plugin.settings.editor_styling}
 			onChange={() => {
 				plugin.settings.editor_styling = !plugin.settings.editor_styling;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -119,7 +120,7 @@ let comment_rendering_mode_notices = {
 		{
 			type: "info",
 			text:
-				"Placing the cursor inside <code>{++text++}</code> reveals the <code>{++</code> and <code>++}</code> brackets, in any editing mode",
+				"Placing the cursor inside {++text++} reveals the {++ and ++} brackets, in any editing mode",
 		},
 	]}
 	type="toggle"
@@ -130,7 +131,7 @@ let comment_rendering_mode_notices = {
 			onChange={() => {
 				plugin.settings.reveal_syntax_on_focus = !plugin.settings
 					.reveal_syntax_on_focus;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -157,10 +158,10 @@ let comment_rendering_mode_notices = {
 				{ value: "none", text: "Hidden" },
 			]}
 			value={comment_rendering_mode}
-			onChange={(value) => {
-				plugin.settings.comment_style = value;
-				comment_rendering_mode = value;
-				plugin.saveSettings();
+			onChange={(value: string) => {
+				plugin.settings.comment_style = value as PluginSettings["comment_style"];
+				comment_rendering_mode = plugin.settings.comment_style;
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -168,15 +169,15 @@ let comment_rendering_mode_notices = {
 
 <SettingItem
 	name="Remove comments on resolve"
-	description="Resolving a thread deletes it instead of marking it done. Highlighted text is kept. Undo restores it. Threads resolved earlier can be removed with &quot;Remove resolved comments in this note&quot;."
+	description="Resolving a thread deletes it instead of marking it done. Highlighted text is kept. Undo restores it. Threads resolved earlier can be removed with “Remove resolved comments in this note”."
 	type="toggle"
 >
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.remove_on_resolve}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.remove_on_resolve = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -190,9 +191,9 @@ let comment_rendering_mode_notices = {
 	{#snippet control()}
 		<Toggle
 			value={plugin.settings.cleanup_broken_markup}
-			onChange={(value) => {
+			onChange={(value: boolean) => {
 				plugin.settings.cleanup_broken_markup = value;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}

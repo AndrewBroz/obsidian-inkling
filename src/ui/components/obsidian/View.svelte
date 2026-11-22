@@ -1,8 +1,9 @@
 <script lang="ts">
+    import type { Snippet } from "svelte";
 
     interface Props {
-        header?: any;
-        view?: any;
+        header?: Snippet<[string]>;
+        view?: Snippet<[string]>;
 
         class?: string;
     }

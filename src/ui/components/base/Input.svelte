@@ -29,7 +29,7 @@
   {value}
   {placeholder}
   {readonly}
-  oninput={(e) => onChange(e.target.value)}
+  oninput={(e) => onChange(e.currentTarget.value)}
   class={className}
   class:svelcomlib-input-success={valid}
   class:svelcomlib-input-fail={valid === false}

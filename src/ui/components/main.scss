@@ -50,6 +50,11 @@
   display: flex;
 }
 
+// EXPL: The wrapper mountElement (scripts/mount_element.ts) puts an element in; it lays out as if it weren't there.
+.svelcomlib-contents.svelcomlib-contents {
+  display: contents;
+}
+
 .svelcomlib-toggle {
   justify-content: space-between;
 }

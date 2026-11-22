@@ -1,4 +1,6 @@
 <script lang="ts">
+    import type { Snippet } from "svelte";
+
     interface InformationField {
         /**
          * The URL to link to.
@@ -32,8 +34,8 @@
         class?: string;
         notices?: InformationField[];
 
-        control?: any;
-        subcontrol?: any;
+        control?: Snippet;
+        subcontrol?: Snippet;
     }
 
     let {name, description = null, type = null, depth = 0, notices = [], class: className = "", control, subcontrol}: Props = $props();
@@ -57,12 +59,12 @@
     <div class="setting-item-info">
         <div class="setting-item-name">
             <div>
-                {@html name}
+                {name}
             </div>
         </div>
         <div class="setting-item-description">
-            {@html description}
-            {#each notices as notice, idx}
+            {description}
+            {#each notices as notice, idx (idx)}
                 {#if notice}
                     {#if description || idx !== 0}
                         <br/>
@@ -73,7 +75,7 @@
                             class:svelcomlib-notice-warning={notice.type === "warning"}
                             class:svelcomlib-notice-error={notice.type === "error"}
                     >
-            {@html notice.text}
+            {notice.text}
           </span>
                 {/if}
             {/each}

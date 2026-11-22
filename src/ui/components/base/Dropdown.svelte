@@ -25,10 +25,10 @@
 <select
   class={className ? className + " dropdown" : "dropdown"}
   {disabled}
-  onchange={(e) => onChange(e.target.value, e.target)}
+  onchange={(e) => onChange(e.currentTarget.value, e.currentTarget)}
   {value}
 >
-  {#each options as { value, text }}
+  {#each options as { value, text } (value)}
     <option {value}>{text}</option>
   {/each}
 </select>

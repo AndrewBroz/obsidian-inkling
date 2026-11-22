@@ -22,6 +22,9 @@ import type { MarkdownEditorProps } from "../../src/ui/embeddable-editor";
 //       jsdom — so pressEnter/pressEscape/triggerBlur below call the exact same `options.onEnter`
 //       /`onEscape`/`onBlur` hooks those real bindings call, standing in for the keypress/blur
 //       instead of re-deriving the contract by hand.
+// The real module needs this before any editor is created; the stub has nothing to resolve.
+export function resolveEmbeddableEditor(_app: App) {}
+
 export class EmbeddableMarkdownEditor {
 	// EXPL: Lets tests confirm how many editors got created for a card, without a real DOM
 	//       insertion to count (this stub never touches `container`, unlike the real editor).

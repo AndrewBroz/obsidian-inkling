@@ -2,21 +2,19 @@
 	import { Dropdown, SettingItem, Toggle } from "../../../components";
 
 import type CommentatorPlugin from "../../../../main";
+import { SuggestionType } from "../../../../editor/base";
+import { RANGE_BRACKET_MOVEMENT_OPTION, RANGE_CURSOR_MOVEMENT_OPTION } from "../../../../types";
 
 let { plugin }: { plugin: CommentatorPlugin } = $props();
 
-const suggestion_ranges = {
-	addition: { icon: "plus-circle", tooltip: "Additions" },
-	deletion: { icon: "minus-square", tooltip: "Deletions" },
-	substitution: { icon: "replace", tooltip: "Substitutions" },
-	highlight: { icon: "highlighter", tooltip: "Highlights" },
-	comment: { icon: "message-square", tooltip: "Comments" },
+const suggestion_ranges: Record<SuggestionType, { icon: string; tooltip: string }> = {
+	[SuggestionType.ADDITION]: { icon: "plus-circle", tooltip: "Additions" },
+	[SuggestionType.DELETION]: { icon: "minus-square", tooltip: "Deletions" },
+	[SuggestionType.SUBSTITUTION]: { icon: "replace", tooltip: "Substitutions" },
+	[SuggestionType.HIGHLIGHT]: { icon: "highlighter", tooltip: "Highlights" },
+	[SuggestionType.COMMENT]: { icon: "message-square", tooltip: "Comments" },
 };
-
-const all_ranges = {
-	"": { icon: "star", tooltip: "Regular" },
-	...suggestion_ranges,
-};
+const suggestion_types = Object.values(SuggestionType);
 
 const cursor_movement_options = [
 	{ value: "unchanged", text: "Regular movement" },
@@ -37,15 +35,15 @@ const bracket_movement_options = [
 <SettingItem name="Suggestion mode" type="heading" depth={1} />
 
 <SettingItem name="Cursor movement" type="heading" depth={2} />
-{#each Object.keys(suggestion_ranges) as type}
+{#each suggestion_types as type (type)}
 	<SettingItem name={suggestion_ranges[type].tooltip} type="dropdown" depth={2}>
 		{#snippet control()}
 			<Dropdown
 				value={plugin.settings.suggestion_mode_operations.cursor_movement[type]}
 				options={cursor_movement_options}
-				onChange={(value) => {
-					plugin.settings.suggestion_mode_operations.cursor_movement[type] = value;
-					plugin.saveSettings();
+				onChange={(value: string) => {
+					plugin.settings.suggestion_mode_operations.cursor_movement[type] = value as RANGE_CURSOR_MOVEMENT_OPTION;
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -53,15 +51,15 @@ const bracket_movement_options = [
 {/each}
 
 <SettingItem name="Bracket movement" type="heading" depth={2} />
-{#each Object.keys(suggestion_ranges) as type}
+{#each suggestion_types as type (type)}
 	<SettingItem name={suggestion_ranges[type].tooltip} type="dropdown" depth={2}>
 		{#snippet control()}
 			<Dropdown
 				value={plugin.settings.suggestion_mode_operations.bracket_movement[type]}
 				options={bracket_movement_options}
-				onChange={(value) => {
-					plugin.settings.suggestion_mode_operations.bracket_movement[type] = value;
-					plugin.saveSettings();
+				onChange={(value: string) => {
+					plugin.settings.suggestion_mode_operations.bracket_movement[type] = value as RANGE_BRACKET_MOVEMENT_OPTION;
+					void plugin.saveSettings();
 				}}
 			/>
 		{/snippet}
@@ -86,7 +84,7 @@ const bracket_movement_options = [
 			value={plugin.settings.live_preview}
 			onChange={() => {
 				plugin.settings.live_preview = !plugin.settings.live_preview;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}
@@ -102,7 +100,7 @@ const bracket_movement_options = [
 			value={plugin.settings.post_processor}
 			onChange={() => {
 				plugin.settings.post_processor = !plugin.settings.post_processor;
-				plugin.saveSettings();
+				void plugin.saveSettings();
 			}}
 		/>
 	{/snippet}

@@ -1,5 +1,6 @@
 <script lang="ts">
     import {getIcon} from "obsidian";
+    import { mountElement } from "../scripts";
 
     interface Props {
         icon?: string;
@@ -45,4 +46,4 @@
 
 </script>
 
-{@html icon_element?.outerHTML ?? ""}
+<span class="svelcomlib-contents" use:mountElement={icon_element}></span>

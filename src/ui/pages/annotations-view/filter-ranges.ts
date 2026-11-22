@@ -1,4 +1,3 @@
-import { search } from "@codemirror/search";
 import { prepareSimpleSearch, TFile } from "obsidian";
 import { type DatabaseEntry } from "../../../database";
 import {
