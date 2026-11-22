@@ -45,6 +45,31 @@ const textX = () =>
 		return line ? Math.round(line.getBoundingClientRect().x) : NaN;
 	}, ACTIVE_EDITOR);
 
+/**
+ * Runs `action` while the page records the text column's left edge on every frame, until `ms` after it ends: a jump
+ * that slides back during the gutter's 0.4 s animation shows up here even when the end position is right.
+ */
+async function textXDuring(action: () => Promise<void>, ms = 1000): Promise<number[]> {
+	await browser.execute((selector: string) => {
+		const w = window as unknown as { __e2eX?: number[]; __e2eXStop?: boolean };
+		w.__e2eX = [];
+		w.__e2eXStop = false;
+		const sample = () => {
+			const line = document.querySelector(`${selector} .cm-content > .cm-line`);
+			if (line) w.__e2eX?.push(Math.round(line.getBoundingClientRect().x));
+			if (!w.__e2eXStop) requestAnimationFrame(sample);
+		};
+		requestAnimationFrame(sample);
+	}, ACTIVE_EDITOR);
+	await action();
+	await browser.pause(ms);
+	return browser.execute(() => {
+		const w = window as unknown as { __e2eX?: number[]; __e2eXStop?: boolean };
+		w.__e2eXStop = true;
+		return w.__e2eX ?? [];
+	});
+}
+
 describe("Draft comment", function() {
 	describe("in a note with comments", function() {
 		before(async function() {
@@ -92,21 +117,25 @@ describe("Draft comment", function() {
 	describe("at a wide window", function() {
 		before(async function() {
 			const width = await resizeWindow(2400, 1400);
-			// The layout bug needs room for the comment column beside the centred text.
+			// The layout bug needs side margins: readable line length with room beside the text for the comment column.
 			expect(width).toBeGreaterThanOrEqual(2000);
-			await openNote("Draft-empty.md");
-			await settle(500);
+			// The notes as the fixture has them, without the comments written above.
+			await obsidianPage.resetVault();
 		});
 
-		it("keeps the note's text in place when a draft opens and is submitted", async function() {
-			const x = await textX();
-			await startDraft("some words");
-			expect(await textX()).toBe(x);
-			await type("A comment.");
-			await clickAway();
-			await settle(500);
-			expect(await noteText()).toContain("{==some words==}{>>A comment.<<}");
-			expect(await textX()).toBe(x);
-		});
+		for (const [note, words] of [["Draft.md", "This is some text"], ["Draft-empty.md", "some words"]]) {
+			const state = note === "Draft.md" ? "already open" : "opened by the draft";
+			it(`keeps the text in place when a draft opens and is submitted (comment column ${state})`, async function() {
+				await openNote(note);
+				await settle(800);
+				const x = await textX();
+				const opening = await textXDuring(() => startDraft(words));
+				await type("A comment.");
+				const submitting = await textXDuring(() => clickAway());
+				expect(await noteText()).toContain(`{==${words}==}{>>A comment.<<}`);
+				expect({ opening: [...new Set(opening)], submitting: [...new Set(submitting)] })
+					.toEqual({ opening: [x], submitting: [x] });
+			});
+		}
 	});
 });
