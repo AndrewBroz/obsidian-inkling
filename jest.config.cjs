@@ -1,6 +1,10 @@
 module.exports = {
 	testEnvironment: "jsdom",
 	testMatch: ["**/tests/**/*.test.ts"],
+	// Agent worktrees under .claude/ hold a second copy of the repo, whose tests and
+	// __mocks__/obsidian.ts would otherwise be picked up alongside these.
+	modulePathIgnorePatterns: ["<rootDir>/.claude/"],
+	testPathIgnorePatterns: ["/node_modules/", "<rootDir>/.claude/"],
 
 	collectCoverage: false,
 
