@@ -43,6 +43,23 @@ bun run sandbox stop                            # when done (reset deletes the s
 - Check computed styles and a screenshot, not just the DOM: a class can be present while its colour resolves to
   nothing (0.13.2: `--text-highlight-bg` no longer existed).
 
+### End-to-end tests
+
+`test/e2e/` holds an automated suite that runs in real, sandboxed Obsidian instances (wdio-obsidian-service), on the
+manifest's `minAppVersion` and the latest release. It never touches the user's Obsidian: each run downloads Obsidian
+into `.obsidian-cache/` and opens a temporary copy of `test/e2e/vaults/basic/` with its own user-data dir.
+
+```bash
+bun run build && bun run test:e2e                     # both versions, one at a time, at nice 19
+OBSIDIAN_VERSIONS=latest/latest bun run test:e2e      # one version
+bun run test:e2e -- --spec test/e2e/specs/settings.e2e.ts
+```
+
+- Never run it at the same time as jest. Locally it runs one Obsidian at a time (`maxInstances` 1); CI runs two.
+- A bug reproduced in the sandbox becomes an e2e spec (with its fixture note in `test/e2e/vaults/basic/`), and the
+  spec must fail with the bug put back before it counts.
+- A stray `./data.json` (git-ignored) would replace the fixture vault's plugin settings, so the suite refuses to run.
+
 ## Releasing
 
 Releases go out only when the owner says so. Every release keeps the plugin's community scorecard
@@ -50,12 +67,15 @@ Releases go out only when the owner says so. Every release keeps the plugin's co
 **Health: Excellent**. Its automated scan of each release is part of the bar, alongside the tests.
 
 Before releasing:
-1. `bun run lint`: 0 errors and 0 warnings. The config includes Obsidian's `eslint-plugin-obsidianmd` and
+1. `bun run lint`: 0 errors and 0 warnings (it also type-checks the e2e suite). The config includes Obsidian's `eslint-plugin-obsidianmd` and
    typescript-eslint's type-checked rules, which are what the scorecard's scan reports. Don't silence a rule to
    get there: fix the code. If a finding is a false positive, disable it on that line only, with a comment saying why.
 2. `bun audit`: no advisories in shipped dependencies.
 3. Full suite (`nice -n 19 npx jest --maxWorkers=2`), `npx tsc --noEmit`, `bun run build`, and a sandbox check of
    anything user-visible (see "Test in real Obsidian").
+4. `bun run test:e2e`: passes on both Obsidian versions (not alongside jest). The release workflow runs the same suite
+   (`.github/workflows/e2e.yml`) and publishes nothing if it fails. A bug reproduced in the sandbox becomes an e2e
+   spec before the fix ships.
 
 Release: `bun run release-patch|minor|major`, then `git push origin main` and `git push origin <tag>` alone (never
 `--follow-tags`). Then confirm the workflow passed: `gh run list --repo AndrewBroz/obsidian-inkling`.
