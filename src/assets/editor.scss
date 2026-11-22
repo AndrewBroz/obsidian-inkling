@@ -340,8 +340,9 @@ span.cm-strikethrough:has([data-type="cmtr-substitution"]) {
   }
 }
 
-.cmtr-deletion img {
-  border: 4px solid var(--deletion-color) !important;
+// EXPL: Specific enough to beat `.cm-s-obsidian .hmd-fold-html a > img { border: 0 }` for a linked image.
+.cmtr-deletion.cmtr-deletion.cmtr-deletion img {
+  border: 4px solid var(--deletion-color);
   border-radius: 12px;
 }
 

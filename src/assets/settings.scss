@@ -57,8 +57,9 @@
   outline: 3px solid var(--text-accent);
 }
 
-.cmtr-settings-navigation-selected-item {
-  outline: unset !important;
+// EXPL: Two classes, after the :hover rule above, so a hovered selected item has no outline either.
+.cmtr-settings-navigation-item.cmtr-settings-navigation-selected-item {
+  outline: unset;
   background-color: var(--text-accent);
   color: var(--text-on-accent);
   padding: 6px 9px;

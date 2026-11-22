@@ -1,7 +1,7 @@
 @import "./assets/main.scss";
 
-.inkling-original-hidden {
-	display: none !important;
+.inkling-original-hidden.inkling-original-hidden {
+	display: none;
 }
 
 /* EXPL: "Uninstall old copy" button in the plugin-id rename notice (plugin-id.ts). */

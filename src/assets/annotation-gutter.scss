@@ -6,6 +6,7 @@
   max-width: calc(var(--file-line-width) + var(--cmtr-anno-gutter-width, 0px) + var(--cmtr-anno-gutter-margin, 0px));
 }
 
+// EXPL: The Minimal theme sets `.cm-gutters { position: absolute !important }`; only !important overrides that.
 .cm-gutters.cm-gutters.cm-gutters.cm-gutters:has(.is-minimal.cmtr-anno-gutter) {
   position: sticky !important;
 }
