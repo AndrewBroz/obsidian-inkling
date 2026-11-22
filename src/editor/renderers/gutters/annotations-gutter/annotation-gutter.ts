@@ -46,8 +46,10 @@ const FOLD_BUTTON_SIZE = 34;
 //       edge. The handle is translated -10px and is `--divider-width-hover` (3px) wide with a 1px border on its right,
 //       so the line's centre is 7.5px before the panel. The unfolded button is centred on it.
 const DIVIDER_OFFSET = 7.5;
-// EXPL: Inset (px) of the folded button from the pane's right edge.
-const FOLDED_FOLD_BUTTON_EDGE_INSET = 6;
+// EXPL: Inset (px) of the folded button from the pane's right edge: just enough that its outline isn't cut off by the
+//       edge, so the 34px circle stays as far as it can in the scroller's right padding strip (32px by default), clear of
+//       the text.
+const FOLDED_FOLD_BUTTON_EDGE_INSET = 2;
 
 /**
  * Whether the gutter has anything to show — i.e. whether `hideOnEmpty` should keep it collapsed.

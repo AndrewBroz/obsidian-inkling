@@ -364,7 +364,7 @@
 .cmtr-anno-gutter-button {
   position: absolute;
   top: calc(var(--file-margins-y, var(--size-4-8)) + 8px);
-  right: 6px;
+  right: 2px;
   z-index: 1000;
 
   transition: right 400ms ease-in-out;
