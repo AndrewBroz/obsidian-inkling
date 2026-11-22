@@ -19,7 +19,6 @@ on:
   workflow_dispatch:
 
 env:
-  PLUGIN_NAME: inkling
   # Beta channel. BRAT 2.x installs the highest version among a repo's releases, GitHub
   # pre-releases included, for everyone tracking "latest" -- so a beta published on the main repo
   # would reach every user. Betas (any tag with a "-", e.g. 0.13.0-beta.1) therefore go ONLY to
@@ -31,6 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Build provenance attestations (actions/attest-build-provenance): a short-lived signing
+      # certificate, and the attestation upload.
+      id-token: write
+      attestations: write
     env:
       IS_BETA: ${{ contains(github.ref_name, '-') }}
       # Whether the BETA_REPO_TOKEN secret (fine-grained, Contents read/write on BETA_REPO) exists.
@@ -55,6 +58,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          # Pinned, like the lockfile: rebuilding the tag must reproduce main.js byte for byte.
+          bun-version-file: package.json
       - name: Stamp the release manifest
         run: |
           # manifest.json on the default branch only ever names a stable version (Obsidian's
@@ -72,9 +78,13 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run build
-          mkdir ${{ env.PLUGIN_NAME }}
-          cp main.js manifest.json styles.css ${{ env.PLUGIN_NAME }}
-          zip -r ${{ env.PLUGIN_NAME }}.zip ${{ env.PLUGIN_NAME }}
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
       - name: Generate release notes
         run: |
           # A stable release's notes cover everything since the previous STABLE release, not just
@@ -91,8 +101,8 @@ jobs:
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           body_path: release_notes.md
+          # Obsidian's community directory accepts only these three assets.
           files: |
-            ${{ env.PLUGIN_NAME }}.zip
             main.js
             manifest.json
             styles.css
@@ -106,8 +116,8 @@ jobs:
           tag_name: ${{ github.ref_name }}
           prerelease: ${{ env.IS_BETA == 'true' }}
           body_path: release_notes.md
+          # Obsidian's community directory accepts only these three assets.
           files: |
-            ${{ env.PLUGIN_NAME }}.zip
             main.js
             manifest.json
             styles.css

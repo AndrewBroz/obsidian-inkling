@@ -4,6 +4,7 @@
 	"type": "module",
 	"description": "A CriticMarkup plugin for Obsidian",
 	"main": "main.js",
+	"packageManager": "bun@1.3.14",
 	"scripts": {
 		"dev": "bun scripts/build/esbuild.config.ts development && obsidian plugin:reload id=inkling-markup",
 		"build": "bun run tsc -noEmit -skipLibCheck && bun scripts/build/esbuild.config.ts production",
