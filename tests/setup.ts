@@ -67,6 +67,53 @@ if (!(Element.prototype as any).addClass) {
 		this.style.setProperty(key, value);
 };
 
+// Obsidian's renderer has ResizeObserver; jsdom doesn't. The annotation gutter observes the scroller to fold itself
+// in a narrow pane. This stub records what each instance observes so a test can fire it (`fireResizeObservers`).
+type StubObserver = { callback: ResizeObserverCallback; targets: Element[] };
+const resizeObservers: StubObserver[] = [];
+(global as any).ResizeObserver = class {
+	private entry: StubObserver;
+	constructor(callback: ResizeObserverCallback) {
+		this.entry = { callback, targets: [] };
+		resizeObservers.push(this.entry);
+	}
+	observe(target: Element) {
+		this.entry.targets.push(target);
+	}
+	unobserve(target: Element) {
+		this.entry.targets = this.entry.targets.filter(t => t !== target);
+	}
+	disconnect() {
+		this.entry.targets = [];
+		resizeObservers.splice(resizeObservers.indexOf(this.entry), 1);
+	}
+};
+/** Runs the callback of every stub ResizeObserver watching `target`. */
+(global as any).fireResizeObservers = (target: Element) => {
+	for (const observer of [...resizeObservers]) {
+		if (observer.targets.includes(target))
+			observer.callback([], observer as unknown as ResizeObserver);
+	}
+};
+
+// Obsidian patches every node with a `.win` getter (its owner window, for pop-out windows) and every element with
+// `createDiv`; jsdom has neither.
+if (!("win" in HTMLElement.prototype)) {
+	Object.defineProperty(HTMLElement.prototype, "win", {
+		get(this: HTMLElement) {
+			return this.ownerDocument.defaultView;
+		},
+	});
+}
+if (!(HTMLElement.prototype as any).createDiv) {
+	(HTMLElement.prototype as any).createDiv = function(o?: { cls?: string }) {
+		const el = document.createElement("div");
+		if (o?.cls) el.className = o.cls;
+		this.appendChild(el);
+		return el;
+	};
+}
+
 // `pluginSettingsField` (used by rangeParser) is only populated once the real
 // plugin calls `providePluginSettingsExtension(plugin)` from its onload().
 // Outside the running app nothing does that, so populate it here with the
