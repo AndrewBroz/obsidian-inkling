@@ -16,7 +16,14 @@
 			"src": [
 				"src/*",
 				"tests/*"
-			]
+			],
+			// obsidian-typings' declarations are CommonJS, so they resolve these packages' "require"
+			// entry. Without a .d.cts beside it they'd be untyped, and with one they'd be a second
+			// copy of each module that doesn't match the ESM one. Both kinds share the ESM types.
+			"@codemirror/state": ["../node_modules/@codemirror/state/dist/index.d.ts"],
+			"@codemirror/view": ["../node_modules/@codemirror/view/dist/index.d.ts"],
+			"@codemirror/language": ["../node_modules/@codemirror/language/dist/index.d.ts"],
+			"@codemirror/search": ["../node_modules/@codemirror/search/dist/index.d.ts"]
 		},
 		"lib": [
 			"dom",

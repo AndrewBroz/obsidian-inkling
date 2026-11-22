@@ -63,7 +63,7 @@ export async function postProcess(el: HTMLElement, ctx: MarkdownPostProcessorCon
 		if (plugin.app.workspace.activeLeaf?.view instanceof MarkdownView) {
 			const view = plugin.app.workspace.activeLeaf.view;
 			if (view.previewMode.docId === ctx.docId)
-				preview_mode = view.editor.cm.state.field(previewModeState);
+				preview_mode = view.editor.cm.state.facet(previewModeState);
 		}
 
 		const lines = ctx.getSectionInfo(el);

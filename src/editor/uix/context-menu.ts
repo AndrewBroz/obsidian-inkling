@@ -1,4 +1,3 @@
-import type { SelectionRange } from "@codemirror/state";
 import type { EventRef, MarkdownView } from "obsidian";
 import type CommentatorPlugin from "../../main";
 
@@ -40,7 +39,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 					.setIcon("check")
 					.setSection("commentator")
 					.onClick(() => {
-						const selections: SelectionRange[] = editor.cm.state.selection.ranges;
+						const selections = editor.cm.state.selection.ranges;
 						const changes = selections.map(selection =>
 							acceptSuggestions(editor.cm.state, selection.from, selection.to)
 						);
@@ -57,7 +56,6 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 					.setSection("commentator")
 					.onClick(() => {
 						const selections = editor.cm.state.selection.ranges;
-						// @ts-expect-error Somehow selections is any (while ranges is defined)
 						const changes = selections.map(selection =>
 							rejectSuggestions(editor.cm.state, selection.from, selection.to)
 						);
@@ -139,7 +137,7 @@ export const cmenuViewportCommands: (plugin: CommentatorPlugin) => EventRef = (p
 	plugin.app.workspace.on("markdown-viewport-menu", (menu, view, sectionName, menuItem) => {
 		if (plugin.settings.annotation_gutter) {
 			const editor_cm = (view as unknown as MarkdownView).editor.cm;
-			let current_settings = editor_cm.state.field(annotationGutterIncludedTypesState);
+			let current_settings = editor_cm.state.facet(annotationGutterIncludedTypesState);
 			stickyContextMenuPatch(true);
 
 			menu.addItem((item) => {
