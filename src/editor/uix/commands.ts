@@ -110,7 +110,10 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		icon: "message-square-x",
 		editor_context: true,
 		regular_callback: (editor: Editor, _: MarkdownView) => {
-			const { changes, count } = remove_resolved_threads(editor.cm.state.field(rangeParser).ranges.ranges);
+			const { changes, count } = remove_resolved_threads(
+				editor.cm.state.field(rangeParser).ranges.ranges,
+				editor.cm.state.doc,
+			);
 			if (!count) {
 				new Notice("Inkling: no resolved comments in this note.");
 				return;

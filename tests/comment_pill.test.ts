@@ -67,10 +67,18 @@ describe("pill_eligible", () => {
 
 	test.each([
 		["inside a fence", "```\nab\n```", 4, 6],
-		["from prose into a fence", "intro\n```\ncode", 0, 14],
 		["from a fence into prose", "```\ncode\n```\nprose", 6, 17],
-	])("a selection %s is not eligible (commenting there is refused)", (_, doc, anchor, head) => {
-		expect(pill_eligible(stateWithSelection(doc, anchor, head))).toBe(false);
+		["from prose with a comment into a fence", "{>>c<<} intro\n```\ncode\n```", 0, 20],
+	])("a selection %s is eligible (it is commented on after the block)", (_, doc, anchor, head) => {
+		expect(pill_eligible(stateWithSelection(doc, anchor, head))).toBe(true);
+	});
+
+	test("a selection in a block with no closing fence is not eligible (there is no after)", () => {
+		expect(pill_eligible(stateWithSelection("intro\n```\ncode", 0, 14))).toBe(false);
+	});
+
+	test("a cursor in code gets no pill", () => {
+		expect(pill_eligible(stateWithSelection("```\nab\n```", 5, 5))).toBe(false);
 	});
 
 	test("a whole line selected above a fence is eligible", () => {

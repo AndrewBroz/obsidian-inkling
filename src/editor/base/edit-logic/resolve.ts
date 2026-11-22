@@ -1,6 +1,9 @@
+import type { Text } from "@codemirror/state";
+
 import type { PluginSettings } from "../../../types";
 import type { EditorChange } from "../edit-handler";
 import { serializeAttrBlock, unconvertibleContent, unconvertibleReason } from "../edit-util/attributes";
+import { removal_spans } from "../edit-util/range-operations";
 import {
 	type CommentRange,
 	CriticMarkupRange,
@@ -47,17 +50,23 @@ export function reopen_thread(range: CriticMarkupRange): EditorChange[] {
 	);
 }
 
+/** Removing `from`-`to`, and with `doc` given, the line it leaves empty (`removal_spans`). */
+function removal(doc: Text | undefined, from: number, to: number): EditorChange[] {
+	return (doc ? removal_spans(doc, [{ from, to }]) : [{ from, to }]).map(span => ({ ...span, insert: "" }));
+}
+
 /**
- * The changes that delete an entire thread.
+ * The changes that delete an entire thread. With `doc` (the note) given, a COMMENT thread alone on its line takes
+ * the line too, as a comment on code does.
  * - COMMENT base: the whole thread span (base + replies) is removed.
  * - HIGHLIGHT base: the highlight is unwrapped to plain text and its replies are removed.
  * - Suggestion bases (addition/deletion/substitution): only the attached comments are removed,
  *   the suggestion markup itself is kept.
  */
-export function remove_thread(range: CriticMarkupRange): EditorChange[] {
+export function remove_thread(range: CriticMarkupRange, doc?: Text): EditorChange[] {
 	const base = range.base_range;
 	if (base.type === SuggestionType.COMMENT)
-		return [{ from: base.full_range_front, to: base.full_range_back, insert: "" }];
+		return removal(doc, base.full_range_front, base.full_range_back);
 	if (base.type === SuggestionType.HIGHLIGHT)
 		return [{ from: base.from, to: base.full_range_back, insert: base.unwrap() }];
 	if (base.replies.length) {
@@ -75,10 +84,22 @@ export function remove_thread(range: CriticMarkupRange): EditorChange[] {
  * included, so each thread is taken once from its base: threads never overlap, so neither do the changes.
  * Suggestions with a legacy `done` flag are not resolvable (see `thread_resolvable`) and are kept.
  */
-export function remove_resolved_threads(ranges: CriticMarkupRange[]): { changes: EditorChange[]; count: number } {
+export function remove_resolved_threads(
+	ranges: CriticMarkupRange[],
+	doc?: Text,
+): { changes: EditorChange[]; count: number } {
 	const bases = [...new Set(ranges.map(range => range.base_range))]
-		.filter(base => thread_resolvable(base) && thread_resolved(base));
-	return { changes: bases.flatMap(remove_thread), count: bases.length };
+		.filter(base => thread_resolvable(base) && thread_resolved(base))
+		.sort((a, b) => a.from - b.from);
+	// EXPL: COMMENT threads are removed together, so that two on one line (comments on one code block) leave no
+	//       empty line between them either.
+	const comments = bases.filter(base => base.type === SuggestionType.COMMENT);
+	const spans = comments.map(base => ({ from: base.full_range_front, to: base.full_range_back }));
+	const changes = [
+		...(doc ? removal_spans(doc, spans) : spans).map(span => ({ ...span, insert: "" })),
+		...bases.filter(base => base.type !== SuggestionType.COMMENT).flatMap(base => remove_thread(base)),
+	];
+	return { changes, count: bases.length };
 }
 
 /** The entries whose thread is still open: Resolve acts on these only, so a mixed selection never removes (or re-marks) a resolved thread. */
@@ -89,8 +110,8 @@ export function unresolved_entries<T extends { range: CriticMarkupRange }>(entri
 export type ResolveSettings = Pick<PluginSettings, "remove_on_resolve">;
 
 /** What an editor Resolve action does: mark the thread done or, with `remove_on_resolve`, remove it. */
-export function resolve_action(range: CriticMarkupRange, settings: ResolveSettings): EditorChange[] {
-	return settings.remove_on_resolve ? remove_thread(range) : resolve_thread(range);
+export function resolve_action(range: CriticMarkupRange, settings: ResolveSettings, doc?: Text): EditorChange[] {
+	return settings.remove_on_resolve ? remove_thread(range, doc) : resolve_thread(range);
 }
 
 /**
@@ -142,12 +163,15 @@ export function anchor_inheritance_changes(
 	return base.set_metadata({ ...missing, ...base.own_fields });
 }
 
-/** Removes one comment, keeping its anchor's authorship if the comment was the one it inherited from. */
-export function remove_comment(comment: CriticMarkupRange): EditorChange[] {
+/**
+ * Removes one comment, keeping its anchor's authorship if the comment was the one it inherited from. With `doc`, a
+ * comment alone on its line takes the line too.
+ */
+export function remove_comment(comment: CriticMarkupRange, doc?: Text): EditorChange[] {
 	const next = comment.base_range.replies[1];
 	return [
 		...anchor_inheritance_changes(comment, next?.own_fields),
-		{ from: comment.from, to: comment.to, insert: "" },
+		...removal(doc, comment.from, comment.to),
 	];
 }
 
@@ -173,7 +197,7 @@ export function range_source_with_fields(range: CriticMarkupRange, fields: Metad
  * selected text, not a thread. Otherwise only the comment's own markup span is removed,
  * leaving the anchor and any sibling replies intact.
  */
-export function cancel_empty_comment(range: CommentRange): EditorChange[] {
+export function cancel_empty_comment(range: CommentRange, doc?: Text): EditorChange[] {
 	const base = range.base_range;
 	const is_only_reply = base.type === SuggestionType.HIGHLIGHT &&
 		base.replies.length === 1 &&
@@ -182,5 +206,5 @@ export function cancel_empty_comment(range: CommentRange): EditorChange[] {
 	if (is_only_reply)
 		return [{ from: base.from, to: range.to, insert: base.unwrap() }];
 
-	return remove_comment(range);
+	return remove_comment(range, doc);
 }

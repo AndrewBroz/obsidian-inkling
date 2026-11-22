@@ -6,7 +6,17 @@ import { Notice } from "obsidian";
 import { CriticMarkupRange, SuggestionType } from "../ranges";
 
 import { rangeParser } from "../edit-util";
-import { create_anchored_comment, create_range } from "../edit-util/range-create";
+import {
+	closed_region,
+	code_comment_insertion,
+	code_comment_region,
+	code_quote,
+	type CodeQuote,
+	code_selection,
+} from "../edit-util/code-comments";
+import type { CodeRegion } from "../edit-util/code-regions";
+import { generate_metadata } from "../edit-util/metadata";
+import { construct_range, create_anchored_comment, create_range } from "../edit-util/range-create";
 
 import {
 	annotationGutterFocusAnnotation,
@@ -31,10 +41,15 @@ export function addCommentToView(
 
 	const selection = comment_selection(editor.state);
 
-	// EXPL: A reply (`range` given) targets an existing thread, which by construction is outside any fence.
-	if (!range && comment_refused_in_code(editor.state)) {
-		new Notice("Comments can't be added inside code blocks");
-		return;
+	// EXPL: A reply (`range` given) targets an existing thread, which by construction is outside any fence. A new
+	//       comment with an end of the selection in a code block is about that block: Inkling never writes inside
+	//       code, so it goes after the block (see code-comments.ts).
+	if (!range) {
+		const region = code_comment_region(editor.state.field(rangeParser).code_regions, selection.from, selection.to);
+		if (region) {
+			addCodeComment(editor, region, selection, scroll);
+			return;
+		}
 	}
 
 	// EXPL: GDocs-style anchored comment. A clean selection no longer writes markup here — it opens
@@ -154,13 +169,100 @@ function comment_selection(state: EditorState): SelectionRange {
 	return from < to && state.doc.lineAt(to).from === to ? EditorSelection.range(from, to - 1) : state.selection.main;
 }
 
-/**
- * Whether a new comment must be refused: an end of the selection is in a code block (its content or a fence line),
- * where the comment's markup would be inert text. Shared with the comment pill, which hides there.
- */
-export function comment_refused_in_code(state: EditorState): boolean {
+/** The code block a new comment on the current selection is about, if any. Shared with the comment pill. */
+export function comment_code_region(state: EditorState): CodeRegion | undefined {
 	const { from, to } = comment_selection(state);
-	return [from, to].some(pos => state.field(rangeParser).code_regions.some(r => r.from <= pos && pos <= r.to));
+	return code_comment_region(state.field(rangeParser).code_regions, from, to);
+}
+
+// EXPL: A block without a closing fence runs to the end of the note (or its quote or list item), so there is no line
+//       "after" it to write the comment on: anything written there would be inside the code.
+const UNCLOSED_NOTICE = "Add a closing ``` to this code block before commenting on it.";
+
+/** The change that writes a comment on `region` with `text` and `fields`, after the block. */
+function code_comment_change(state: EditorState, region: CodeRegion, fields: CodeQuote, text: string) {
+	const settings = state.field(pluginSettingsField);
+	const comment = construct_range(text, "", SuggestionType.COMMENT, { ...generate_metadata(settings), ...fields }).insert;
+	const { at, before, after } = code_comment_insertion(state.doc, state.field(rangeParser).ranges, region);
+	return { changes: { from: at, insert: before + comment + after }, comment_from: at + before.length, comment };
+}
+
+/**
+ * Starts a comment on code: a draft on the selected code (or, with only a cursor, the whole block), whose card opens
+ * beside the block. Nothing is written until it is submitted (`commitCommentDraft`), and then only after the block.
+ */
+function addCodeComment(editor: EditorView, region: CodeRegion, selection: SelectionRange, scroll: boolean) {
+	if (!closed_region(region)) {
+		new Notice(UNCLOSED_NOTICE);
+		return;
+	}
+	const state = editor.state;
+	const code = code_selection(state.doc, region, selection.from, selection.to);
+
+	if (state.field(pendingAnnotationMarkers, false) !== undefined) {
+		editor.dispatch({
+			effects: setCommentDraft.of(
+				code ? { ...code, code: "selection" } : { from: region.from, to: region.to, code: "block" },
+			),
+			// EXPL: Unfold, for the same reason as a draft on prose (above).
+			annotations: [annotationGutterFoldAnnotation.of(false)],
+			scrollIntoView: scroll,
+		});
+		return;
+	}
+
+	// EXPL: No gutter, so no card for a draft: write an empty comment now and put the cursor in it, as for prose.
+	const { changes, comment_from, comment } = code_comment_change(state, region, code_quote(state.doc, region, code), "");
+	editor.dispatch(state.update({
+		changes,
+		selection: EditorSelection.cursor(comment_from + comment.lastIndexOf("<<}")),
+		scrollIntoView: scroll,
+		annotations: [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)],
+	}));
+}
+
+/**
+ * Writes a drafted comment on code, after its block, with what it is about taken from the code as it is now.
+ * @returns false (writing nothing, draft left open) if the block has lost its closing fence.
+ */
+function commitCodeComment(editor: EditorView, draft: CommentDraft, text: string): boolean {
+	const state = editor.state;
+	const region = code_comment_region(state.field(rangeParser).code_regions, draft.from, draft.from);
+	const annotations = [commentModeAnnotation.of(true), pluginEditAnnotation.of(true)];
+
+	// EXPL: The fences were removed while the draft was open, so the code is ordinary text now. Keep the user's words
+	//       and what they were about: an ordinary comment after the text, with its quote, and a Notice saying why.
+	if (!region) {
+		const fields: CodeQuote = draft.code === "selection" ?
+			{ quote: state.sliceDoc(draft.from, Math.min(draft.to, state.doc.lineAt(draft.from).to)) } :
+			{};
+		const settings = state.field(pluginSettingsField);
+		const comment = construct_range(text, "", SuggestionType.COMMENT, { ...generate_metadata(settings), ...fields })
+			.insert;
+		const cursor = safe_insert_position(state, draft.to);
+		editor.dispatch(state.update({
+			changes: { from: cursor, to: cursor, insert: comment },
+			effects: [clearCommentDraft.of(null)],
+			annotations,
+		}));
+		new Notice("Inkling: the code block is gone, so the comment was added as an ordinary comment.");
+		return true;
+	}
+	if (!closed_region(region)) {
+		new Notice(UNCLOSED_NOTICE);
+		return false;
+	}
+
+	const code = draft.code === "selection" ? code_selection(state.doc, region, draft.from, draft.to) : undefined;
+	const { changes } = code_comment_change(state, region, code_quote(state.doc, region, code), text);
+	// EXPL: Unlike a highlight on prose, the comment does not cover the selected code, so a selection still on it
+	//       would bring the pill straight back, offering to comment on it again. It is collapsed to its head.
+	const main = state.selection.main;
+	const selection = !main.empty && main.from <= draft.to && draft.from <= main.to ?
+		EditorSelection.cursor(main.head) :
+		undefined;
+	editor.dispatch(state.update({ changes, selection, effects: [clearCommentDraft.of(null)], annotations }));
+	return true;
 }
 
 // EXPL: CriticMarkup has no escape syntax: `create_range` concatenates brackets around raw text, so
@@ -284,6 +386,8 @@ export function commitCommentDraft(editor: EditorView, text: string): boolean {
 	const draft = editor.state.field(commentDraftField);
 	if (editor.state.readOnly || !draft || !text.trim() || comment_text_rejected(text))
 		return false;
+	if (draft.code)
+		return commitCodeComment(editor, draft, text);
 
 	const settings = editor.state.field(pluginSettingsField);
 	const comment = create_range(settings, SuggestionType.COMMENT, text);

@@ -1,6 +1,8 @@
-import { type Extension, RangeSet, StateEffect, StateField } from "@codemirror/state";
+import { type EditorState, type Extension, type Range, RangeSet, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
-import { rangeParser } from "../../base";
+import { type CriticMarkupRange, rangeParser } from "../../base";
+import { code_link_of } from "../../base/edit-util/code-comments";
+import { code_block_outline, code_quote_decoration } from "../../uix/extensions/code-decorations";
 
 type MarkupFocus = { from: number; to: number; unfocus?: boolean };
 export const markupFocusEffect = StateEffect.define<MarkupFocus>();
@@ -17,6 +19,17 @@ export const markupFocusState = StateField.define<MarkupFocus>({
 		return value;
 	},
 });
+
+/**
+ * For a focused comment on code, what it is about: its quote highlighted in the block, or the whole block outlined
+ * when it has no quote or its quote is no longer there. Decorations only; the code never changes.
+ */
+function code_focus(state: EditorState, range: CriticMarkupRange): Range<Decoration>[] {
+	const link = code_link_of(state, range);
+	if (!link) return [];
+	if (typeof link.target === "object") return [code_quote_decoration(link.target.from, link.target.to)];
+	return code_block_outline(state.doc, link.region.from, link.region.to);
+}
 
 export const focusRenderer = StateField.define<DecorationSet>({
 	create(state): DecorationSet {
@@ -39,7 +52,9 @@ export const focusRenderer = StateField.define<DecorationSet>({
 						Decoration
 							.mark({ attributes: { "class": "cmtr-focused" } })
 							.range(ranges[0].full_range_front, ranges[0].full_range_back),
+						...code_focus(tr.state, ranges[0]),
 					],
+					true,
 				);
 			} else {
 				return Decoration.none;

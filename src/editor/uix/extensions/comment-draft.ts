@@ -1,10 +1,16 @@
 import { StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView } from "@codemirror/view";
 
-/** The document span a not-yet-written comment is anchored to. */
+import { code_block_outline, code_quote_decoration } from "./code-decorations";
+
+/**
+ * The document span a not-yet-written comment is anchored to. A comment on code (`code`) is anchored to the
+ * selected code, or with `"block"` to the whole block (its fence lines included); it is written after the block.
+ */
 export interface CommentDraft {
 	from: number;
 	to: number;
+	code?: "selection" | "block";
 }
 
 export const setCommentDraft = StateEffect.define<CommentDraft>();
@@ -52,11 +58,18 @@ export const commentDraftField = StateField.define<CommentDraft | null>({
 		//       leaves every other test in the file green.
 		const from = tr.changes.mapPos(draft.from, 1);
 		const to = tr.changes.mapPos(draft.to, -1);
-		return from < to ? { from, to } : null;
+		return from < to ? { ...draft, from, to } : null;
 	},
 
 	// EXPL: A decoration, not markup: nothing is written to the note until the comment is committed, and the
-	//       decoration goes with the draft (the committed range's own highlight takes over on commit).
+	//       decoration goes with the draft (the committed range's own highlight takes over on commit). A draft on code
+	//       shows what the comment will be about the way the written comment does when focused.
 	provide: field =>
-		EditorView.decorations.from(field, draft => draft ? Decoration.set([draftAnchorDecoration.range(draft.from, draft.to)]) : Decoration.none),
+		EditorView.decorations.compute([field], state => {
+			const draft = state.field(field);
+			if (!draft) return Decoration.none;
+			if (draft.code === "block") return Decoration.set(code_block_outline(state.doc, draft.from, draft.to));
+			if (draft.code === "selection") return Decoration.set([code_quote_decoration(draft.from, draft.to)]);
+			return Decoration.set([draftAnchorDecoration.range(draft.from, draft.to)]);
+		}),
 });

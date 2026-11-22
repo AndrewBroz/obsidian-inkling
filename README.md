@@ -53,6 +53,7 @@ different plugin.
 **Collaboration features:**
 
 - **Comments anchored to selections** — Select text > _Add comment_ > `{==highlight==}{>>comment<<}` thread.
+- **Comments on code** — Comment on a line of a code block, or on the whole block, without changing the code (see [Comments on code](#comments-on-code))
 - **Comment mode** — A reviewer-friendly mode where text edits are blocked (with feedback) but commenting works
 - **Frontmatter-enforced modes** — A note can force `suggest`/`comment`/`off` for everyone except listed authors (see [Frontmatter](#frontmatter))
 - **No unprotected mode** — Every editing mode guards the CriticMarkup syntax (see [Editing modes](#editing-modes))
@@ -95,6 +96,28 @@ so existing notes from before the rename don't need to be updated.
 > [!NOTE]
 > This is not hard technical enforcement. Inkling is only appropriate for high-trust teams.
 
+## Comments on code
+
+Select some code in a code block and click the comment button, or put the cursor in the block and run **Add comment**.
+With only the cursor in the block, the comment is about the whole block. This works in every mode, including
+Commenting, where the code itself stays locked.
+
+Inkling never writes inside a code block. The comment goes on the line just below the block and remembers the code you
+selected. Its card sits beside the block and shows that code; click the card to highlight the code in the block (the
+whole block is outlined for a comment on all of it).
+
+- **If you edit the code**, the highlight follows the selected code to wherever it is now. If that code appears more
+  than once, Inkling picks the copy nearest to where it was.
+- **If the selected code is gone**, the card still shows it, marked "This code has changed", and clicking the card
+  outlines the whole block.
+- **If you delete the block, or put a blank line or any other text between the block and its comments**, the comments
+  stay in the note as ordinary comments and still show the code they were about.
+- **Several comments on one block** share the line below it, side by side.
+- **Removing or resolving** (with Remove comments on resolve on) a comment that has the line to itself removes the line
+  too.
+
+A block needs its closing fence (```` ``` ```` or `~~~`) before you can comment on it.
+
 ## Metadata format
 
 Inkling stores author, time and resolution state with each range, in a Pandoc-style attribute block after the range's
@@ -124,6 +147,19 @@ every resolved comment thread in the note in one step (a single undo restores th
 suggestions are never touched. **Settings, Editor, Remove comments on resolve** makes every Resolve action delete the
 thread instead of marking it done. As of 0.13 this setting is on by default, including for existing installs (it is
 switched on once; turning it off afterwards sticks). Threads resolved earlier can be removed with the command above.
+
+A comment on code keeps what it is about in its attribute block: `quote` (the selected code, or for a selection over
+several lines, the selected part of its first line), `line` (the line within the block where the selection starts,
+counting from 1) and `lines` (how many lines were selected, only when more than one). A comment on the whole block has
+none of these. It belongs to the block when it starts on the line directly after the closing fence, with nothing but
+other such comments before it on that line:
+
+````
+```js
+let x = 1
+```
+{>>Why not const?<<}{author="Andrew" time=1795300000 quote="let x = 1" line=1}
+````
 
 Thread rules for attribute blocks: a highlight takes its author and time from its first comment, so the same fact is
 not written twice. The resolved state (`done`) is written once, on the thread's base.

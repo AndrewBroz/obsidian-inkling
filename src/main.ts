@@ -24,6 +24,7 @@ import {
 	reviveCachedRanges,
 	text_copy,
 } from "./editor/base";
+import { codeCommentLinks } from "./editor/base/edit-util/code-comments";
 import { registerOriginalTextEmbeds } from "./editor/renderers/embed/original-text-embeds";
 import {
 	annotationGutter,
@@ -172,6 +173,8 @@ export default class CommentatorPlugin extends Plugin {
 		this.editorExtensions.push(editMode.of(getEditMode(this.settings.default_edit_mode, this.settings)));
 
 		this.editorExtensions.push(rangeParser);
+		// EXPL: Which comment threads are about a code block, and where their code is now (code-comments.ts).
+		this.editorExtensions.push(codeCommentLinks);
 		// EXPL: Holds a pending comment's anchor and writes NOTHING to the note; the pill dispatches
 		//       into it, the annotation gutter renders a provisional card for it, and commitCommentDraft
 		//       writes highlight+comment in one transaction on submit. Registered unconditionally (like

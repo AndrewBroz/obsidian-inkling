@@ -5,6 +5,8 @@ import { Component, editorEditorField, editorInfoField } from "obsidian";
 
 import { createMetadataInfoElement } from "../../../../ui/snippets";
 import { commitCommentDraft } from "../../../base/edit-logic/add-comment";
+import { code_comment_region } from "../../../base/edit-util/code-comments";
+import { rangeParser } from "../../../base/edit-util/range-state";
 import { generate_metadata } from "../../../base/edit-util/metadata";
 import { pluginSettingsField } from "../../../uix";
 import { clearCommentDraft, commentDraftField } from "../../../uix/extensions/comment-draft";
@@ -227,8 +229,13 @@ export const pendingAnnotationMarkers = StateField.define<RangeSet<PendingAnnota
 			return RangeSet.empty;
 		}
 
+		// EXPL: A draft on code opens beside its block, where the written comment's card will be.
+		const at = draft.code ?
+			code_comment_region(tr.state.field(rangeParser).code_regions, draft.from, draft.from)?.from ?? draft.from :
+			draft.from;
+
 		if (existing) {
-			existing.annotation.from = draft.from;
+			existing.annotation.from = at;
 			existing.annotation.to = draft.to;
 			// EXPL: Latched while the draft lives. Without it, a marker re-homed to a different
 			//       GutterElement gets toDOM()'d for the new element and THEN destroy()'d for the old
@@ -236,14 +243,14 @@ export const pendingAnnotationMarkers = StateField.define<RangeSet<PendingAnnota
 			//       ones) — unloading the Component that the fresh card's ReplyBox was just added to,
 			//       leaving a dead input on screen. Same reason AnnotationMarker latches it.
 			existing.preventUnload = true;
-			return RangeSet.of([existing.range(draft.from, draft.to)]);
+			return RangeSet.of([existing.range(at, draft.to)]);
 		}
 
 		// EXPL: `editorEditorField` is Obsidian's own StateField holding the EditorView — the same
 		//       way marker.ts:599 gets a view inside annotationGutterMarkers' StateField, which
 		//       otherwise has no access to one.
-		const created = new PendingAnnotationMarker(draft.from, draft.to, tr.state.field(editorEditorField));
+		const created = new PendingAnnotationMarker(at, draft.to, tr.state.field(editorEditorField));
 		created.preventUnload = true;
-		return RangeSet.of([created.range(draft.from, draft.to)]);
+		return RangeSet.of([created.range(at, draft.to)]);
 	},
 });

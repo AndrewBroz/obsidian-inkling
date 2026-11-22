@@ -142,6 +142,31 @@
   margin-block-end: 0.25em;
 }
 
+// EXPL: A comment on code shows its quote as one short monospace line, cut off with an ellipsis, and a plain note
+//       under it when the quoted code is no longer in the block (code-comments.ts).
+.cmtr-code-quote {
+  margin-block-start: 0.25em;
+
+  code {
+    display: block;
+    overflow: hidden;
+    padding: 0.1em 0.4em;
+    border-radius: var(--radius-s);
+    background-color: var(--code-background);
+    color: var(--code-normal);
+    font-family: var(--font-monospace);
+    font-size: var(--code-size);
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+}
+
+.cmtr-code-quote-changed {
+  margin-block-start: 0.2em;
+  color: var(--text-warning);
+  font-size: var(--font-ui-smaller);
+}
+
 // EXPL: These were `box-shadow: 0 0 0 2px` rings — an outline in all but name, and the reason a
 //       hovered reply grew a hard stroke inside an otherwise flat card. Hover/focus now tint the
 //       entry's own surface. `z-index` is retained: entries scroll within a fixed-height card, and

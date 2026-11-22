@@ -1,6 +1,7 @@
 {
 	"version": "0.2.3",
 	"author": "Tester",
+	"metadata_syntax_migrated": true,
 	"enable_metadata": true,
 	"enable_author_metadata": true,
 	"enable_timestamp_metadata": true,

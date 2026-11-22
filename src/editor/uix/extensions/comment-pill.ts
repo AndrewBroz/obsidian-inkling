@@ -4,7 +4,8 @@ import { EditorView, showTooltip, type Tooltip, type TooltipView } from "@codemi
 import { setIcon, setTooltip } from "obsidian";
 
 import { addCommentToView, rangeParser } from "../../base";
-import { comment_refused_in_code } from "../../base/edit-logic/add-comment";
+import { comment_code_region } from "../../base/edit-logic/add-comment";
+import { closed_region } from "../../base/edit-util/code-comments";
 import { pendingAnnotationMarkers } from "../../renderers/gutters/annotations-gutter/pending-marker";
 import { commentDraftField } from "./comment-draft";
 
@@ -20,7 +21,8 @@ const PILL_GAP = 8;
 
 // EXPL: GDocs-style floating "add comment" pill. Eligibility mirrors addCommentToView's
 //       wrap path (edit-logic/add-comment.ts): a non-empty selection that touches no
-//       existing CriticMarkup range. A selection landing inside/overlapping a range
+//       existing CriticMarkup range, or a selection in a closed code block. A cursor in code gets no pill: it would
+//       float over every click while editing code; "Add comment" covers a comment on the whole block. A selection landing inside/overlapping a range
 //       (including a comment's own content) has nowhere clean to wrap, so the pill hides
 //       rather than offering an action that would fall back to a plain at-cursor comment.
 export function pill_eligible(state: EditorState): boolean {
@@ -43,8 +45,14 @@ export function pill_eligible(state: EditorState): boolean {
 		return false;
 
 	const selection = state.selection.main;
-	if (selection.empty || comment_refused_in_code(state))
+	if (selection.empty)
 		return false;
+
+	// EXPL: A selection in code is commented on after its block, whatever markup the prose part of the selection
+	//       holds, and only a block with a closing fence has an "after" (add-comment.ts).
+	const region = comment_code_region(state);
+	if (region)
+		return closed_region(region);
 
 	const ranges = state.field(rangeParser).ranges;
 	return ranges.ranges_overlapping_interval(selection.from, selection.to).length === 0;

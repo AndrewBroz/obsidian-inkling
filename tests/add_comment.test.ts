@@ -162,31 +162,29 @@ describe("addCommentToView with a selection", () => {
 });
 
 describe("addCommentToView inside fenced code", () => {
-	test("a selection inside a fence is refused with a notice and writes nothing", () => {
-		const doc = "```\nab\n```";
-		const view = viewWith(doc, 4, 5);
-		const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
+	// EXPL: Commenting in code used to be refused. It now opens a draft on the code, written after the block on
+	//       submit (tests/code_comment_write.test.ts covers what is written); nothing is ever written inside it.
+	test.each([
+		["a selection inside a fence", "```\nab\n```", 4, 5, { from: 4, to: 5, code: "selection" }],
+		["an empty cursor inside a fence", "```\nab\n```", 5, 5, { from: 0, to: 10, code: "block" }],
+		["a selection from a fence into prose", "```\ncode\n```\nprose", 6, 17, { from: 6, to: 8, code: "selection" }],
+	])("%s opens a draft on the code and writes nothing", (_, doc, anchor, head, draft) => {
+		const view = viewWith(doc, anchor, head);
 		addCommentToView(view, undefined);
-
 		expect(view.state.doc.toString()).toBe(doc);
-		expect(view.state.field(commentDraftField)).toBeNull();
-		expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
-		notice.mockRestore();
+		expect(view.state.field(commentDraftField)).toEqual(draft);
 	});
 
-	test.each([
-		["an empty cursor inside a fence", "```\nab\n```", 5, 5],
-		["a selection from prose into a fence", "intro\n```\ncode", 0, 14],
-		["a selection from a fence into prose", "```\ncode\n```\nprose", 6, 17],
-	])("%s is refused with a notice and writes nothing", (_, doc, anchor, head) => {
+	test("a selection from prose into an unclosed fence is refused with a notice and writes nothing", () => {
+		const doc = "intro\n```\ncode";
 		for (const extra of [WITH_GUTTER, []]) {
-			const view = viewWith(doc, anchor, head, extra);
+			const view = viewWith(doc, 0, 14, extra);
 			const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
 			addCommentToView(view, undefined);
 
 			expect(view.state.doc.toString()).toBe(doc);
 			expect(view.state.field(commentDraftField, false) ?? null).toBeNull();
-			expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
+			expect(notice).toHaveBeenCalledWith("Add a closing ``` to this code block before commenting on it.");
 			notice.mockRestore();
 		}
 	});
@@ -208,17 +206,19 @@ describe("addCommentToView inside fenced code", () => {
 	});
 
 	test.each([
-		["at the end of a closing fence", "```\nx\n```\nafter", 9, 9],
-		["at the start of an opening fence", "intro\n```\nx\n```", 6, 6],
-		["selecting from prose to the end of a closing fence", "intro\n```\nx\n```\nafter", 0, 15],
-	])("a comment %s is refused: its delimiters would sit on a fence line", (_, doc, anchor, head) => {
+		["at the end of a closing fence", "```\nx\n```\nafter", 9, 9, "```\nx\n```\n{>><<}\n\nafter"],
+		["at the start of an opening fence", "intro\n```\nx\n```", 6, 6, "intro\n```\nx\n```\n{>><<}"],
+		[
+			"selecting from prose to the end of a closing fence",
+			"intro\n```\nx\n```\nafter",
+			0,
+			15,
+			"intro\n```\nx\n```\n{>><<}{quote=x line=1}\n\nafter",
+		],
+	])("a comment %s goes after the block, never on a fence line", (_, doc, anchor, head, out) => {
 		const view = viewWith(doc, anchor, head, []);
-		const notice = jest.spyOn(obsidian, "Notice").mockImplementation(() => ({}) as obsidian.Notice);
 		addCommentToView(view, undefined);
-
-		expect(view.state.doc.toString()).toBe(doc);
-		expect(notice).toHaveBeenCalledWith("Comments can't be added inside code blocks");
-		notice.mockRestore();
+		expect(view.state.doc.toString()).toBe(out);
 	});
 
 	test("a selection covering a whole block from prose to prose is commented", () => {

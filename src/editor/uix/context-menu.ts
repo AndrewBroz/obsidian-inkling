@@ -123,7 +123,7 @@ export const cmenuGlobalCommands: (plugin: CommentatorPlugin) => EventRef = (plu
 									.setIcon("lucide-check")
 									.onClick(() => {
 										editor.cm.dispatch(editor.cm.state.update({
-											changes: resolve_action(range, editor.cm.state.field(pluginSettingsField)),
+											changes: resolve_action(range, editor.cm.state.field(pluginSettingsField), editor.cm.state.doc),
 											annotations: [pluginEditAnnotation.of(true)],
 										}));
 									});

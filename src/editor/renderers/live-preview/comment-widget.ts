@@ -136,7 +136,7 @@ export class CommentIconWidget extends WidgetType {
 		// EXPL: Cancel dispatch goes FIRST, before any DOM mutation, while range.from/to are still
 		//       valid document offsets.
 		this.view.dispatch(this.view.state.update({
-			changes: cancel_empty_comment(range),
+			changes: cancel_empty_comment(range, this.view.state.doc),
 			annotations: [pluginEditAnnotation.of(true)],
 		}));
 
@@ -293,7 +293,7 @@ export class CommentIconWidget extends WidgetType {
 					.onClick((e) => {
 						this.tooltip!.removeChild(rangeContainer);
 						this.view.dispatch({
-							changes: remove_comment(range),
+							changes: remove_comment(range, this.view.state.doc),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 						editorComponent.unload();

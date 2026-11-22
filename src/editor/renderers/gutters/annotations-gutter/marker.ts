@@ -27,6 +27,7 @@ import {
 } from "../../../base";
 
 import { AnnotationInclusionType } from "../../../../constants";
+import { type CodeLink, codeCommentLinks, quote_of } from "../../../base/edit-util/code-comments";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../../../settings";
 import { pluginEditAnnotation } from "../../../uix/extensions/editing-modes";
 import { annotationGutterFocusThreadAnnotation, annotationGutterFoldAnnotation } from "./annotation-gutter";
@@ -63,6 +64,20 @@ class AnnotationNode extends Component {
 		if (this.range.meta) {
 			this.metadata_view = createMetadataInfoElement(this.range);
 			this.annotation_container.appendChild(this.metadata_view);
+		}
+
+		// EXPL: A comment on code shows what it is about: its quote as a short snippet, marked when the quote is no
+		//       longer in the block. A comment that lost its block (deleted, or text put between them) keeps showing
+		//       its quote. Only the first comment of a thread remembers one.
+		const quote = range === range.base_range && range.type === SuggestionType.COMMENT ?
+			quote_of(range.fields) :
+			undefined;
+		if (quote) {
+			const snippet = this.annotation_container.createDiv({ cls: "cmtr-code-quote" });
+			const lines = range.fields.lines;
+			snippet.createEl("code", { text: typeof lines === "number" && lines > 1 ? quote + " …" : quote });
+			if (marker.code_link?.target === "changed")
+				snippet.createDiv({ cls: "cmtr-code-quote-changed", text: "This code has changed" });
 		}
 
 		this.annotation_view = this.annotation_container.createDiv({ cls: "cmtr-anno-gutter-annotation-view" });
@@ -160,7 +175,7 @@ class AnnotationNode extends Component {
 					this.cancelling = true;
 					this.new_text = null;
 					this.marker.view.dispatch({
-						changes: cancel_empty_comment(this.range as CommentRange),
+						changes: cancel_empty_comment(this.range as CommentRange, this.marker.view.state.doc),
 						annotations: [pluginEditAnnotation.of(true)],
 					});
 				}
@@ -283,7 +298,7 @@ class AnnotationNode extends Component {
 						.setSection("close-annotation")
 						.onClick(() => {
 							this.marker.view.dispatch({
-								changes: remove_thread(this.range),
+								changes: remove_thread(this.range, this.marker.view.state.doc),
 								annotations: [pluginEditAnnotation.of(true)],
 							});
 						});
@@ -315,7 +330,7 @@ class AnnotationNode extends Component {
 					.setSection("comment-handling")
 					.onClick(() => {
 						this.marker.view.dispatch({
-							changes: remove_comment(this.range),
+							changes: remove_comment(this.range, this.marker.view.state.doc),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});
@@ -337,7 +352,7 @@ class AnnotationNode extends Component {
 						.setSection("comment-handling")
 						.onClick(() => {
 							this.marker.view.dispatch({
-								changes: remove_thread(this.range),
+								changes: remove_thread(this.range, this.marker.view.state.doc),
 								annotations: [pluginEditAnnotation.of(true)],
 							});
 						});
@@ -367,7 +382,7 @@ class AnnotationNode extends Component {
 					.setSection("close-annotation")
 					.onClick(() => {
 						this.marker.view.dispatch({
-							changes: resolve_action(this.range, settings),
+							changes: resolve_action(this.range, settings, this.marker.view.state.doc),
 							annotations: [pluginEditAnnotation.of(true)],
 						});
 					});
@@ -443,6 +458,8 @@ export class AnnotationMarker extends GutterMarker {
 		public annotations: CriticMarkupRange[],
 		public view: EditorView,
 		public itr = 0,
+		/** The code block this thread is about, if it is a comment on code (code-comments.ts). */
+		public code_link?: CodeLink,
 	) {
 		super();
 	}
@@ -605,7 +622,7 @@ export class AnnotationMarker extends GutterMarker {
 			resolve_button.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.view.dispatch({
-					changes: resolve_action(this.annotation, this.view.state.field(pluginSettingsField)),
+					changes: resolve_action(this.annotation, this.view.state.field(pluginSettingsField), this.view.state.doc),
 					annotations: [pluginEditAnnotation.of(true)],
 				});
 			});
@@ -723,6 +740,7 @@ export class AnnotationMarker extends GutterMarker {
 
 function createMarkers(state: EditorState, changed_ranges: CriticMarkupRange[], types: number) {
 	const view = state.field(editorEditorField);
+	const links = state.field(codeCommentLinks, false);
 
 	const includeAdditions = (types & AnnotationInclusionType.ADDITION) !== 0;
 	const includeDeletions = (types & AnnotationInclusionType.DELETION) !== 0;
@@ -772,9 +790,11 @@ function createMarkers(state: EditorState, changed_ranges: CriticMarkupRange[], 
 			// MODIFICATION: advanceCursor in base.ts required markers to be inserted into the rangeset at exactly
 			//      the positions where line starts, this caused some issues with correct adjustment of positions through updates,
 			//      so adjustment is that markers can now occur at any position before the start of the line
-			const marker = new AnnotationMarker(range, full_thread, view, itr);
+			// EXPL: A comment on code lines up with its block, not with the line after it.
+			const code_link = links?.get(range);
+			const marker = new AnnotationMarker(range, full_thread, view, itr, code_link);
 			marker.preventUnload = true;
-			cm_ranges.push(marker.range(range.from, range.to));
+			cm_ranges.push(marker.range(code_link ? code_link.region.from : range.from, range.to));
 		}
 	}
 
@@ -797,6 +817,7 @@ export const annotationGutterMarkers = StateField.define<RangeSet<AnnotationMark
 				ranges,
 				state.facet(annotationGutterIncludedTypesState),
 			),
+			true,
 		);
 	},
 
@@ -821,6 +842,24 @@ export const annotationGutterMarkers = StateField.define<RangeSet<AnnotationMark
 			added_ranges.add(range.base_range);
 		const deleted_ranges = new Set(parsed.deleted_ranges.map(range => range.base_range));
 
+		// EXPL: A comment on code is drawn by where its block is and whether its quote is still there, which an edit
+		//       can change without touching the comment itself (code edited, a line put between block and comment):
+		//       its card is replaced whenever either changes.
+		const old_links = tr.startState.field(codeCommentLinks, false);
+		const new_links = tr.state.field(codeCommentLinks, false);
+		if (old_links && new_links && old_links !== new_links) {
+			const signature = (link: CodeLink | undefined, region_from: number | undefined) =>
+				link ? `${region_from}:${link.target === "changed"}` : "";
+			const gone = new Set(parsed.deleted_ranges);
+			for (const base of new Set([...old_links.keys(), ...new_links.keys()])) {
+				const before = old_links.get(base), after = new_links.get(base);
+				if (signature(before, before && tr.changes.mapPos(before.region.from)) === signature(after, after?.region.from))
+					continue;
+				deleted_ranges.add(base);
+				if (!gone.has(base)) added_ranges.add(base);
+			}
+		}
+
 		return oldSet
 			.map(tr.changes)
 			.update({
@@ -832,6 +871,7 @@ export const annotationGutterMarkers = StateField.define<RangeSet<AnnotationMark
 					return keep;
 				},
 				add: createMarkers(tr.state, [...added_ranges].map(range => range.full_thread[0]), includedTypes),
+				sort: true,
 			});
 	},
 });

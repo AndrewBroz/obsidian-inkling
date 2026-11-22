@@ -344,3 +344,33 @@ span.cm-strikethrough:has([data-type="cmtr-substitution"]) {
   border: 4px solid var(--deletion-color) !important;
   border-radius: 12px;
 }
+
+// ================================================
+//        Comments on code
+// ================================================
+
+// EXPL: What a focused comment on code (or its draft) is about: the quoted code highlighted, the same colour as a
+//       selected highlight, or the whole block outlined, fence lines included. `inset` box-shadows draw the outline
+//       inside each line so it neither shifts the text nor is clipped by the line's neighbours.
+.cmtr-code-quote-focus {
+  background-color: var(--highlight-color-alt);
+  border-radius: 2px;
+}
+
+.cm-line.cmtr-code-block-focus {
+  box-shadow: inset 2px 0 0 var(--interactive-accent), inset -2px 0 0 var(--interactive-accent);
+}
+
+.cm-line.cmtr-code-block-focus-first {
+  box-shadow: inset 2px 0 0 var(--interactive-accent), inset -2px 0 0 var(--interactive-accent),
+    inset 0 2px 0 var(--interactive-accent);
+}
+
+.cm-line.cmtr-code-block-focus-last {
+  box-shadow: inset 2px 0 0 var(--interactive-accent), inset -2px 0 0 var(--interactive-accent),
+    inset 0 -2px 0 var(--interactive-accent);
+}
+
+.cm-line.cmtr-code-block-focus-first.cmtr-code-block-focus-last {
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
