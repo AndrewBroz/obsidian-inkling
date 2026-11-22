@@ -72,7 +72,7 @@ export function migrateLegacyHotkeys(app: App): number {
 		migrated++;
 	}
 	if (migrated)
-		manager.save();
+		void manager.save();
 	return migrated;
 }
 

@@ -1,12 +1,6 @@
 import { App } from "obsidian";
 import CommentatorPlugin from "../main";
 
-declare module "@flatten-js/interval-tree" {
-	export default interface IntervalTree<T = unknown> {
-		nil_node: Node<T>;
-	}
-}
-
 declare global {
 	interface Window {
 		COMMENTATOR_DEBUG: Record<string, unknown> & { app: App };

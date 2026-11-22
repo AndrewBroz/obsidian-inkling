@@ -205,7 +205,8 @@ export const rangeParser: StateField<ParserData> = StateField.define({
 		let cumulative_offset = 0;
 
 		// apply-offsets: 2.72-3.70 ms
-		const nil_node = value.ranges.tree.nil_node;
+		// EXPL: The tree's sentinel leaf, which its typings leave out.
+		const nil_node = (value.ranges.tree as unknown as { nil_node: Node<CriticMarkupRange> }).nil_node;
 		// EXPL: Keys are shifted IN PLACE rather than rebuilding the tree -- a deliberate optimisation, and
 		//       the reason this traversal exists at all. But the tree is an AUGMENTED red-black tree: every
 		//       node caches `max`, the widest interval in its subtree, and `search()` prunes a subtree

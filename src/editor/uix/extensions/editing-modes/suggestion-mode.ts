@@ -2,7 +2,7 @@ import { ChangeSet, EditorSelection, EditorState, type Extension, StateEffect, T
 import { EditorView } from "@codemirror/view";
 import DiffMatchPatch from "diff-match-patch";
 import { editorEditorField } from "obsidian";
-import type { VimEditor } from "obsidian-typings";
+import type { VimState } from "obsidian-typings";
 import { type PluginSettings } from "../../../../types";
 
 import {
@@ -242,12 +242,14 @@ function carriedEffects(tr: Transaction, all: ChangeSet, end: number): readonly 
 
 // TODO: Functionality: Double click mouse should also floodfill (problem: no specific userevent attached)
 function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction {
-	const editor = tr.startState.field(editorEditorField) as EditorView & { cm: VimEditor };
+	// EXPL: `cm` is the CodeMirror 5 adapter Obsidian adds to the view while Vim mode is on.
+	const editor = tr.startState.field(editorEditorField) as EditorView & { cm?: { state: VimState } };
 	const userEvents = getUserEvents(tr);
-	const vim_mode = editor.cm !== undefined;
+	const vim_cm = editor.cm;
+	const vim_mode = vim_cm !== undefined;
 
 	// TODO: Resolve used vim cursor movements since they do not receive user event annotations
-	if (vim_mode && !tr.docChanged && tr.selection) {
+	if (vim_cm && !tr.docChanged && tr.selection) {
 		if (cursorMoved(tr)) {
 			userEvents.push(
 				tr.startState.selection.ranges[0].from < tr.selection.ranges[0].from ?
@@ -255,7 +257,7 @@ function applySuggestion(tr: Transaction, settings: PluginSettings): Transaction
 					"select.backward",
 			);
 		}
-		if (vim_action_resolver[editor.cm.state.vim.lastMotion?.name as keyof typeof vim_action_resolver]?.group)
+		if (vim_action_resolver[vim_cm.state.vim.lastMotion?.name as keyof typeof vim_action_resolver]?.group)
 			userEvents.push("select.group");
 	}
 

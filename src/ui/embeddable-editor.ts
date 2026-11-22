@@ -23,12 +23,10 @@ import { around } from "monkey-around";
 function resolveEditorPrototype(app: App) {
 	// EXPL: Create a temporary editor to resolve the prototype of ScrollableMarkdownEditor
 	// EXPL: The file may be null here; Obsidian's typing only allows a TFile.
-	const createEmbed = app.embedRegistry.embedByExtension.md as (
-		context: { app: App; containerEl: HTMLElement },
-		file: TFile | null,
-		subpath: string,
-	) => WidgetEditorView;
-	const widgetEditorView = createEmbed({ app, containerEl: createDiv() }, null, "");
+	const embedByExtension = app.embedRegistry.embedByExtension as unknown as {
+		md: (context: { app: App; containerEl: HTMLElement }, file: TFile | null, subpath: string) => WidgetEditorView;
+	};
+	const widgetEditorView = embedByExtension.md({ app, containerEl: createDiv() }, null, "");
 
 	// EXPL: Mark as editable to instantiate the editor
 	widgetEditorView.editable = true;
