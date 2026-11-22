@@ -7,8 +7,8 @@ import { inlineWorkerPlugin } from "./inline-worker-plugin";
 
 import { banner } from "./banner";
 
-import builtins from "builtin-modules";
-import process from "process";
+import { builtinModules } from "node:module";
+import process from "node:process";
 
 const externalModules = [
 	"obsidian",
@@ -34,7 +34,8 @@ const externalModules = [
 	"@codemirror/text",
 	"@codemirror/tooltip",
 	"@codemirror/view",
-	...builtins,
+	...builtinModules,
+	...builtinModules.map((name) => `node:${name}`),
 ];
 
 const prod = process.argv[2] === "production";
