@@ -64,4 +64,16 @@ export default defineConfig([
 			parserOptions: { parser: tseslint.parser },
 		},
 	},
+	{
+		// The e2e suite (WebdriverIO + mocha) has its own TypeScript project; the root one excludes it, because
+		// mocha's globals clash with jest's. It gets the same rules: it runs in Node and in the Obsidian page.
+		files: ["test/e2e/**/*.ts", "wdio.conf.mts"],
+		languageOptions: {
+			parserOptions: {
+				projectService: false,
+				project: "./test/e2e/tsconfig.json",
+				tsconfigRootDir: import.meta.dirname,
+			},
+		},
+	},
 ]);
