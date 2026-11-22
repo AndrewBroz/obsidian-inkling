@@ -55,7 +55,7 @@ const preview_mode_notices = {
 	notices={[
 		{
 			type: "info",
-			text: "When opening a new note, this will be the default editing mode",
+			text: "When opening a new note, this will be the default preview mode",
 		},
 		{ type: "info", text: preview_mode_notices[preview_mode] },
 	]}
