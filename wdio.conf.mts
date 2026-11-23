@@ -43,10 +43,32 @@ export const config: WebdriverIO.Config = {
 			plugins: ["."],
 			vault: "test/e2e/vaults/basic",
 		},
+		// EXPL: Keep the window painting while it's in the background. A test window behind other windows (or
+		//       minimised) is "hidden" to Chromium, which then stops animation frames and CSS transitions: settle()'s
+		//       requestAnimationFrame never fired and the spec failed with "script timeout" (seen locally on 1.8.7,
+		//       passing on rerun), and a fading control never reached its end opacity. See also `before` below.
+		"goog:chromeOptions": {
+			args: [
+				"--disable-backgrounding-occluded-windows",
+				"--disable-renderer-backgrounding",
+				"--disable-background-timer-throttling",
+			],
+		},
 	})),
 
 	services: ["obsidian"],
 	reporters: ["obsidian"],
+
+	// EXPL: Electron throttles a hidden window's renderer on its own (`backgroundThrottling`), whatever the Chromium
+	//       switches above say; checked in the sandbox: a minimised window's requestAnimationFrame never fired until
+	//       this was turned off, then fired at once. Runs once per spec file, on the session that spec gets.
+	before: async function(_capabilities, _specs, browser: WebdriverIO.Browser) {
+		await browser.execute(() => {
+			type Remote = { getCurrentWebContents(): { setBackgroundThrottling(allowed: boolean): void } };
+			const electron = (window as unknown as { require(id: "electron"): { remote: Remote } }).require("electron");
+			electron.remote.getCurrentWebContents().setBackgroundThrottling(false);
+		});
+	},
 
 	mochaOpts: {
 		ui: "bdd",

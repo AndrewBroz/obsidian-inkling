@@ -78,11 +78,28 @@ export async function type(keys: string | string[]) {
 	await settle();
 }
 
-/** Waits for a couple of animation frames, so CodeMirror and the gutter have drawn the last change. */
+/**
+ * Waits for a couple of animation frames, so CodeMirror and the gutter have drawn the last change.
+ *
+ * EXPL: A hidden window gets no animation frames, and waiting for one hung the script until the driver's 30s script
+ *       timeout. wdio.conf.mts keeps test windows painting in the background; should a frame still not come, this
+ *       gives up waiting after a second and says so on the console, rather than failing the spec. `browser.execute`
+ *       awaits the returned promise, so the timer has to settle it.
+ */
 export async function settle(ms = 150) {
-	await browser.execute(() =>
-		new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+	const painted = await browser.execute(() =>
+		new Promise<boolean>(resolve => {
+			const timer = setTimeout(() => resolve(false), 1000);
+			requestAnimationFrame(() =>
+				requestAnimationFrame(() => {
+					clearTimeout(timer);
+					resolve(true);
+				})
+			);
+		})
 	);
+	if (!painted)
+		console.warn("settle: no animation frame within 1s (is the window hidden and throttled?)");
 	await browser.pause(ms);
 }
 
