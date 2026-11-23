@@ -11,16 +11,16 @@ import type CommentatorPlugin from "../../../../main";
 let { plugin }: { plugin: CommentatorPlugin } = $props();
 </script>
 
-<SettingItem name="Diff gutter" type="heading" />
+<SettingItem name="Change markers" type="heading" />
 
 <SettingItem
-	name="Enable diff gutter"
-	description="Display a gutter in the editor for showing changes from suggestions"
+	name="Show change markers in the margin"
+	description="Mark the lines that have suggested changes in the margin"
 	notices={[
 		{
 			type: "info",
 			text:
-				"Clicking on the gutter reveals a menu for accepting/rejecting all changes within the block",
+				"Click a marker to accept or reject all changes in that block",
 		},
 	]}
 	type="toggle"
@@ -39,7 +39,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 
 <SettingItem
 	name="Hide when empty"
-	description="When enabled, the gutter will not take up any space when there are no changes in the current note"
+	description="When the note has no changes, the margin takes no space"
 	notices={[{
 		type: "info",
 		text:
@@ -61,11 +61,11 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 	{/snippet}
 </SettingItem>
 
-<SettingItem name="Annotation gutter" type="heading" />
+<SettingItem name="Comments beside the note" type="heading" />
 
 <SettingItem
-	name="Enable annotation gutter"
-	description="Display a gutter in the editor for annotations"
+	name="Show comments beside the note"
+	description="Show comments and suggestions in a column beside the note"
 	type="toggle"
 >
 	{#snippet control()}
@@ -108,7 +108,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 
 <SettingItem
 	name="Focus annotation on selection"
-	description="When selecting an annotation in the editor, the corresponding annotation in the gutter will be focused"
+	description="When you select an annotation in the note, its card in the comment column is selected too"
 	type="toggle"
 	depth={1}
 >
@@ -126,7 +126,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 
 <SettingItem
 	name="Width"
-	description="The width of the gutter in pixels"
+	description="The width of the comment column, in pixels"
 	type="slider"
 	depth={1}
 >
@@ -146,7 +146,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 
 <SettingItem
 	name="Show resize handle"
-	description="Display a handle bar within the editor for quickly resizing the gutter"
+	description="Drag the line between the note and the comment column to change the column's width"
 	type="toggle"
 	depth={1}
 >
@@ -163,8 +163,8 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 </SettingItem>
 
 <SettingItem
-	name="Default fold state"
-	description="Determine whether the gutter is shown by default"
+	name="Hide comments by default"
+	description="Start with the comment column hidden"
 	notices={[{ type: "info", text: "This setting only applies after reloading the app" }]}
 	type="toggle"
 	depth={1}
@@ -182,8 +182,8 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 </SettingItem>
 
 <SettingItem
-	name="Show fold button"
-	description="Display a button within the editor for (un)folding the gutter"
+	name="Show the hide/show comments button"
+	description="A round button on the line beside the comment column that hides or shows it"
 	type="toggle"
 	depth={1}
 >
@@ -201,7 +201,7 @@ let { plugin }: { plugin: CommentatorPlugin } = $props();
 
 <SettingItem
 	name="Hide when empty"
-	description="When enabled, the gutter will not take up any space when there are no annotations in the current note"
+	description="When the note has no comments or suggestions, the comment column takes no space"
 	notices={[{
 		type: "info",
 		text:

@@ -390,7 +390,7 @@ class AnnotationNode extends Component {
 		}
 
 		menu.addItem((item) => {
-			item.setTitle("Fold gutter")
+			item.setTitle("Hide comments")
 				.setSection("gutter-controls")
 				.setIcon("arrow-right-from-line")
 				.onClick(() => {

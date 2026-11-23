@@ -246,7 +246,7 @@ Items may be dropped for any reason.
 - [x] Accepting/Rejecting all changes in document
   - [x] Via command palette (entire document/selection)
   - [x] Via context menu (selection)
-  - [x] Via gutter markings (line)
+  - [x] Via change markers in the margin (line)
 
 #### Extensions
 
@@ -280,7 +280,7 @@ Items may be dropped for any reason.
 - [x] Rendering of markup in Live Preview
 - [x] Rendering of markup in Reading View (Postprocessor)
 - [x] Rendering comments
-  - [x] In right-side gutter of document
+  - [x] In a column beside the note
   - [x] On hover in document
 
 ### Syntax

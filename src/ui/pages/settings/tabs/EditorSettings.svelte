@@ -13,7 +13,7 @@ let comment_rendering_mode_notices = {
 	icon:
 		"Comments are displayed as icons and can be hovered over to reveal the comment",
 	none:
-		"Comments are not rendered in the editor, use this with the annotation gutter",
+		"Comments are not rendered in the editor; use this with the comment column",
 };
 </script>
 

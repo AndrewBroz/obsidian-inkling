@@ -14,7 +14,7 @@ import {
 } from "../base";
 
 import { AnnotationInclusionType } from "../../constants";
-import { annotationGutterFoldAnnotation } from "../renderers/gutters";
+import { annotationGutterFoldAnnotation, annotationGutterView } from "../renderers/gutters";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../settings";
 import { pluginEditAnnotation } from "./extensions/editing-modes";
 import { pluginSettingsField } from "./extensions/plugin-settings";
@@ -140,9 +140,11 @@ export const cmenuViewportCommands: (plugin: CommentatorPlugin) => EventRef = (p
 			let current_settings = editor_cm.state.facet(annotationGutterIncludedTypesState);
 			stickyContextMenuPatch(true);
 
+			// EXPL: The command toggles; the menu names what it will do, from what the comment column shows now.
+			const collapsed = editor_cm.plugin(annotationGutterView)?.gutters[0]?.collapsed ?? false;
 			menu.addItem((item) => {
-				item.setTitle("Fold gutter")
-					.setIcon("arrow-right-from-line")
+				item.setTitle(collapsed ? "Show comments" : "Hide comments")
+					.setIcon(collapsed ? "arrow-left-from-line" : "arrow-right-from-line")
 					.setSection("commentator")
 					.onClick(() => {
 						editor_cm.dispatch(editor_cm.state.update({

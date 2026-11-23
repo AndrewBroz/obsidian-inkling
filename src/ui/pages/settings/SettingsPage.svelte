@@ -19,7 +19,7 @@ let tabs = [
 	{ id: "general", name: "General", icon: "settings" },
 	{ id: "editor", name: "Editor", icon: "pencil" },
 	{ id: "interface", name: "Interface", icon: "layout-panel-top" },
-	{ id: "gutter", name: "Gutters", icon: "sidebar-open" },
+	{ id: "gutter", name: "Margins", icon: "sidebar-open" },
 	{ id: "metadata", name: "Metadata", icon: "tags" },
 	{ id: "advanced", name: "Advanced", icon: "shield-alert" },
 ];

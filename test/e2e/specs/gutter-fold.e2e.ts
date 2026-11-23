@@ -53,7 +53,7 @@ describe("Comment column in a narrow pane", function() {
 		expect(wide.gutter).toBe(300);
 		expect(wide.text).toBeGreaterThanOrEqual(600);
 		expect(wide.tag).toBe("BUTTON");
-		expect(wide.label).toBe("Fold gutter");
+		expect(wide.label).toBe("Hide comments");
 	});
 
 	it("folds on its own when the pane is too narrow, so the text keeps its width", async function() {
@@ -64,7 +64,7 @@ describe("Comment column in a narrow pane", function() {
 		expect(narrow.gutter).toBe(0);
 		// Squeezed by the column, the text was under 300px wide here.
 		expect(narrow.text).toBeGreaterThanOrEqual(400);
-		expect(narrow.label).toBe("Unfold gutter");
+		expect(narrow.label).toBe("Show comments");
 		// An automatic fold isn't the user's choice: the saved state stays unfolded.
 		expect(await savedFold()).toBe(false);
 	});
@@ -75,6 +75,6 @@ describe("Comment column in a narrow pane", function() {
 		await settle(800);
 		const wide = await layout();
 		expect(wide.gutter).toBe(300);
-		expect(wide.label).toBe("Fold gutter");
+		expect(wide.label).toBe("Hide comments");
 	});
 });

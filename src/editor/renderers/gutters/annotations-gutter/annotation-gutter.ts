@@ -675,10 +675,10 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			const icon = this.fold_button_el.children[0] as HTMLElement;
 			icon.classList.toggle("cmtr-anno-gutter-button-folded", this.shown_collapsed);
 			if (this.shown_collapsed) {
-				icon.ariaLabel = "Unfold gutter";
+				icon.ariaLabel = "Show comments";
 				this.resize_handle_el?.hide();
 			} else {
-				icon.ariaLabel = "Fold gutter";
+				icon.ariaLabel = "Hide comments";
 				this.resize_handle_el?.show();
 			}
 			this.updateFoldButtonPosition();

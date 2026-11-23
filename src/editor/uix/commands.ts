@@ -213,7 +213,7 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 	},
 	{
 		id: "fold-gutter",
-		name: "Fold annotation gutter",
+		name: "Hide or show comments",
 		icon: "arrow-right-from-line",
 		editor_context: true,
 		regular_callback: (editor: Editor, _: MarkdownFileInfo) => {

@@ -125,19 +125,19 @@ function getFoldIcon(view: EditorView): HTMLElement {
 const FOLDED_CLASS = "cmtr-anno-gutter-button-folded";
 
 describe("annotation gutter fold button icon state", () => {
-	test("creation while folded starts with the folded class and 'Unfold gutter' label", () => {
+	test("creation while folded starts with the folded class and 'Show comments' label", () => {
 		const { view } = setup(true);
 		const icon = getFoldIcon(view);
 		expect(icon.classList.contains(FOLDED_CLASS)).toBe(true);
-		expect(icon.ariaLabel).toBe("Unfold gutter");
+		expect(icon.ariaLabel).toBe("Show comments");
 		view.destroy();
 	});
 
-	test("creation while unfolded starts without the folded class and 'Fold gutter' label", () => {
+	test("creation while unfolded starts without the folded class and 'Hide comments' label", () => {
 		const { view } = setup(false);
 		const icon = getFoldIcon(view);
 		expect(icon.classList.contains(FOLDED_CLASS)).toBe(false);
-		expect(icon.ariaLabel).toBe("Fold gutter");
+		expect(icon.ariaLabel).toBe("Hide comments");
 		view.destroy();
 	});
 
@@ -148,11 +148,11 @@ describe("annotation gutter fold button icon state", () => {
 
 		button.click();
 		expect(icon.classList.contains(FOLDED_CLASS)).toBe(true);
-		expect(icon.ariaLabel).toBe("Unfold gutter");
+		expect(icon.ariaLabel).toBe("Show comments");
 
 		button.click();
 		expect(icon.classList.contains(FOLDED_CLASS)).toBe(false);
-		expect(icon.ariaLabel).toBe("Fold gutter");
+		expect(icon.ariaLabel).toBe("Hide comments");
 
 		view.destroy();
 	});
@@ -163,11 +163,11 @@ describe("annotation gutter fold button icon state", () => {
 
 		view.dispatch({ annotations: [annotationGutterFoldAnnotation.of(null)] });
 		expect(icon.classList.contains(FOLDED_CLASS)).toBe(true);
-		expect(icon.ariaLabel).toBe("Unfold gutter");
+		expect(icon.ariaLabel).toBe("Show comments");
 
 		view.dispatch({ annotations: [annotationGutterFoldAnnotation.of(null)] });
 		expect(icon.classList.contains(FOLDED_CLASS)).toBe(false);
-		expect(icon.ariaLabel).toBe("Fold gutter");
+		expect(icon.ariaLabel).toBe("Hide comments");
 
 		view.destroy();
 	});
@@ -206,7 +206,7 @@ describe("annotation gutter fold button", () => {
 		const button = getFoldIcon(view);
 		expect(button.tagName).toBe("BUTTON");
 		expect(button.getAttribute("type")).toBe("button");
-		expect(button.ariaLabel).toBe("Fold gutter");
+		expect(button.ariaLabel).toBe("Hide comments");
 		view.destroy();
 	});
 });
@@ -258,7 +258,7 @@ describe("annotation gutter in a narrow pane", () => {
 
 		button.click();
 		expect(gutter.dom.style.width).toBe("300px");
-		expect(button.ariaLabel).toBe("Fold gutter");
+		expect(button.ariaLabel).toBe("Hide comments");
 		button.click();
 		expect(gutter.dom.style.width).toBe("0px");
 		expect(gutter.folded).toBe(false);

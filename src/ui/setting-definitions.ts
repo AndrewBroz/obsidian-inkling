@@ -192,7 +192,7 @@ export function settingDefinitions(plugin: CommentatorPlugin): SettingDefinition
 					name: "Comment rendering mode",
 					desc: "Determine how comments are rendered inside the editor. Inline: comments get a background color " +
 						"and are fully visible. Icon: comments are icons you hover to read. Hidden: comments aren't shown " +
-						"in the editor (use this with the annotation gutter).",
+						"in the editor (use this with the comment column).",
 					control: {
 						type: "dropdown",
 						key: "comment_style",
@@ -253,64 +253,68 @@ export function settingDefinitions(plugin: CommentatorPlugin): SettingDefinition
 		},
 		{
 			type: "group",
-			heading: "Diff gutter",
+			heading: "Change markers",
 			items: [
 				toggle(
 					"diff_gutter",
-					"Enable diff gutter",
-					"Display a gutter in the editor for showing changes from suggestions. Clicking on the gutter reveals " +
-						"a menu for accepting/rejecting all changes within the block.",
+					"Show change markers in the margin",
+					"Mark the lines that have suggested changes in the margin. Click a marker to accept or reject all " +
+						"changes in that block.",
 				),
 				toggle(
 					"diff_gutter_hide_empty",
 					"Hide when empty",
-					"When enabled, the gutter will not take up any space when there are no changes in the current note. " +
-						"Switching between notes may then cause content to shift.",
+					"When the note has no changes, the margin takes no space. Switching between notes may then make the " +
+						"text shift.",
 				),
 			],
 		},
 		{
 			type: "group",
-			heading: "Annotation gutter",
+			heading: "Comments beside the note",
 			items: [
-				toggle("annotation_gutter", "Enable annotation gutter", "Display a gutter in the editor for annotations"),
+				toggle(
+					"annotation_gutter",
+					"Show comments beside the note",
+					"Show comments and suggestions in a column beside the note",
+				),
 				...INCLUDED_ANNOTATION_TYPES.map(([type, name]) =>
 					toggle(
 						INCLUDED_ANNOTATION + type,
 						`Included annotations: ${name}`,
-						"Whether the gutter shows this kind of annotation by default. Applies after reloading the app.",
+						"Whether the comment column shows this kind of annotation by default. Applies after reloading the app.",
 					)
 				),
 				toggle(
 					"annotation_gutter_focus_on_click",
 					"Focus annotation on selection",
-					"When selecting an annotation in the editor, the corresponding annotation in the gutter will be focused",
+					"When you select an annotation in the note, its card in the comment column is selected too",
 				),
 				{
 					name: "Width",
-					desc: "The width of the gutter in pixels",
+					desc: "The width of the comment column, in pixels",
 					control: { type: "slider", key: "annotation_gutter_width", min: 100, max: 500, step: 50 },
 				},
 				toggle(
 					"annotation_gutter_resize_handle",
 					"Show resize handle",
-					"Display a handle bar within the editor for quickly resizing the gutter",
+					"Drag the line between the note and the comment column to change the column's width",
 				),
 				toggle(
 					"annotation_gutter_default_fold_state",
-					"Default fold state",
-					"Determine whether the gutter is shown by default. Applies after reloading the app.",
+					"Hide comments by default",
+					"Start with the comment column hidden. Applies after reloading the app.",
 				),
 				toggle(
 					"annotation_gutter_fold_button",
-					"Show fold button",
-					"Display a button within the editor for (un)folding the gutter",
+					"Show the hide/show comments button",
+					"A round button on the line beside the comment column that hides or shows it",
 				),
 				toggle(
 					"annotation_gutter_hide_empty",
 					"Hide when empty",
-					"When enabled, the gutter will not take up any space when there are no annotations in the current " +
-						"note. Switching between notes may then cause content to shift.",
+					"When the note has no comments or suggestions, the comment column takes no space. Switching between " +
+						"notes may then make the text shift.",
 				),
 			],
 		},
