@@ -89,6 +89,7 @@
 	},
 	"overrides": {
 		"glob": "^14.0.6",
+		"minimatch": "^11.0.1",
 		"obsidian": "$obsidian",
 		"@lezer/common": "1.2.3",
 		"@codemirror/state": "6.5.0",
