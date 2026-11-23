@@ -71,15 +71,30 @@ Before releasing:
 1. `bun run lint`: 0 errors and 0 warnings (it also type-checks the e2e suite). The config includes Obsidian's `eslint-plugin-obsidianmd` and
    typescript-eslint's type-checked rules, which are what the scorecard's scan reports. Don't silence a rule to
    get there: fix the code. If a finding is a false positive, disable it on that line only, with a comment saying why.
-2. `bun audit`: no advisories in shipped dependencies.
+   - Lint covers the config files at the root (`eslint.config.js`, `jest.config.cjs`) with the type-checked rules:
+     the scan lints them too (0.15.3 failed on `eslint.config.js`). A new root config file goes in
+     `ROOT_CONFIG_FILES` in `eslint.config.js`, not in the ignores.
+   - The scan runs an older, stricter eslint-plugin-obsidianmd than npm's latest. `eslint.config.js` adds back the
+     strictness 0.15.3 was failed on (`inkling-scan/no-unsupported-api`, `globalThis` in types). Guard an Obsidian
+     API newer than `minAppVersion` with `if (requireApiVersion("x.y.z"))` around the use: the scan doesn't accept
+     an override of an Obsidian-called hook (`setControlValue`, `getSettingDefinitions`, ...), a feature check or an
+     early return as proof. Don't raise `minAppVersion` to get past it.
+2. `bun audit`: no advisories, dev dependencies included (not just `--prod`): the scan counts them. A vulnerable
+   transitive copy is fixed with a top-level `overrides` entry in `package.json` (bun ignores nested overrides).
 3. Full suite (`nice -n 19 npx jest --maxWorkers=2`), `npx tsc --noEmit`, `bun run build`, and a sandbox check of
    anything user-visible (see "Test in real Obsidian").
 4. `bun run test:e2e`: passes on both Obsidian versions (not alongside jest). The release workflow runs the same suite
    (`.github/workflows/e2e.yml`) and publishes nothing if it fails. A bug reproduced in the sandbox becomes an e2e
    spec before the fix ships.
+5. **Preview scan, before the tag goes out.** The owner runs a preview scan of the release commit in the Community
+   developer dashboard, and it must **Pass**, with no finding lint didn't report. A release that fails review is
+   removed from search within 24 hours, so the tag isn't pushed until the scan passes.
 
-Release: `bun run release-patch|minor|major`, then `git push origin main` and `git push origin <tag>` alone (never
-`--follow-tags`). Then confirm the workflow passed: `gh run list --repo AndrewBroz/obsidian-inkling`.
+Release: `bun run release-patch|minor|major` (commits the version bump and makes the tag locally), then
+`git push origin main`. Stop there: the owner runs the preview scan on that commit (step 5). Only once it passes,
+`git push origin <tag>` alone (never `--follow-tags`). Then confirm the workflow passed:
+`gh run list --repo AndrewBroz/obsidian-inkling`. If the scan fails, fix it in a new commit, move the local tag to
+it (`git tag -f -a <version> -m "chore(release): <version>"`), push main and scan again.
 
 After the scan of the new release appears on the scorecard (read the page in a browser; the Scorecard tab is
 rendered client-side), compare its findings with what lint reported. Anything new is fixed in the next patch,
