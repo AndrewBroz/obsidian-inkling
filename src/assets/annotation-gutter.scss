@@ -16,15 +16,27 @@
 //       (`--cmtr-anno-gutter-space`, annotation-gutter.ts setGutterWidth). Same layout as the override gave, checked in
 //       the sandbox: same card positions and alignment with their lines, no overlap, and the column scrolls with the
 //       note. `.is-minimal` is set on the gutter when Minimal is the active theme (index.ts).
+// EXPL: Inset from the pane's edge by `--file-margins-x`, the right margin Obsidian's own scroller padding gives the
+//       column in the default theme (Minimal zeroes that padding). Flush against the edge, the cards ran into the
+//       window's edge and were cut off.
 .cm-gutters:has(> .cmtr-anno-gutter.is-minimal) {
   inset-inline-start: auto;
-  inset-inline-end: 0;
+  inset-inline-end: var(--file-margins-x, var(--size-4-8));
 }
 
-// EXPL: Transitions with the gutter's width (400ms below), so the text widens and narrows as the column folds.
+// EXPL: Transitions with the gutter's width (400ms below), so the text widens and narrows as the column folds. The
+//       column's inset counts only while it takes room (`--cmtr-anno-gutter-open`, 1 or 0): folded, the text has its
+//       full width back.
 .cm-contentContainer:has(> .cm-gutters > .cmtr-anno-gutter.is-minimal) > .cm-content {
-  margin-inline-end: var(--cmtr-anno-gutter-space, 0px);
+  margin-inline-end: calc(
+    var(--cmtr-anno-gutter-space, 0px) + var(--cmtr-anno-gutter-open, 0) * var(--file-margins-x, var(--size-4-8))
+  );
   transition: margin-inline-end 400ms ease-in-out;
+  // EXPL: CodeMirror's base theme has `.cm-content { flex-shrink: 0 }` and Minimal sets `width: 100%`, so in a narrow
+  //       pane the margin above pushed the content out past the column instead of narrowing it, and the column sat on
+  //       the text (seen in the sandbox: a peeked column at x 568–868 over lines reaching x 867).
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 // Removes additional padding to the right of the gutter
@@ -385,12 +397,14 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: var(--cmtr-fold-button-size, 34px);
-  height: var(--cmtr-fold-button-size, 34px);
+  width: var(--cmtr-fold-button-size, 30px);
+  height: var(--cmtr-fold-button-size, 30px);
   padding: 0;
 
   border: 1px solid var(--background-modifier-border);
   border-radius: 50%;
+  // EXPL: Obsidian gives buttons `corner-shape: superellipse(…)`, which turns a 50% radius into a squircle.
+  corner-shape: round;
   background-color: var(--background-primary);
   box-shadow: none;
   color: var(--icon-color);

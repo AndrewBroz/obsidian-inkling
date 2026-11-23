@@ -41,15 +41,14 @@ function setReservedWidth(view: EditorView, width: number, folded: boolean) {
 
 // EXPL: Diameter (px) of the round fold button; annotation-gutter.scss sizes it from `--cmtr-fold-button-size`, which
 //       createFoldButton sets from this, so the CSS and the position maths can't disagree.
-const FOLD_BUTTON_SIZE = 34;
+// EXPL: 30px so that, folded, it fits inside Obsidian's 32px right file margin (`--file-margins-x`) clear of the text.
+const FOLD_BUTTON_SIZE = 30;
 // EXPL: Where the divider line (the resize handle's dashed border) sits, measured leftwards from the gutter panel's left
 //       edge. The handle is translated -10px and is `--divider-width-hover` (3px) wide with a 1px border on its right,
 //       so the line's centre is 7.5px before the panel. The unfolded button is centred on it.
 const DIVIDER_OFFSET = 7.5;
-// EXPL: Inset (px) of the folded button from the pane's right edge: just enough that its outline isn't cut off by the
-//       edge, so the 34px circle stays as far as it can in the scroller's right padding strip (32px by default), clear of
-//       the text.
-const FOLDED_FOLD_BUTTON_EDGE_INSET = 2;
+// EXPL: Smallest inset (px) of the folded button from the pane's right edge, so its outline isn't cut off by the edge.
+const FOLDED_FOLD_BUTTON_EDGE_INSET = 1;
 
 /**
  * Whether the gutter has anything to show — i.e. whether `hideOnEmpty` should keep it collapsed.
@@ -560,6 +559,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			"--cmtr-anno-gutter-space",
 			width > 0 ? width + ANNOTATION_GUTTER_MARGIN + "px" : "0px",
 		);
+		// EXPL: 1 while the gutter takes room, 0 while it doesn't: scales the right inset Minimal's out-of-flow column
+		//       keeps from the pane's edge (annotation-gutter.scss).
+		this.view.dom.style.setProperty("--cmtr-anno-gutter-open", width > 0 ? "1" : "0");
 	}
 
 	createFoldButton() {
@@ -699,13 +701,19 @@ class AnnotationSingleGutterView extends SingleGutterView {
 	 *   transitions `right` towards an estimate for Obsidian's default layout (the gutter panel's right edge is the
 	 *   `.cm-sizer`'s, inside the scroller's padding and scrollbar and, with readable line length on, centred), and
 	 *   the measured position replaces it when the animation ends.
-	 * - Folded: a small inset from the pane's right edge, in the scroller's right padding strip
-	 *   (`padding: var(--file-margins)`, which holds no text), so its outline isn't cut off by the pane's edge.
+	 * - Folded: centred in the strip right of the text: the scroller's right padding (`padding: var(--file-margins)`),
+	 *   or `--file-margins-x` where a theme moves that margin elsewhere (Minimal zeroes the scroller's padding and keeps
+	 *   the lines that far from the edge). The 30px button fits in the default 32px strip, clear of the text.
 	 */
 	updateFoldButtonPosition() {
 		if (!this.fold_button_el) return;
 		if (this.shown_collapsed) {
-			this.fold_button_el.style.right = `${FOLDED_FOLD_BUTTON_EDGE_INSET}px`;
+			const scroller_style = this.view.scrollDOM.win.getComputedStyle(this.view.scrollDOM);
+			const strip = Math.max(
+				parseFloat(scroller_style.paddingRight) || 0,
+				parseFloat(scroller_style.getPropertyValue("--file-margins-x")) || 0,
+			);
+			this.fold_button_el.style.right = `${Math.max(FOLDED_FOLD_BUTTON_EDGE_INSET, (strip - FOLD_BUTTON_SIZE) / 2)}px`;
 			return;
 		}
 		const gutters = this.gutterDom.getBoundingClientRect();
