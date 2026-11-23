@@ -43,7 +43,7 @@ function setReservedWidth(view: EditorView, width: number, folded: boolean) {
 //       createFoldButton sets from this, so the CSS and the position maths can't disagree.
 // EXPL: 30px so that, folded, it fits inside Obsidian's 32px right file margin (`--file-margins-x`) clear of the text.
 const FOLD_BUTTON_SIZE = 30;
-// EXPL: Where the divider line (the resize handle's dashed border) sits, measured leftwards from the gutter panel's left
+// EXPL: Where the divider line (the resize handle's border) sits, measured leftwards from the gutter panel's left
 //       edge. The handle is translated -10px and is `--divider-width-hover` (3px) wide with a 1px border on its right,
 //       so the line's centre is 7.5px before the panel. The unfolded button is centred on it.
 const DIVIDER_OFFSET = 7.5;
@@ -976,7 +976,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			} else {
 				this.fold_button_el?.show();
 				// EXPL: Not while folded: the handle is the divider line of an open column (setFoldButtonState hides it
-				//       on fold), and shown here it drew a stray dashed line at the pane's edge.
+				//       on fold), and shown here it drew a stray line at the pane's edge.
 				if (!this.shown_collapsed) {
 					this.resize_handle_el?.show();
 					this.setGutterWidth(this.width);

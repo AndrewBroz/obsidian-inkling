@@ -92,6 +92,27 @@ const selection = () =>
 		return { text: editor.getSelection(), head: editor.posToOffset(editor.getCursor("head")) };
 	});
 
+/** Scrolls the active note's editor to `top` px and lets it draw. */
+const setScroll = async (top: number) => {
+	await browser.execute((editor: string, top: number) => {
+		const scroller = document.querySelector(`${editor} .cm-scroller`);
+		if (scroller) scroller.scrollTop = top;
+	}, ACTIVE_EDITOR, top);
+	await settle(300);
+};
+
+/** The button's vertical centre, the visible pane's (the editor box, which doesn't scroll), and the scroll offset. */
+const verticalCentres = () =>
+	browser.execute((leaf: string, editor: string) => {
+		const button = document.querySelector(`${leaf} .cmtr-anno-gutter-button`)!.getBoundingClientRect();
+		const pane = document.querySelector(`${editor} .cm-editor`)!.getBoundingClientRect();
+		return {
+			button: button.top + button.height / 2,
+			pane: pane.top + pane.height / 2,
+			scrolled: document.querySelector(`${editor} .cm-scroller`)!.scrollTop,
+		};
+	}, ACTIVE_LEAF, ACTIVE_EDITOR);
+
 const label = async () => (await browser.$(`${BUTTON} button`).getAttribute("aria-label")) ?? "";
 
 describe("Comment column controls show on hover", function() {
@@ -151,8 +172,11 @@ describe("Comment column controls show on hover", function() {
 	it("shows the button while it has keyboard focus", async function() {
 		await moveTo(at.divider - 300, at.lineY);
 		await waitOpacity(BUTTON, 0, "button at rest");
+		// EXPL: A real key first: the browser shows focus as keyboard focus (`:focus-visible`) when the last thing the user
+		//       did was press a key. Chrome 120 (Obsidian 1.8.7's installer) has no `focusVisible` option on focus().
+		await browser.keys("Shift");
 		await browser.execute((selector: string) => {
-			document.querySelector<HTMLElement>(`${selector} button`)?.focus({ focusVisible: true } as FocusOptions);
+			document.querySelector<HTMLElement>(`${selector} button`)?.focus();
 		}, BUTTON);
 		await waitOpacity(BUTTON, 1, "focused button");
 		await browser.execute(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -162,14 +186,34 @@ describe("Comment column controls show on hover", function() {
 	it("keeps the button on the divider after the column is resized", async function() {
 		// EXPL: A quick drag: the column's last width lands just after the button is let go, which is when the button
 		//       used to be placed from a column still in its width transition.
+		await moveTo(at.divider, at.lineY + 200);
+		await waitOpacity(HANDLE, 1, "divider line before the drag");
 		await drag(at.divider, at.lineY + 200, at.divider - 60, at.lineY + 200, 0);
 		await settle(1200);
 		const resized = await geometry();
 		expect(Math.abs(resized.divider - at.divider)).toBeGreaterThan(10);
 		expect(Math.abs(resized.button - resized.divider)).toBeLessThan(2);
+		await moveTo(resized.divider, at.lineY + 200);
+		await waitOpacity(HANDLE, 1, "divider line before the drag back");
 		await drag(resized.divider, at.lineY + 200, resized.divider + 60, at.lineY + 200, 0);
 		await settle(1200);
 		at = await geometry();
+		expect(Math.abs(at.divider - resized.divider)).toBeGreaterThan(10);
+		expect(Math.abs(at.button - at.divider)).toBeLessThan(2);
+	});
+
+	it("draws the divider as a solid line", async function() {
+		expect((await browser.$(HANDLE).getCSSProperty("border-right-style")).value).toBe("solid");
+	});
+
+	it("centres the button top to bottom in the visible part of the pane, also scrolled partway down", async function() {
+		for (const scroll of [0, 600]) {
+			await setScroll(scroll);
+			const { button, pane, scrolled } = await verticalCentres();
+			expect(scrolled).toBeGreaterThanOrEqual(scroll === 0 ? 0 : 500);
+			expect(Math.abs(button - pane)).toBeLessThanOrEqual(3);
+		}
+		await setScroll(0);
 	});
 
 	it("always shows the button while the comments are hidden", async function() {
@@ -182,6 +226,9 @@ describe("Comment column controls show on hover", function() {
 		await settle(600);
 		expect(await opacity(BUTTON)).toBe(1);
 		expect(await browser.$(`${ACTIVE_LEAF} .cmtr-anno-gutter`).getSize("width")).toBe(0);
+		// Folded, it keeps the same height: the middle of the visible pane.
+		const folded = await verticalCentres();
+		expect(Math.abs(folded.button - folded.pane)).toBeLessThanOrEqual(3);
 		// And it brings them back.
 		const button = await browser.$(`${BUTTON} button`);
 		await button.click();

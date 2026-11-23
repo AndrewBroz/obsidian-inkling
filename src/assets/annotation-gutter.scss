@@ -348,9 +348,12 @@
   height: 100%;
   transform: translate(-10px, -40px);
 
+  // EXPL: Solid, in Obsidian's own pane-divider colour, so it follows light, dark and themes. It was dashed while it
+  //       showed all the time; now it shows only near the pointer (see the hover rules further down) and reads as
+  //       the edge between the note and the comment column.
   border-inline-end-color: var(--divider-color);
   border-inline-end-width: var(--divider-width);
-  border-inline-end-style: dashed;
+  border-inline-end-style: solid;
 
   width: var(--divider-width-hover);
 
@@ -368,16 +371,17 @@
 // ================================================
 
 // EXPL: The button lives in `view.dom` (`.cm-editor`, position: relative per the CM6 base theme), which doesn't
-//       scroll, so `position: absolute` keeps it in view at the top of the pane. Its `right` is set by
+//       scroll, so `position: absolute` keeps it in view, centred top to bottom in the visible part of the pane: as the
+//       note scrolls (the scroller is inside `view.dom`) and as the pane resizes (a percentage of `view.dom`'s height),
+//       with no JS. Open or folded, it sits at the same height. Its `right` is set by
 //       AnnotationSingleGutterView.updateFoldButtonPosition() (annotation-gutter.ts): centred on the divider line between
 //       the text and the gutter while the gutter shows, and just inside the pane's right edge while folded.
 //       It transitions with the gutter's width, so the button rides the divider as the gutter folds.
-// NOTE: `top` must use --file-margins-y — the `--file-margins` shorthand is a two-value token
-//       stream, and calc() over it is invalid-at-computed-value time (top silently became `auto`,
-//       i.e. the static position, in main panes).
+// EXPL: An embed's editor is as tall as its content, so its middle isn't a place the eye looks for a control; there
+//       the button keeps to the top (below).
 .cmtr-anno-gutter-button {
   position: absolute;
-  top: calc(var(--file-margins-y, var(--size-4-8)) + 8px);
+  top: calc(50% - var(--cmtr-fold-button-size, 30px) / 2);
   right: 2px;
   z-index: 1000;
 
@@ -392,7 +396,7 @@
 }
 
 // EXPL: A round button on the divider: a light outline (`--background-modifier-border`, the colour Obsidian draws its
-//       own hairlines in) around a mid-grey chevron (`--icon-color`), on the note's own surface so the dashed divider
+//       own hairlines in) around a mid-grey chevron (`--icon-color`), on the note's own surface so the divider
 //       doesn't show through it. All theme variables, so it follows light, dark and themes.
 // EXPL: Two classes (0,2,0) because Obsidian styles every `button` (`button:not(.clickable-icon)`: a raised fill, a
 //       shadow, a fixed height and padding), and theme CSS loads after plugin CSS, so a tie would go to the theme.
