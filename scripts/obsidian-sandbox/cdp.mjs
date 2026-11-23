@@ -10,6 +10,12 @@
 //   node cdp.mjs keys '<keys>'          type real key events into the focused editor, one at a time: characters as typed,
 //                                       {Enter} {Backspace} {Delete} {Tab} {Escape} {ArrowLeft|Right|Up|Down} as keys,
 //                                       {{ and }} for literal braces (focus the editor first, e.g. editor.focus() in eval)
+//   node cdp.mjs mouse move <x> <y>     real pointer events at window CSS px (hover, :hover, mousemove listeners);
+//   node cdp.mjs mouse click <x> <y>    move there, then press and release the left button;
+//   node cdp.mjs mouse down|up <x> <y>  press or release the left button there (a held move: `mouse down`, then
+//                                       `mouse move`s, which carry the held button, then `mouse up`)
+//   node cdp.mjs mouse drag <x1> <y1> <x2> <y2>   press at the first point, move in steps, release at the second
+//                                       (selects text in the editor)
 //
 // `app` (Obsidian's App) and `require` are globals in the window. Port: OBSIDIAN_SANDBOX_PORT (default 9333).
 const PORT = process.env.OBSIDIAN_SANDBOX_PORT ?? "9333";
@@ -185,8 +191,40 @@ if (cmd === "eval") {
 		await sleep(40);
 	}
 	await sleep(300);
+} else if (cmd === "mouse") {
+	const [action, ...rest] = args;
+	const n = rest.map(Number);
+	const arity = { move: 2, click: 2, down: 2, up: 2, drag: 4 }[action];
+	if (!arity || n.length !== arity || n.some(isNaN))
+		throw new Error("mouse: move|click|down|up <x> <y> | drag <x1> <y1> <x2> <y2>");
+	const at = (type, x, y, extra = {}) => send("Input.dispatchMouseEvent", { type, x, y, ...extra });
+	// EXPL: Each run is a new connection, so a held button can't be remembered here; `mouse move` reports the left
+	//       button held whenever a `mouse down` is pending (the page tracks it in `window.__cdpMouseDown`).
+	if (action === "move") {
+		const held = await evaluate("!!window.__cdpMouseDown");
+		await at("mouseMoved", n[0], n[1], held ? { button: "left", buttons: 1 } : {});
+	} else if (action === "down") {
+		await at("mouseMoved", n[0], n[1]);
+		await at("mousePressed", n[0], n[1], { button: "left", buttons: 1, clickCount: 1 });
+		await evaluate("window.__cdpMouseDown = true");
+	} else if (action === "up") {
+		await at("mouseReleased", n[0], n[1], { button: "left", buttons: 0, clickCount: 1 });
+		await evaluate("window.__cdpMouseDown = false");
+	} else if (action === "click") {
+		await at("mouseMoved", n[0], n[1]);
+		await at("mousePressed", n[0], n[1], { button: "left", buttons: 1, clickCount: 1 });
+		await at("mouseReleased", n[0], n[1], { button: "left", buttons: 0, clickCount: 1 });
+	} else {
+		const [x1, y1, x2, y2] = n;
+		await at("mouseMoved", x1, y1);
+		await at("mousePressed", x1, y1, { button: "left", buttons: 1, clickCount: 1 });
+		for (let i = 1; i <= 10; i++)
+			await at("mouseMoved", x1 + (x2 - x1) * i / 10, y1 + (y2 - y1) * i / 10, { button: "left", buttons: 1 });
+		await at("mouseReleased", x2, y2, { button: "left", buttons: 0, clickCount: 1 });
+	}
+	await sleep(300);
 } else {
-	console.error("usage: node cdp.mjs eval '<js>' | shot out.png | open 'Note.md' | mode live|source|reading | logs [ms] ['<js>'] | size <width> <height> | keys '<keys>'");
+	console.error("usage: node cdp.mjs eval '<js>' | shot out.png | open 'Note.md' | mode live|source|reading | logs [ms] ['<js>'] | size <width> <height> | keys '<keys>' | mouse move|click|down|up <x> <y> | mouse drag <x1> <y1> <x2> <y2>");
 	process.exitCode = 1;
 }
 ws.close();
