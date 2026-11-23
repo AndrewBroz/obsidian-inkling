@@ -183,6 +183,12 @@ export async function resizeWindow(width: number, height: number): Promise<numbe
 		height,
 	);
 	await browser.pause(500);
+	const outer = await browser.execute(() => window.outerWidth);
+	// EXPL: A window manager that ignores the request (a tiling one, as in CI before windows were set to float) would
+	//       otherwise make a size-dependent spec fail with a misleading assertion. A window capped by the screen is
+	//       smaller than asked, which is fine; one that stayed wider than asked is not.
+	if (outer > width + 2)
+		throw new Error(`resizeWindow: asked for ${width}px wide, the window stayed ${outer}px (window manager ignored it?)`);
 	return browser.execute(() => window.innerWidth);
 }
 

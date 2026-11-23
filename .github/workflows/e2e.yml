@@ -68,6 +68,9 @@ jobs:
           sleep 1
           herbstluftwm &
           sleep 1
+          # herbstluftwm tiles windows and ignores resize requests; the gutter-fold spec resizes the window, so new
+          # windows float and keep the size they ask for.
+          herbstclient rule floating=on
 
       - name: Run the e2e tests
         env:
