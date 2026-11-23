@@ -55,7 +55,9 @@
 }
 
 .cmtr-anno-gutter-resizing .cmtr-anno-gutter-button {
-  transition: right 50ms ease-out;
+  transition:
+    right 50ms ease-out,
+    opacity 150ms ease-in-out;
 }
 
 // EXPL: Flat by design. Obsidian's own comment-adjacent surfaces (callouts, hover popovers,
@@ -379,7 +381,9 @@
   right: 2px;
   z-index: 1000;
 
-  transition: right 400ms ease-in-out;
+  transition:
+    right 400ms ease-in-out,
+    opacity 150ms ease-in-out;
 }
 
 // EXPL: If the gutter is placed inside an embed, pin the button to the embed's top edge
@@ -437,6 +441,23 @@
 //       Toggled as a class (rather than an inline style) so it composes with the `rotate` transition above.
 .cmtr-anno-gutter-button .cmtr-anno-gutter-fold.cmtr-anno-gutter-button-folded {
   rotate: 180deg;
+}
+
+// EXPL: While the comments show, the divider line and the round "Hide comments" button on it are drawn only when the
+//       pointer is near the line (`data-cmtr-near-divider`, set from the pointer's position by
+//       annotation-gutter.ts onPointerMove), while the column is being resized, or while the button has keyboard focus.
+//       Otherwise they stay out of the way of the text, as in Google Docs. `pointer-events: none` while hidden, so an
+//       invisible line or button never takes a click; the pointer reaching them reveals them first.
+// EXPL: Folded (`is-folded`), the "Show comments" button always shows: it is the only way back.
+// EXPL: Only where the pointer can hover. On a touch screen nothing would ever reveal them.
+@media (hover: hover) {
+  .cm-editor:not([data-cmtr-near-divider]):not(.cmtr-anno-gutter-resizing) {
+    .cmtr-anno-gutter-resize-handle,
+    .cmtr-anno-gutter-button:not(.is-folded):not(:has(.cmtr-anno-gutter-fold:focus-visible)) {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
 }
 
 // EXPL: Resolves `--file-line-width` (whatever unit a theme sets it in) to pixels for the narrow-pane check in

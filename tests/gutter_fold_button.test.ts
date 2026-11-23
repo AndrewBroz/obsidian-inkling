@@ -292,3 +292,63 @@ describe("annotation gutter in a narrow pane", () => {
 		view.destroy();
 	});
 });
+
+describe("annotation gutter controls show near the divider", () => {
+	// The column's container starts at x 1000, so the divider line is at 992.5 (DIVIDER_OFFSET 7.5); the reveal range
+	// is 48px either side.
+	function setupAt() {
+		const { view } = setup(false);
+		const gutter = gutterOf(view);
+		resizePane(view, 1600);
+		(gutter as any).gutterDom.getBoundingClientRect = () => ({ left: 1000, width: 300 }) as DOMRect;
+		const move = (clientX: number) =>
+			view.dom.dispatchEvent(new MouseEvent("mousemove", { clientX, clientY: 100, bubbles: true }));
+		const near = () => view.dom.hasAttribute("data-cmtr-near-divider");
+		return { view, gutter, move, near };
+	}
+
+	test("marks the pane while the pointer is within 48px of the divider, on either side", () => {
+		const { view, move, near } = setupAt();
+		expect(near()).toBe(false);
+		move(992.5 - 40);
+		expect(near()).toBe(true);
+		move(992.5 - 60);
+		expect(near()).toBe(false);
+		move(992.5 + 40);
+		expect(near()).toBe(true);
+		move(992.5 + 60);
+		expect(near()).toBe(false);
+		move(992.5);
+		view.dom.dispatchEvent(new MouseEvent("mouseleave"));
+		expect(near()).toBe(false);
+		view.destroy();
+	});
+
+	test("the mark survives CodeMirror rewriting the editor's classes (on a focus change)", () => {
+		const { view, move, near } = setupAt();
+		move(992.5);
+		view.dom.className = "cm-editor";
+		expect(near()).toBe(true);
+		view.destroy();
+	});
+
+	test("never marks a folded pane, whose button always shows", () => {
+		const { view, move, near } = setupAt();
+		const button = view.dom.querySelector<HTMLElement>(".cmtr-anno-gutter-button")!;
+		expect(button.classList.contains("is-folded")).toBe(false);
+		button.querySelector("button")!.click();
+		expect(button.classList.contains("is-folded")).toBe(true);
+		move(992.5);
+		expect(near()).toBe(false);
+		view.destroy();
+	});
+
+	test("stops watching the pointer once destroyed", () => {
+		const { view, move, near } = setupAt();
+		move(992.5);
+		view.destroy();
+		expect(near()).toBe(false);
+		move(992.5);
+		expect(near()).toBe(false);
+	});
+});

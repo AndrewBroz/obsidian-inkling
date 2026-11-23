@@ -49,6 +49,11 @@ const FOLD_BUTTON_SIZE = 30;
 const DIVIDER_OFFSET = 7.5;
 // EXPL: Smallest inset (px) of the folded button from the pane's right edge, so its outline isn't cut off by the edge.
 const FOLDED_FOLD_BUTTON_EDGE_INSET = 1;
+// EXPL: How close (px, either side) the pointer must come to the divider line for the line and the round button on it to
+//       show while the comments are showing (Google Docs reveals its comment-column controls the same way). The one
+//       number to tune. The button is 30px across, so it lies wholly inside this range. Watching for it takes nothing
+//       from the text or cards under the pointer (onPointerMove), however wide it is.
+const DIVIDER_REVEAL_RANGE = 48;
 
 /**
  * Whether the gutter has anything to show — i.e. whether `hideOnEmpty` should keep it collapsed.
@@ -415,6 +420,8 @@ class AnnotationSingleGutterView extends SingleGutterView {
 	private folding_timer: number | undefined = undefined;
 	private resize_observer: ResizeObserver | undefined = undefined;
 	private line_width_probe: HTMLElement | undefined = undefined;
+	/** The pointer is within DIVIDER_REVEAL_RANGE of the divider line (see onPointerMove). */
+	private near_divider: boolean = false;
 	hide_on_empty: boolean = false;
 	width: number = 0;
 	add_fold_button: boolean = false;
@@ -461,6 +468,38 @@ class AnnotationSingleGutterView extends SingleGutterView {
 		const Observer = (this.view.dom.win as Window & typeof globalThis).ResizeObserver;
 		this.resize_observer = new Observer(() => this.onPaneResize());
 		this.resize_observer.observe(this.view.scrollDOM);
+
+		// EXPL: Listened for on the whole pane, not on a hover strip over the divider: a strip wide enough to reveal the
+		//       controls from 24px away would cover the end of every line and the edge of every card, and take their
+		//       clicks and text selection. A passive listener only watches the pointer, so nothing under it changes.
+		this.view.dom.addEventListener("mousemove", this.onPointerMove, { passive: true });
+		this.view.dom.addEventListener("mouseleave", this.onPointerLeave, { passive: true });
+	}
+
+	/**
+	 * Marks the pane `data-cmtr-near-divider` while the pointer is within DIVIDER_REVEAL_RANGE of the divider line
+	 * between the note and the comment column. While the comments show, the line and the round "Hide comments" button
+	 * on it are only drawn then (annotation-gutter.scss), so they don't sit over the page while the user reads.
+	 */
+	private onPointerMove = (event: MouseEvent) => {
+		let near = false;
+		if (!this.shown_collapsed) {
+			const gutters = this.gutterDom.getBoundingClientRect();
+			near = gutters.width > 0 &&
+				Math.abs(event.clientX - (gutters.left - DIVIDER_OFFSET)) <= DIVIDER_REVEAL_RANGE;
+		}
+		this.setNearDivider(near);
+	};
+
+	private onPointerLeave = () => this.setNearDivider(false);
+
+	private setNearDivider(near: boolean) {
+		if (near === this.near_divider) return;
+		this.near_divider = near;
+		// EXPL: An attribute, not a class: CodeMirror rewrites `view.dom`'s class attribute whenever the editor's own
+		//       classes change (`cm-focused` on every focus change, for one), which dropped a class set here as soon as
+		//       the user clicked a card (seen in the sandbox). It leaves attributes it doesn't manage alone.
+		this.view.dom.toggleAttribute("data-cmtr-near-divider", near);
 	}
 
 	/** Whether the gutter shows folded: the user's choice, unless the pane is too narrow (then folded, unless peeked). */
@@ -518,6 +557,8 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			return;
 		}
 		this.shown_collapsed = this.collapsed;
+		// EXPL: The divider moves (or goes) with the fold; whether the pointer is near it is known again on its next move.
+		this.setNearDivider(false);
 		if (animate) {
 			this.foldGutter();
 			return;
@@ -643,6 +684,12 @@ class AnnotationSingleGutterView extends SingleGutterView {
 				if (isReadableLineWidth)
 					temporarySheet.deleteRule(temporarySheet.cssRules.length - 1);
 
+				// EXPL: setWidth places the button by measuring the column while its 50ms width transition is still
+				//       running, so after a drag the button was left where the divider had been (50px off after a 100px
+				//       drag, seen in the sandbox). Measure again once the last debounced width has landed and settled: a
+				//       width that lands after mouseup animates over the full 400ms, `cmtr-anno-gutter-resizing` being gone.
+				window.setTimeout(() => this.updateFoldButtonPosition(), 450);
+
 				// EXPL: Widening the gutter by hand can make the pane "narrow" for it. Folding it the moment the user
 				//       lets go would undo what they just did, so the new state starts as a peek: still showing, and
 				//       folding on its own once the pane next crosses the threshold. The other way round (narrowed until it
@@ -674,6 +721,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 			//       attribute, clobbering the `display: none` set on this element in `createFoldButton` for empty gutters.
 			const icon = this.fold_button_el.children[0] as HTMLElement;
 			icon.classList.toggle("cmtr-anno-gutter-button-folded", this.shown_collapsed);
+			// EXPL: Folded, the button is the only way back, so it always shows; open, it shows near the divider
+			//       (onPointerMove, annotation-gutter.scss).
+			this.fold_button_el.classList.toggle("is-folded", this.shown_collapsed);
 			if (this.shown_collapsed) {
 				icon.ariaLabel = "Show comments";
 				this.resize_handle_el?.hide();
@@ -925,9 +975,12 @@ class AnnotationSingleGutterView extends SingleGutterView {
 					this.setGutterWidth(0);
 			} else {
 				this.fold_button_el?.show();
-				this.resize_handle_el?.show();
-				if (!this.shown_collapsed)
+				// EXPL: Not while folded: the handle is the divider line of an open column (setFoldButtonState hides it
+				//       on fold), and shown here it drew a stray dashed line at the pane's edge.
+				if (!this.shown_collapsed) {
+					this.resize_handle_el?.show();
 					this.setGutterWidth(this.width);
+				}
 			}
 		}
 
@@ -938,6 +991,9 @@ class AnnotationSingleGutterView extends SingleGutterView {
 	destroy() {
 		window.clearTimeout(this.folding_timer);
 		this.resize_observer?.disconnect();
+		this.view.dom.removeEventListener("mousemove", this.onPointerMove);
+		this.view.dom.removeEventListener("mouseleave", this.onPointerLeave);
+		this.view.dom.removeAttribute("data-cmtr-near-divider");
 		this.line_width_probe?.remove();
 		this.fold_button_el?.remove();
 		this.resize_handle_el?.remove();
