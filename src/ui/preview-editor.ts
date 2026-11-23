@@ -159,9 +159,9 @@ export class PreviewEditor extends Component {
 		this.removeClickListener();
 		const click_listener = () => {
 			this.removeClickListener();
-			setImmediate(() => {
+			window.setTimeout(() => {
 				this.switchMode();
-			});
+			}, 0);
 		};
 		this.clickListener = click_listener;
 		this.clickContainer.addEventListener(this.options.focus_mode, click_listener);

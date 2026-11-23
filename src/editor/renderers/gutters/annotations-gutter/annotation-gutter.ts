@@ -101,16 +101,16 @@ export class AnnotationGutterView extends GutterView {
 		// FIXME: this still causes a layout shift
 		// EXPL: If the gutter is not inside a Markdown View, hide it and remove it from the gutter extension from the view
 		if (!view.dom.parentElement!.classList.contains("markdown-source-view")) {
-			// NOTE: Prevents gutter from appearing for a brief second (until setImmediate kicks in)
+			// NOTE: Prevents gutter from appearing for a brief second (until the deferred reconfigure runs)
 			this.dom.hide();
 			// NOTE: Codemirror doesn't allow state changes during updates, so reconfiguration needs to be delayed
-			setImmediate(() => {
+			window.setTimeout(() => {
 				view.dispatch(view.state.update({
 					effects: [
 						annotationGutterCompartment.reconfigure([]),
 					],
 				}));
-			});
+			}, 0);
 		}
 	}
 

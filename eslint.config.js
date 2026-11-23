@@ -68,6 +68,20 @@ const GLOBAL_THIS_IN_TYPE = {
 	message: "Avoid using 'globalThis'. Use 'window' or 'activeWindow' for popout window compatibility.",
 };
 
+// 3. Node's setImmediate/clearImmediate exist in Electron but not in Obsidian mobile's web view. Setting
+//    no-restricted-globals replaces its options, so obsidianmd's own entries (app, fetch, localStorage) are kept.
+const IMMEDIATE_MESSAGE = "Node API, missing on Obsidian mobile. Use window.setTimeout(fn, 0) / window.clearTimeout.";
+const obsidianRestrictedGlobals = obsidianmd.configs.recommended
+	.map((config) => config.rules?.["no-restricted-globals"])
+	.filter((entry) => Array.isArray(entry))
+	.at(-1)
+	?.slice(1) ?? [];
+const RESTRICTED_GLOBALS = [
+	...obsidianRestrictedGlobals,
+	{ name: "setImmediate", message: IMMEDIATE_MESSAGE },
+	{ name: "clearImmediate", message: IMMEDIATE_MESSAGE },
+];
+
 export default defineConfig([
 	// Build output, tests and Node-side tooling don't ship in the plugin.
 	globalIgnores([
@@ -136,6 +150,7 @@ export default defineConfig([
 		rules: {
 			"inkling-scan/no-unsupported-api": "error",
 			"no-restricted-syntax": ["warn", GLOBAL_THIS_IN_TYPE],
+			"no-restricted-globals": ["warn", ...RESTRICTED_GLOBALS],
 		},
 	},
 	{
