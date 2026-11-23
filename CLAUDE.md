@@ -26,6 +26,7 @@ node scripts/obsidian-sandbox/cdp.mjs open 'Comments.md'
 node scripts/obsidian-sandbox/cdp.mjs mode reading         # live | source | reading
 node scripts/obsidian-sandbox/cdp.mjs size 2400 1400      # resize the sandbox window (layout bugs can need a wide one)
 node scripts/obsidian-sandbox/cdp.mjs keys 'abc{Backspace}'   # real key events into the focused editor ({{ }} = literal braces)
+node scripts/obsidian-sandbox/cdp.mjs mouse move 800 400     # real pointer events: move | click | down | up | drag
 node scripts/obsidian-sandbox/cdp.mjs eval '<js>'          # `app`, `require` are globals; JSON result
 node scripts/obsidian-sandbox/cdp.mjs shot .obsidian-sandbox/shot.png   # then Read the PNG
 node scripts/obsidian-sandbox/cdp.mjs logs 3000 '<js>'     # console + uncaught errors

@@ -78,8 +78,8 @@ start() {
 	if [ -n "$(pids)" ]; then echo "sandbox already running (port $PORT, data $DATA)"; status; return; fi
 	if curl -s "http://127.0.0.1:$PORT/json/version" >/dev/null; then die "port $PORT is taken; set OBSIDIAN_SANDBOX_PORT"; fi
 	case "$(uname)" in
-		Darwin) open -n -a Obsidian --args --user-data-dir="$DATA" --remote-debugging-port="$PORT" ;;
-		*) (obsidian --user-data-dir="$DATA" --remote-debugging-port="$PORT" >/dev/null 2>&1 &) ;;
+		Darwin) open -n -a Obsidian --args --user-data-dir="$DATA" --remote-debugging-port="$PORT" --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling ;;
+		*) (obsidian --user-data-dir="$DATA" --remote-debugging-port="$PORT" --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling >/dev/null 2>&1 &) ;;
 	esac
 	for _ in $(seq 1 40); do
 		if $CDP eval 'typeof app !== "undefined" && !!app.workspace?.layoutReady' 2>/dev/null | grep -q true; then
@@ -98,6 +98,8 @@ start() {
 trust() {
 	$CDP eval "(async () => {
 		const sleep = ms => new Promise(r => setTimeout(r, ms));
+		// A sandbox window behind other windows would otherwise stop painting, and CDP input and frame waits stall.
+		try { require('electron').remote.getCurrentWebContents().setBackgroundThrottling(false); } catch {}
 		await sleep(500);
 		const button = [...document.querySelectorAll('.modal-container button')]
 			.find(b => b.textContent.includes('Trust author'));
