@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, type SettingDefinitionItem } from "obsidian";
+import { App, PluginSettingTab, requireApiVersion, type SettingDefinitionItem } from "obsidian";
 import type CommentatorPlugin from "../main";
 
 import { mount, unmount } from "svelte";
@@ -28,8 +28,10 @@ export class CommentatorSettings extends PluginSettingTab {
 
 	async setControlValue(key: string, value: unknown) {
 		writeSetting(this.plugin, key, value);
-		// EXPL: Some settings show or hide others (the metadata fields).
-		this.refreshDomState();
+		// EXPL: Some settings show or hide others (the metadata fields). Obsidian only calls setControlValue on 1.13+,
+		//       but the check says so explicitly: the community scan doesn't treat the hook as proof of the version.
+		if (requireApiVersion("1.13.0"))
+			this.refreshDomState();
 		await this.plugin.saveSettings();
 	}
 

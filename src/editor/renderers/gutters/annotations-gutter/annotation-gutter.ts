@@ -465,7 +465,7 @@ class AnnotationSingleGutterView extends SingleGutterView {
 
 		// EXPL: The scroller's width doesn't depend on the gutter (the gutter is inside it), so folding in response to
 		//       its size can't feed back into another resize. `.win` keeps this right in pop-out windows.
-		const Observer = (this.view.dom.win as Window & typeof globalThis).ResizeObserver;
+		const Observer = (this.view.dom.win as typeof window).ResizeObserver;
 		this.resize_observer = new Observer(() => this.onPaneResize());
 		this.resize_observer.observe(this.view.scrollDOM);
 
